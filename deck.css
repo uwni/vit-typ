@@ -1,0 +1,578 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+/* 放映器界面的明暗只管这些 token（工具栏、总览、演讲者视图）；版面本身是
+   Typst 排的，不归这里管。runtime 按 deck(theme:) / 系统偏好把 data-theme
+   落到 <html> 上，演讲者窗口照抄同一份 token。 */
+html {
+  color-scheme: dark;
+  --vt-bg: #08090c;
+  --vt-panel: #111318;
+  --vt-glass: rgba(24, 27, 35, 0.82);
+  --vt-line: #2b313d;
+  --vt-fg: #eef1f7;
+  --vt-fg2: #aab3c5;
+  --vt-muted: #8992a5;
+  --vt-accent: #7aa2ff;
+  --vt-on-accent: #0d1017;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+  --vt-bg: #eef0f4;
+  --vt-panel: #ffffff;
+  --vt-glass: rgba(255, 255, 255, 0.85);
+  --vt-line: #d3d8e1;
+  --vt-fg: #14171e;
+  --vt-fg2: #3f4756;
+  --vt-muted: #6b7384;
+  --vt-accent: #2f62d8;
+  --vt-on-accent: #ffffff;
+}
+html {
+  background: var(--vt-bg);
+  --vt-dur: 700ms;
+  --vt-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+}
+/* --vt-page 是版面底色，由 Typst 侧 deck(fill:) 写在元素上；它是内容不是界面，不跟主题走 */
+/* 版面尺寸（--vt-w / --vt-h，pt 数）和底色一起由 Typst 侧写在元素上 */
+.vt-deck {
+  position: relative;
+  aspect-ratio: var(--vt-w) / var(--vt-h);
+  width: min(100vw, calc(100svh * var(--vt-w) / var(--vt-h)));
+  background: var(--vt-page, #111318);
+  overflow: hidden;
+}
+.vt-deck:not([data-ready]) .vt-group ~ .vt-group {
+  display: none;
+}
+.vt-deck:not([data-ready]) .vt-slide ~ .vt-slide {
+  display: none;
+}
+.vt-deck[data-ready] .vt-slide {
+  display: none;
+}
+.vt-deck[data-ready] .vt-slide.is-active {
+  display: block;
+}
+/* 组永远铺满、永远在版面里：里面除当前帧外都是 display:none，所以放映时
+   它是个空盒子，没有视觉影响；但它**有盒子**，于是总览的整页缩放可以挂在
+   组上，与「点开的是哪一帧」无关。 */
+.vt-group {
+  position: absolute;
+  inset: 0;
+}
+.vt-slide {
+  position: absolute;
+  inset: 0;
+}
+.vt-page {
+  position: absolute;
+  inset: 0;
+}
+.vt-page > svg:not(.vt-mark) {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+/* overflow 要 visible：getBBox() 是几何框不含描边，hidden 会把四周各裁掉半个线宽
+   （李萨如两端被切平）。View Transitions 的快照本来就带 ink overflow，不会闪。 */
+.vt-mark {
+  position: absolute;
+  display: block;
+  overflow: visible;
+  view-transition-class: vt-mo;
+}
+/* 元素动画（mark(key, s0, s1, …)）的各个状态叠在同一处：只显示第一个，其余是
+   数据，runtime 走一步就换显示哪个（行内 style 盖过这两条） */
+[data-typst-label^="vt-"][data-typst-label*="@"] {
+  display: none;
+}
+[data-typst-label^="vt-"][data-typst-label$="@0"] {
+  display: inline;
+}
+/* 标题和演讲者备注：只给 runtime 读，版面里永远不显示（display:none 也不进 VT 捕获） */
+.vt-title,
+.vt-note {
+  display: none;
+}
+
+/* 总览：按 o / a 切换 */
+body:has(.vt-all) {
+  display: block;
+  place-items: start;
+}
+.vt-deck.vt-all {
+  position: static;
+  width: 100%;
+  max-width: none;
+  height: auto;
+  aspect-ratio: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--vt-bg);
+  overflow: visible;
+}
+.vt-deck.vt-all > .vt-group {
+  display: block;
+  position: relative;
+  inset: auto;
+  cursor: pointer;
+}
+/* 一页 = 一个缩略图：组里只露出一帧，其余的不参与 */
+.vt-deck.vt-all .vt-slide {
+  display: none !important;
+}
+.vt-deck.vt-all .vt-slide.is-thumb {
+  display: block !important;
+  position: relative;
+  inset: auto;
+  aspect-ratio: var(--vt-w) / var(--vt-h);
+  border: 1px solid var(--vt-line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--vt-page, #111318);
+}
+.vt-deck.vt-all > .vt-group:hover .vt-slide.is-thumb {
+  border-color: var(--vt-accent);
+}
+.vt-deck.vt-all > .vt-group.is-here .vt-slide.is-thumb {
+  border-color: var(--vt-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 28%, transparent);
+}
+
+/* 标题栏在上、缩略图在下，所以组的底边就是缩略图的底边，圆点贴右下角即可 */
+.vt-cap,
+.vt-dots {
+  display: none;
+}
+.vt-all .vt-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0 0.2rem 0.3rem;
+  font:
+    500 12px/1.35 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.vt-all .vt-cap b {
+  flex: none;
+  font-weight: 600;
+  color: var(--vt-muted);
+  font-variant-numeric: tabular-nums;
+}
+.vt-all .is-here .vt-cap b {
+  color: var(--vt-accent);
+}
+.vt-all .vt-cap span {
+  color: var(--vt-fg2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vt-all .vt-dots {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 6px;
+  border-radius: 99px;
+  background: var(--vt-glass);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+.vt-all .vt-dots i {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--vt-muted);
+  cursor: pointer;
+}
+.vt-all .vt-dots i:hover,
+.vt-all .vt-dots i.is-peek {
+  border-color: var(--vt-fg);
+}
+.vt-all .vt-dots i.is-peek {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-fg) 35%, transparent);
+}
+.vt-all .vt-dots i.is-on {
+  background: color-mix(in srgb, var(--vt-accent) 70%, var(--vt-bg));
+  border-color: transparent;
+}
+.vt-all .vt-dots i.is-now {
+  background: var(--vt-accent);
+  border-color: var(--vt-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 32%, transparent);
+}
+::view-transition-group(*) {
+  animation-duration: var(--vt-dur);
+  animation-timing-function: var(--vt-ease);
+}
+/* ── 转场是两帧之间的一对动作 ──────────────────────────────────────────
+   每种效果定义一对：新的一方用 in 进场，旧的一方用 out 退场，后退时两者对调，
+   所以前进后退天然镜像。root（没被标记的内容）按这次过渡的 types 选（runtime 交给
+   startViewTransition 的 ["slide", "back"]，CSS 用 :active-view-transition-type() 认），
+   单边的标记按 runtime 加的 vt-fx-<名字> 选——它自己写了 mark(transition:) 就用
+   自己的，没写就继承这一对（root 用什么它用什么）。两边共用同一组关键帧：
+   推的距离 / 揭开的边写在 --vt-in / --vt-out 里，root 设在 html 上让伪元素继承，
+   标记直接设在自己的伪元素上。
+
+   fade 是真正的交叉淡化（旧淡出、新淡入）。两张快照要用 plus-lighter 叠：透明度
+   互补的两张不透明图相加在任一时刻正好是 1，底色不变（冻结到中点量过：19 → 19）；
+   normal 叠会比原来亮出一截（19 → 28），旧版「按住旧的」也是为了绕开 normal 的坑，
+   现在不需要了。Chromium 的伪元素算出来的 mix-blend-mode 是 normal，所以要自己写。 */
+::view-transition-old(*),
+::view-transition-new(*) {
+  mix-blend-mode: plus-lighter;
+}
+::view-transition-old(root),
+::view-transition-old(.vt-mo),
+::view-transition-old(.vt-fx-fade) {
+  animation: vt-fade-out var(--vt-dur) var(--vt-ease) both;
+}
+::view-transition-new(root),
+::view-transition-new(.vt-mo),
+::view-transition-new(.vt-fx-fade) {
+  animation: vt-fade-in var(--vt-dur) var(--vt-ease) both;
+}
+/* none：直接切。新的立刻在，旧的立刻没 */
+html:active-view-transition-type(none)::view-transition-old(root),
+::view-transition-old(.vt-fx-none) {
+  animation: vt-fade-out 1ms linear both;
+}
+html:active-view-transition-type(none)::view-transition-new(root),
+::view-transition-new(.vt-fx-none) {
+  animation: vt-hold var(--vt-dur) linear both;
+}
+/* slide / rise：推。前进新的从右/下进来、旧的往左/上出去；后退对调。标记按自己的盒子推 */
+html:active-view-transition-type(slide),
+::view-transition-old(.vt-fx-slide),
+::view-transition-new(.vt-fx-slide) {
+  --vt-in: translateX(100%);
+  --vt-out: translateX(-100%);
+}
+html:active-view-transition-type(rise),
+::view-transition-old(.vt-fx-rise),
+::view-transition-new(.vt-fx-rise) {
+  --vt-in: translateY(100%);
+  --vt-out: translateY(-100%);
+}
+html:active-view-transition-type(slide):active-view-transition-type(back),
+html:active-view-transition-type(back)::view-transition-old(.vt-fx-slide),
+html:active-view-transition-type(back)::view-transition-new(.vt-fx-slide) {
+  --vt-in: translateX(-100%);
+  --vt-out: translateX(100%);
+}
+html:active-view-transition-type(rise):active-view-transition-type(back),
+html:active-view-transition-type(back)::view-transition-old(.vt-fx-rise),
+html:active-view-transition-type(back)::view-transition-new(.vt-fx-rise) {
+  --vt-in: translateY(-100%);
+  --vt-out: translateY(100%);
+}
+html:active-view-transition-type(slide)::view-transition-old(root),
+html:active-view-transition-type(rise)::view-transition-old(root),
+::view-transition-old(.vt-fx-slide),
+::view-transition-old(.vt-fx-rise) {
+  animation: vt-push-out var(--vt-dur) var(--vt-ease) both;
+}
+html:active-view-transition-type(slide)::view-transition-new(root),
+html:active-view-transition-type(rise)::view-transition-new(root),
+::view-transition-new(.vt-fx-slide),
+::view-transition-new(.vt-fx-rise) {
+  animation: vt-push-in var(--vt-dur) var(--vt-ease) both;
+}
+/* wipe-*：揭开。名字是前沿走的方向（wipe-up 从底边往上扫）：新的从这条边起露出来，旧的从同一条
+   边起被盖掉，任一时刻两者正好拼成整页；后退时前沿反着走。--vt-in 是新的起始裁剪、--vt-out 是旧的终止裁剪 */
+html:active-view-transition-type(wipe-left),
+::view-transition-old(.vt-fx-wipe-left),
+::view-transition-new(.vt-fx-wipe-left) {
+  --vt-in: inset(0 0 0 100%);
+  --vt-out: inset(0 100% 0 0);
+}
+html:active-view-transition-type(wipe-right),
+::view-transition-old(.vt-fx-wipe-right),
+::view-transition-new(.vt-fx-wipe-right) {
+  --vt-in: inset(0 100% 0 0);
+  --vt-out: inset(0 0 0 100%);
+}
+html:active-view-transition-type(wipe-up),
+::view-transition-old(.vt-fx-wipe-up),
+::view-transition-new(.vt-fx-wipe-up) {
+  --vt-in: inset(100% 0 0 0);
+  --vt-out: inset(0 0 100% 0);
+}
+html:active-view-transition-type(wipe-down),
+::view-transition-old(.vt-fx-wipe-down),
+::view-transition-new(.vt-fx-wipe-down) {
+  --vt-in: inset(0 0 100% 0);
+  --vt-out: inset(100% 0 0 0);
+}
+html:active-view-transition-type(wipe-left):active-view-transition-type(back),
+html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-left),
+html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-left) {
+  --vt-in: inset(0 100% 0 0);
+  --vt-out: inset(0 0 0 100%);
+}
+html:active-view-transition-type(wipe-right):active-view-transition-type(back),
+html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-right),
+html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-right) {
+  --vt-in: inset(0 0 0 100%);
+  --vt-out: inset(0 100% 0 0);
+}
+html:active-view-transition-type(wipe-up):active-view-transition-type(back),
+html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-up),
+html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-up) {
+  --vt-in: inset(0 0 100% 0);
+  --vt-out: inset(100% 0 0 0);
+}
+html:active-view-transition-type(wipe-down):active-view-transition-type(back),
+html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-down),
+html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-down) {
+  --vt-in: inset(100% 0 0 0);
+  --vt-out: inset(0 0 100% 0);
+}
+html:active-view-transition-type(wipe-left)::view-transition-old(root),
+html:active-view-transition-type(wipe-right)::view-transition-old(root),
+html:active-view-transition-type(wipe-up)::view-transition-old(root),
+html:active-view-transition-type(wipe-down)::view-transition-old(root),
+::view-transition-old(.vt-fx-wipe-left),
+::view-transition-old(.vt-fx-wipe-right),
+::view-transition-old(.vt-fx-wipe-up),
+::view-transition-old(.vt-fx-wipe-down) {
+  animation: vt-wipe-out var(--vt-dur) var(--vt-ease) both;
+}
+html:active-view-transition-type(wipe-left)::view-transition-new(root),
+html:active-view-transition-type(wipe-right)::view-transition-new(root),
+html:active-view-transition-type(wipe-up)::view-transition-new(root),
+html:active-view-transition-type(wipe-down)::view-transition-new(root),
+::view-transition-new(.vt-fx-wipe-left),
+::view-transition-new(.vt-fx-wipe-right),
+::view-transition-new(.vt-fx-wipe-up),
+::view-transition-new(.vt-fx-wipe-down) {
+  animation: vt-wipe-in var(--vt-dur) var(--vt-ease) both;
+}
+/* 总览的打开/收起是「整页缩放」：这一整页作为一个组补间，元素级 morph
+   会把它拆散，所以先把标记的名字盖掉（作者样式的 !important 压得过
+   hoist.js 写在元素上的行内名字），让它们并回 root 一起缩放。 */
+html:active-view-transition-type(zoom) .vt-mark {
+  view-transition-name: none !important;
+}
+@keyframes vt-hold {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes vt-push-in {
+  from {
+    transform: var(--vt-in);
+  }
+}
+@keyframes vt-push-out {
+  to {
+    transform: var(--vt-out);
+  }
+}
+@keyframes vt-wipe-in {
+  from {
+    clip-path: var(--vt-in);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+@keyframes vt-wipe-out {
+  from {
+    clip-path: inset(0);
+  }
+  to {
+    clip-path: var(--vt-out);
+  }
+}
+
+/* ── 工具栏 / 激光笔 ─────────────────────────────────────────────────── */
+.vt-bar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--vt-glass);
+  border: 1px solid var(--vt-line);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font:
+    500 12px/1 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--vt-muted);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  view-transition-name: vt-bar;
+}
+.vt-bar.is-shown {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.vt-bar button,
+.vt-bar a {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  color: var(--vt-fg2);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.vt-bar button:hover,
+.vt-bar a:hover {
+  background: var(--vt-line);
+  color: var(--vt-fg);
+}
+.vt-bar button[aria-pressed="true"] {
+  background: var(--vt-accent);
+  color: var(--vt-on-accent);
+}
+.vt-bar button:focus-visible,
+.vt-bar a:focus-visible {
+  outline: 2px solid var(--vt-accent);
+  outline-offset: 2px;
+}
+.vt-bar svg {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.vt-bar .vt-count {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 32px;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* 激光笔：直接换光标。系统光标由合成器绘制，完全跟手；DOM 元素靠
+   pointermove 更新 transform，至少落后一帧。代价是触屏/触控笔下没有
+   光标，而且只能是静态位图（尺寸也有上限，这里取 32×32 最稳）。 */
+/* 同一张图两处用：鼠标是 cursor，触摸/演讲者视图远程指点是 DOM 光点，
+   看起来必须是同一个点。 */
+html {
+  --vt-laser: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='16%25' stop-color='%23ffffff'/%3E%3Cstop offset='34%25' stop-color='%23ff4d4d'/%3E%3Cstop offset='56%25' stop-color='%23ff3c3c' stop-opacity='0.45'/%3E%3Cstop offset='100%25' stop-color='%23ff3c3c' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E");
+}
+/* 非鼠标输入没有光标可换，改用下面的 DOM 光点，这里把系统光标收掉免得重复 */
+body.vt-lasing.vt-nomouse .vt-deck {
+  cursor: none;
+}
+.vt-laser {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 30;
+  width: 32px;
+  height: 32px;
+  margin: -16px 0 0 -16px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  background: var(--vt-laser) center/32px 32px no-repeat;
+  view-transition-name: vt-laser;
+}
+.vt-laser.is-on {
+  opacity: 1;
+}
+
+body.vt-lasing .vt-deck {
+  cursor:
+    var(--vt-laser) 16 16,
+    none;
+}
+
+/* 工具栏和激光笔是 chrome 不是内容：给它们自己的名字（和页面内容隔开），
+   再把它们的**组**关掉不做动画。
+   不关就会糊，而且原因不在「参与了过渡」：页码从「1 / 7」变成「2.1 / 7」，
+   工具栏宽度 198→210px，浏览器于是把这个框补间，旧快照被拉伸到中间尺寸——
+   整排图标一起拖影。实测（工具栏区域 vs 静止态，mean/255，越小越清晰）：
+
+     t=            40    120    250    350    600
+     自己的名字+默认动画  3.08   4.20   2.77   1.06   0.24
+     name:none        1.48   1.11   0.82   0.05   0.05
+     自己的名字+组不动画  0.52   0.52   0.52   0.00   0.00
+
+   `view-transition-name:none` 确实比现状好，但它不是「不参与过渡」——
+   none 是**默认值**，意思是「不单独成组」，于是被并进 root 快照一起淡入淡出。
+   顺带试过把它塞进 top layer（popover）：最差，过渡期间整个消失，因为
+   view transition 的伪元素树本身就在 top layer 并且画在它上面。
+
+   backdrop-filter 也要在这里关掉：规范把它复制到 ::view-transition-group() 上，
+   而 opacity 只烤进快照图——过渡期间就是一块看不见的毛玻璃盖在它底下的快照上，
+   视口小的时候工具栏占的面积大，演讲者视图的 iframe 里右下角的字一过渡就糊。 */
+::view-transition-group(vt-bar),
+::view-transition-group(vt-laser) {
+  animation: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+::view-transition-old(vt-bar),
+::view-transition-old(vt-laser) {
+  animation: vt-fade-out 1ms linear both;
+}
+::view-transition-new(vt-bar),
+::view-transition-new(vt-laser) {
+  animation: vt-hold var(--vt-dur) linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vt-bar {
+    transition: none;
+  }
+}
+
+/* 总览里不指点：只把光标收回来，lasing 标志本身不动，退出总览就恢复 */
+body.vt-lasing .vt-deck.vt-all {
+  cursor: default;
+}

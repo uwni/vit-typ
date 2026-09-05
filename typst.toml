@@ -1,0 +1,12 @@
+[package]
+name = "vtslides"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["choei"]
+license = "MIT"
+description = "Typst slides that morph in the browser: one .typ, PDF + HTML, element-level transitions via the View Transitions API."
+repository = "https://github.com/choei/vtslides"
+keywords = ["slides", "presentation", "html", "animation", "view-transitions"]
+categories = ["presentation"]
+compiler = "0.15.0"
+exclude = ["examples", "tools"]
