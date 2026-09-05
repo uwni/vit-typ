@@ -1,13 +1,16 @@
-/* ── 把标记的区域从页面 SVG 里提出来 ─────────────────────────────────
-   view-transition-name 在 SVG 子元素上会被静默忽略，标记的区域待在页面 SVG
-   里就没法 morph。这里把每一个提成自己的一个绝对定位的 <svg>——一个 HTML
-   层的元素，API 认它。
+/* ── hoist marked regions out of the page SVG ──────────────────────────
+   view-transition-name is silently ignored on SVG child elements, so a marked
+   region cannot morph where it sits inside the page SVG. Each one is lifted
+   into its own absolutely positioned <svg> — an HTML-level element the API
+   honours.
 
-   身份通道是 Typst 的 label：SVG 导出写成包住内容的 <g data-typst-label="vt-key">，
-   这个 <g> 就是内容边界，不用推断：没有几何探测、没有逐节点归属、没有容差、
-   没有 mask。两个标记的盒子重叠也仍是两棵子树。
+   The identity channel is a Typst label: the SVG export writes it as a
+   <g data-typst-label="vt-key"> wrapping the content, and that <g> *is* the
+   content boundary. Nothing is inferred: no geometry probing, no per-node
+   assignment, no tolerance, no mask. Two marks whose boxes overlap are still
+   two subtrees.
 
-   加载时跑一次，之后全是浏览器的事。 */
+   Runs once at load; after that everything is the browser's. */
 
 (function () {
   "use strict";
@@ -16,8 +19,8 @@
   var PREFIX = "vt-";
 
   /* getBBox/getCTM return nothing inside a display:none subtree, and every
-     slide but the first is hidden at load — so measure them all laid out,
-     then put the hidden ones back. */
+     slide but the first is hidden at load — so lay them all out, measure,
+     then hide them again. */
   var shown = [].slice.call(document.querySelectorAll(".vt-slide, .vt-group"));
   var was = shown.map(function (s) { return s.style.display; });
   shown.forEach(function (s) { s.style.display = "block"; });
@@ -27,14 +30,16 @@
     if (!root) return;
     var vb = root.viewBox.baseVal;
 
-    /* getCTM 的目标空间各家不一致：Chrome 把 viewBox→viewport 的缩放也算进去
-       （窗口 1920 宽时 root.getCTM() 是 1.5 倍），Safari 的约定又不同。所以
-       绝对值不能直接用——改成**用同一个函数量两次再相除**：root 的逆乘元素的，
-       得到的一定是「元素用户空间 → 根 viewBox 空间」，与浏览器约定无关。
+    /* getCTM's target space differs between browsers: Chrome includes the
+       viewBox→viewport scale (root.getCTM() is 1.5× in a 1920px window), Safari
+       follows another convention. So the absolute value is never used directly:
+       measure twice with the same function and divide — root's inverse times
+       the element's is always "element user space → root viewBox space",
+       whatever the convention.
 
-       这个 bug 在 1280×720 下完全看不见，因为那时缩放正好是 1；换个窗口大小
-       所有提升出来的元素就按比例往右下偏。测试一直只跑 1280×720，正好是它
-       隐身的那个尺寸。 */
+       Invisible at 1280×720, where the scale happens to be 1; at any other
+       window size every hoisted element drifts down-right proportionally.
+       The tests only ran at 1280×720 — exactly where the bug hides. */
     var inv = root.getScreenCTM().inverse();
     var toRoot = function (el) { return inv.multiply(el.getScreenCTM()); };
 
@@ -43,29 +48,32 @@
     page.querySelectorAll("[data-typst-label]").forEach(function (g) {
       var l = g.getAttribute("data-typst-label");
       if (l.slice(0, PREFIX.length) !== PREFIX) return;    // leave the author's own labels alone
-      /* 元素动画的状态（vt-key@i）和它们里面的标记都留在原地：运行时要把
-         各状态的节点逐个对照着补间，搬走一个就对不上了。外层的 vt-key 照提。 */
+      /* The states of an element animation (vt-key@i) and any marks inside them
+         stay put: the runtime pairs the nodes of the states one by one, and one
+         moved away would no longer line up. The outer vt-key is hoisted as usual. */
       if (l.indexOf("@") >= 0 || g.parentNode.closest(STATE)) return;
-      /* "vt-thm|wipe-up"：竖线后面是这个标记自己的进出场效果 */
+      /* "vt-thm|wipe-up": after the bar is this mark's own enter/leave effect */
       var parts = l.slice(PREFIX.length).split("|"), k = parts[0];
       g.vtFx = parts[1];
       (byKey[k] = byKey[k] || []).push(g);
     });
 
-    /* 先量完，再搬。搬动会改变还没量的节点的屏幕位置——外层 mark 被移进
-       自己的 host 之后，嵌在它里面的内层 mark 就是在新宿主里量的，而宿主
-       的尺寸是百分比，于是内层的结果开始跟着窗口大小走。两遍走：第一遍
-       只读，第二遍才动 DOM。 */
+    /* Measure everything first, then move. Moving changes the screen position
+       of nodes not yet measured — once an outer mark sits in its own host, an
+       inner mark nested in it is measured inside the new host, whose size is a
+       percentage, and the inner result starts following the window size. Two
+       passes: the first only reads, the second touches the DOM. */
     var plan = [];
     Object.keys(byKey).forEach(function (key) {
-      /* 一个 label 实例 = 一个 <g> = 一个区域。同一个 key 在一页里出现多次
-         是**允许的**——它们各自成区域，名字带上出现序号，运行时再按数量
-         配对（一变多 = 分裂，多变一 = 归并）。 */
+      /* One label instance = one <g> = one region. The same key several times
+         on a page is **allowed** — each is its own region, the name carries the
+         occurrence index, and the runtime pairs them by count (one-to-many =
+         split, many-to-one = merge). */
       byKey[key].forEach(function (n, i) {
         var box = bbox(n, toRoot);
         if (!box || box[2] <= box[0] || box[3] <= box[1]) return;
-        /* 记的是**父节点**的 CTM——节点自己的 transform 属性会跟着走，用它自己的
-           就套了两次 */
+        /* record the **parent's** CTM — the node's own transform attribute travels
+           with it, so using its own CTM would apply it twice */
         plan.push({ key: key, at: i, node: n, box: box, mat: toRoot(n.parentNode) });
       });
     });
@@ -73,14 +81,17 @@
     plan.forEach(function (p) {
       var x = p.box[0], y = p.box[1], w = p.box[2] - x, h = p.box[3] - y, m = p.mat;
 
-      /* 区域自己的 <svg> 就是一个 HTML 层的元素，名字直接挂在它上面。（套在
-         页面 svg **里面**的 <svg> 不行：只有 CSS 盒树里的元素才会被捕获。） */
+      /* The region's own <svg> is an HTML-level element and carries the name
+         itself. (An <svg> nested *inside* the page svg would not do: only
+         elements in the CSS box tree are ever captured.) */
       var host = document.createElementNS(NS, "svg");
       host.setAttribute("class", "vt-mark");
       host.setAttribute("viewBox", x + " " + y + " " + w + " " + h);
-      /* 宿主的盒子会被布局引擎吸附到 1/64 px，默认 xMidYMid meet 按两个方向里较小
-         的比例统一缩放——1160px 宽的一块文字会被整体缩 0.02%，右端漂 0.3px，
-         整行字的抗锯齿都跟 PDF 对不上。两个方向各自缩放，误差就只剩万分之几 px。 */
+      /* Layout snaps the host's box to 1/64 px, and the default xMidYMid meet
+         then scales uniformly by the smaller of the two ratios — a 1160px wide
+         block of text shrinks by 0.02% and its right end drifts 0.3px, so a whole
+         line's anti-aliasing no longer matches the PDF. Scaling the two axes
+         independently leaves an error of a few ten-thousandths of a px. */
       host.setAttribute("preserveAspectRatio", "none");
       host.style.left = ((x - vb.x) / vb.width * 100) + "%";
       host.style.top = ((y - vb.y) / vb.height * 100) + "%";
@@ -92,7 +103,7 @@
 
       var wrap = document.createElementNS(NS, "g");
       wrap.setAttribute("transform", "matrix(" + [m.a, m.b, m.c, m.d, m.e, m.f].join(" ") + ")");
-      wrap.appendChild(p.node);                  // 从页面 svg 里摘出来
+      wrap.appendChild(p.node);                  // detaches it from the page svg
       host.appendChild(wrap);
       page.appendChild(host);
     });

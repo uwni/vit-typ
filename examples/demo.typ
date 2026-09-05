@@ -1,8 +1,8 @@
-// 一次编译出 examples/out/demo.pdf 和 examples/out/demo.html：
+// One compile produces examples/out/demo.pdf and examples/out/demo.html:
 //
 //   typst compile --features html,bundle --format bundle examples/demo.typ examples/out
 //
-// 发布后把下面这行换成 #import "@preview/vtslides:0.1.0": *
+// Once published, replace the next line with #import "@preview/vtslides:0.1.0": *
 #import "../lib.typ": *
 #import "@preview/cetz:0.4.1"
 
@@ -10,12 +10,12 @@
 #let hi = rgb("#f2f4f8")
 #let B(body) = text(size: 40pt, weight: 700, fill: rgb("#7aa2ff"), body)
 
-// 每页左上角的小标题，用同一个 key，所以翻页时它待在原地不动
+// the small heading in every page's corner; same key everywhere, so it stays put across pages
 #let head(body) = mark("title")[#text(size: 28pt, weight: 700, fill: hi, body)]
 
 #let body = {
-  // ── 一、同一个 key 就是同一个东西 ──────────────────────────────────
-  // note: 只进 HTML 的演讲者备注，放映时按 s 打开的窗口里看。
+  // ── 1. the same key is the same thing ────────────────────────────────
+  // note: speaker notes, HTML only, shown in the window opened with `s`.
   slide(
     title: "标记，不是坐标",
     note: "开场：这套东西的核心只有一句话——给要变形的内容起个名字，其余交给 Typst 和浏览器。",
@@ -27,9 +27,9 @@
     #mark("sub")[#text(size: 26pt, fill: dim)[版面完全由 Typst 决定]]
   ]
 
-  // 同一页的两帧：第二帧只是在第一帧上多一行公式。缩略图里它们合成一张，
-  // 右下角两个点；翻页时多出来的那行是补间进来的，不是整页跳变。
-  let 展开 = [
+  // Two frames of one page: the second only adds a formula. One thumbnail with two
+  // dots; the added line is interpolated in, the page does not jump.
+  let expanded = [
     #mark("title")[#text(size: 40pt, weight: 700, fill: hi)[标记，不是坐标]]
 
     #v(20pt)
@@ -50,8 +50,8 @@
       - 第二帧只是多了一行
       note 由 typst 编译成 HTML，因此支持公式 $sqrt(4) = 2$
     ],
-    展开,
-    展开
+    expanded,
+    expanded
       + [
         #v(16pt)
         #mark("eq")[#math.equation(
@@ -69,7 +69,7 @@
     )[$integral_0^infinity e^(-x^2) dif x = sqrt(pi)/2$]]]
   ]
 
-  // ── 嵌套：内层被浏览器从外层的快照里拎出来，各飞各的 ────────────────
+  // ── nesting: the browser lifts the inner mark out of the outer snapshot; each flies on its own ──
   let nest(sz, al) = [
     #set align(al)
     #mark("outer")[#text(size: sz, fill: hi)[外面 #mark("inner")[#text(fill: rgb("#ff9f45"))[里面]] 后面]]
@@ -81,7 +81,7 @@
     nest(28pt, left + top),
   )
 
-  // ── 一个 key 在一页里出现多次：一变多 = 分裂，多变一 = 归并 ──────────
+  // ── the same key several times on one page: one-to-many splits, many-to-one merges ──
   let cell(body) = box(fill: rgb("#2b3a5c"), inset: 14pt, radius: 6pt, text(size: 30pt, weight: 700, fill: hi, body))
 
   slide(
@@ -95,7 +95,7 @@
       #place(dx: 480pt, dy: 380pt, mark("cell")[#cell[一个]])
       #place(dx: 880pt, dy: 120pt, mark("cell")[#cell[一个]])
     ],
-    // 三个变两个：数量不整除也没关系，第 i 个名字取第 floor(i·k/K) 个源
+    // three to two: counts need not divide, name i takes source floor(i·k/K)
     [
       #place(dx: 220pt, dy: 260pt, mark("cell")[#cell[三变二]])
       #place(dx: 760pt, dy: 260pt, mark("cell")[#cell[三变二]])
@@ -106,8 +106,8 @@
     ],
   )
 
-  // ── 二、重叠与交叉：每个标记是自己的一组，互不干扰 ──────────────────
-  // 章节页：整页从右边推进来（deck 默认是淡入），标记过的标题不受影响照样 morph
+  // ── 2. overlap and crossing: every mark is its own group ─────────────
+  // section page: the whole page pushes in from the right (the deck default is fade); the marked heading morphs regardless
   slide(title: "重叠与交叉 · 引子", transition: "slide")[
     #head[重叠与交叉]
 
@@ -119,10 +119,10 @@
     ]
   ]
 
-  // 五帧走完：包围盒重叠 → 分道扬镳 → 对角交叉 → 同线对穿。
-  // 一张缩略图，右下角五个点。
-  // A 每一帧同时换位置、字号和颜色——五帧连起来是**一个对象在连续变化**，
-  // 不是五次「消失再出现」。B 只换位置，用来对照。
+  // Five frames: overlapping boxes → parting → crossing diagonally → passing through on one line.
+  // One thumbnail, five dots.
+  // A changes position, size and colour on every frame — five frames read as **one object
+  // changing continuously**, not five "vanish and reappear". B only moves, for comparison.
   let ab(ax, ay, bx, by, sz, hue) = [
     #head[重叠与交叉]
     #place(dx: ax, dy: ay, mark("A")[#text(size: sz, weight: 700, fill: hue)[AAAAAAAA]])
@@ -138,20 +138,21 @@
     ab(800pt, 300pt, 40pt, 300pt, 40pt, rgb("#7aa2ff")),
   )
 
-  // ── 定理环境：三块各从不同的边揭开 ──────────────────────────────────
-  // 进出场效果写在出现的那个元素上：mark(transition:)。这一帧里它是新出现的，就按
-  // 它自己的效果进场（定义从上往下揭、定理从底边往上揭、证明从右边往左揭）；后退时
-  // 消失的那个按同一效果倒放退场；前后两帧都在的（定义、定理）照常 morph 不动。
+  // ── theorem environment: three blocks revealed from three different edges ──
+  // The enter/leave effect sits on the element that appears: mark(transition:). New on
+  // this frame, it enters with its own effect (definition wipes down, theorem wipes up,
+  // proof wipes in from the right); going back, the one that disappears leaves with the
+  // same effect reversed; the ones present on both frames (definition, theorem) just morph.
   let env(kind, hue, body) = block(
     width: 100%, inset: (left: 24pt, rest: 16pt), radius: 6pt,
     fill: hue.transparentize(88%), stroke: (left: 3pt + hue),
     text(size: 22pt, fill: hi)[#text(weight: 700, fill: hue)[#kind]#h(12pt)#body],
   )
-  let 定义 = mark("def", transition: "wipe-down", env("定义", rgb("#7aa2ff"))[
+  let definition = mark("def", transition: "wipe-down", env("定义", rgb("#7aa2ff"))[
     数列 $(a_n)$ 是*柯西列*：对任意 $epsilon > 0$，存在 $N$，使得 $m, n > N$ 时 $|a_m - a_n| < epsilon$。
   ])
-  let 定理 = mark("thm", transition: "wipe-up", env("定理", rgb("#ff9f45"))[实数列收敛，当且仅当它是柯西列。])
-  let 证明 = mark("proof", transition: "wipe-left", env("证明", rgb("#8ce99a"))[
+  let theorem = mark("thm", transition: "wipe-up", env("定理", rgb("#ff9f45"))[实数列收敛，当且仅当它是柯西列。])
+  let proof = mark("proof", transition: "wipe-left", env("证明", rgb("#8ce99a"))[
     收敛则柯西：$|a_m - a_n| <= |a_m - a| + |a - a_n|$。
     柯西则有界，由 Bolzano–Weierstrass 取收敛子列 $a_(n_k) -> a$，
     再用柯西性把整列拉到 $a$。$qed$
@@ -159,15 +160,16 @@
   slide(
     title: "定义 · 定理 · 证明",
     note: [三个 `mark(transition:)`：定义 wipe-down、定理 wipe-up、证明 wipe-left。新出现的按自己的效果进场，后退时倒放退场。],
-    [#head[定义 · 定理 · 证明] #v(20pt) #定义],
-    [#head[定义 · 定理 · 证明] #v(20pt) #定义 #v(14pt) #定理],
-    [#head[定义 · 定理 · 证明] #v(20pt) #定义 #v(14pt) #定理 #v(14pt) #证明],
+    [#head[定义 · 定理 · 证明] #v(20pt) #definition],
+    [#head[定义 · 定理 · 证明] #v(20pt) #definition #v(14pt) #theorem],
+    [#head[定义 · 定理 · 证明] #v(20pt) #definition #v(14pt) #theorem #v(14pt) #proof],
   )
 
-  // ── 三、CeTZ 画的东西也能变形 ──────────────────────────────────────
-  // 整张 canvas 一个 mark，两帧之间位置、尺寸补间，内容交叉淡化（转场补的是盒子；
-  // 要曲线弯成另一条曲线，是下一页的元素动画）。`import cetz.draw: *` 会盖掉
-  // vtslides 的 mark，按名导入；Typst 的圆写 std.circle。
+  // ── 3. CeTZ drawings morph too ───────────────────────────────────────
+  // One mark around the whole canvas: position and size interpolate between the two frames,
+  // the content cross-fades (a transition interpolates boxes; bending a curve into another
+  // curve is the element animation on the next page). `import cetz.draw: *` would shadow
+  // vtslides' mark, so import by name; Typst's circle is std.circle.
   let fig(r) = cetz.canvas(length: 1cm, {
     import cetz.draw: circle, line, rect, content
     circle((0, 0), radius: r, fill: rgb("#ff9f45"), stroke: none)
@@ -191,9 +193,10 @@
     ],
   )
 
-  // ── 四、元素动画：同一张图的几个参数，→ 一步一步走 ────────────────────
-  // wave(t) 六个状态：曲线的 d、小球的位置和颜色在插值，"t = 几" 换字形直接切。
-  // 看不见的矩形把 canvas 的包围盒钉死，各状态原点才不跳。
+  // ── 4. element animation: one drawing, a few parameters, stepped with → ──
+  // Six states of wave(t): the curve's d, the ball's position and colour interpolate; the
+  // "t = n" label swaps glyphs and just switches. The invisible rectangle pins the canvas
+  // bounding box so the origin does not jump between states.
   let wave(t) = cetz.canvas(length: 1cm, {
     import cetz.draw: circle, line, rect, content
     rect((-0.5, -1.7), (8.5, 1.7), stroke: none)
@@ -218,10 +221,11 @@
     ])
   ]
 
-  // ── 连续动画：页面停在这一帧时一直跑，翻页过渡播完才开始 ─────────────
-  // anim 的 spec 就是 Web Animations API 的 keyframes + options，原样交给
-  // el.animate()；follow 是唯一的便利：让一个标记的中心沿另一个标记里的 path 跑
-  // （CSS offset-path，合成器上跑）。轨迹和小球是两个独立的标记，小球放哪都行。
+  // ── continuous animation: runs while the page rests on this frame, starts after the transition ──
+  // The anim spec is Web Animations keyframes + options, handed to el.animate() as is;
+  // follow is the one convenience: run a mark's centre along the path inside another mark
+  // (CSS offset-path, on the compositor). Track and ball are two independent marks; the
+  // ball can be placed anywhere.
   let lissajous = range(0, 121).map(i => {
     let a = i / 120 * 2 * calc.pi
     (3 * calc.sin(2 * a) + 3.2, 1.6 * calc.sin(3 * a) + 1.8)
@@ -246,10 +250,11 @@
     ])
   ]
 
-  // ── 弹跳小球：连续动画的 keyframes 直接动标记本身 ────────────────────
-  // 每个球一个 mark、一条动画，keyframes 就是 WAAPI 的写法：分段 easing 做重力
-  // （下落加速、上升减速），落地那一瞬 scale 压扁——transform-origin 放在球底，
-  // 压的是着地点。位移用百分比（自身尺寸的倍数），随版面一起缩放。delay 错开。
+  // ── bouncing balls: continuous keyframes on the marks themselves ─────
+  // One mark and one animation per ball; the keyframes are plain WAAPI: per-segment easing
+  // plays gravity (accelerating down, decelerating up), a scale squash on touchdown with the
+  // transform-origin at the bottom so it squashes against the floor. Offsets are percentages
+  // (multiples of the ball's own size), so they scale with the layout. Staggered by delay.
   let ball(i) = (
     keyframes: (
       (transform: "translateY(0) scale(1, 1)", transformOrigin: "50% 100%", easing: "cubic-bezier(.45, 0, 1, .55)"),
@@ -277,12 +282,14 @@
     ])
   ]
 
-  // ── 单摆和双摆 ─────────────────────────────────────────────────────
-  // 单摆：两帧 keyframes 绕顶端来回转（transform-origin 在悬点），alternate + ease-in-out
-  // 就是简谐摆。双摆是混沌的，没有公式可写——在 Typst 里用 RK4 把运动方程积出来，
-  // 每隔一小段时间画一个姿态，mark 里塞 96 个状态；anim 点到它的名字、不写
-  // keyframes，运行时就把这些状态当关键帧连续播（alternate：倒放的摆也是摆）。
-  // 淡淡的那条线是整段轨迹，每个状态里都一样，所以它不动。
+  // ── single and double pendulum ───────────────────────────────────────
+  // Single: two keyframes rotating about the top (transform-origin at the pivot); alternate
+  // + ease-in-out is a harmonic swing. The double pendulum is chaotic and has no closed
+  // form — integrate the equations of motion with RK4 in Typst, draw a pose every few
+  // steps, put 96 states into the mark; anim names it without keyframes, and the runtime
+  // plays the states as keyframes (alternate: a pendulum played backwards is still a
+  // pendulum). The faint line is the whole trajectory, identical in every state, so it
+  // never moves.
   let pendulum = cetz.canvas(length: 1cm, {
     import cetz.draw: circle, line
     line((0, 0), (0, -6.5), stroke: 2pt + hi)
@@ -350,9 +357,10 @@
     ])
   ]
 
-  // ── 海浪 ─────────────────────────────────────────────────────────
-  // 三层正弦叠成的浪，每层不同的波长、波速、透明度；一条小船骑在最前面那层上，
-  // 位置取浪高、朝向取斜率。25 个状态首尾相同，循环播就无缝。
+  // ── waves ────────────────────────────────────────────────────────────
+  // Three layers of summed sines, each with its own wavelength and speed; a small boat
+  // rides the front layer, its position from the wave height and its heading from the
+  // slope. 25 states with identical first and last, so the loop is seamless.
   let sea(k) = cetz.canvas(length: 2cm, {
     import cetz.draw: circle, line, rect, content
     let phi = k / 24 * 2 * calc.pi

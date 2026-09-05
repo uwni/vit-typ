@@ -3,9 +3,10 @@
 *::after {
   box-sizing: border-box;
 }
-/* 放映器界面的明暗只管这些 token（工具栏、总览、演讲者视图）；版面本身是
-   Typst 排的，不归这里管。runtime 按 deck(theme:) / 系统偏好把 data-theme
-   落到 <html> 上，演讲者窗口照抄同一份 token。 */
+/* The chrome's light/dark theme only governs these tokens (toolbar, overview,
+   speaker view); the layout itself is Typst's and not ours. The runtime lands
+   data-theme on <html> from deck(theme:) / the system preference; the speaker
+   window copies the same tokens. */
 html {
   color-scheme: dark;
   --vt-bg: #08090c;
@@ -41,8 +42,8 @@ body {
   display: grid;
   place-items: center;
 }
-/* --vt-page 是版面底色，由 Typst 侧 deck(fill:) 写在元素上；它是内容不是界面，不跟主题走 */
-/* 版面尺寸（--vt-w / --vt-h，pt 数）和底色一起由 Typst 侧写在元素上 */
+/* --vt-page is the layout's background, written on the element by deck(fill:) on the Typst side; it is content, not chrome, and does not follow the theme */
+/* the layout size (--vt-w / --vt-h, in pt) is written on the element by the Typst side together with the background */
 .vt-deck {
   position: relative;
   aspect-ratio: var(--vt-w) / var(--vt-h);
@@ -62,9 +63,10 @@ body {
 .vt-deck[data-ready] .vt-slide.is-active {
   display: block;
 }
-/* 组永远铺满、永远在版面里：里面除当前帧外都是 display:none，所以放映时
-   它是个空盒子，没有视觉影响；但它**有盒子**，于是总览的整页缩放可以挂在
-   组上，与「点开的是哪一帧」无关。 */
+/* A group always fills the deck and always stays in the layout: everything in
+   it but the current frame is display:none, so while presenting it is an empty
+   box with no visual effect — but it **has a box**, so the overview's whole-page
+   zoom can be named on the group, independent of which frame is opened. */
 .vt-group {
   position: absolute;
   inset: 0;
@@ -84,29 +86,32 @@ body {
   height: 100% !important;
   display: block;
 }
-/* overflow 要 visible：getBBox() 是几何框不含描边，hidden 会把四周各裁掉半个线宽
-   （李萨如两端被切平）。View Transitions 的快照本来就带 ink overflow，不会闪。 */
+/* overflow must be visible: getBBox() is the geometric box without the stroke,
+   and hidden clips half a stroke width on every side (the ends of a Lissajous
+   curve get cut flat). View Transitions snapshots carry ink overflow anyway,
+   so nothing flickers. */
 .vt-mark {
   position: absolute;
   display: block;
   overflow: visible;
   view-transition-class: vt-mo;
 }
-/* 元素动画（mark(key, s0, s1, …)）的各个状态叠在同一处：只显示第一个，其余是
-   数据，runtime 走一步就换显示哪个（行内 style 盖过这两条） */
+/* The states of an element animation (mark(key, s0, s1, …)) are stacked in one
+   place: only the first shows, the rest are data, and the runtime swaps which
+   one shows on every step (inline style overrides these two rules). */
 [data-typst-label^="vt-"][data-typst-label*="@"] {
   display: none;
 }
 [data-typst-label^="vt-"][data-typst-label$="@0"] {
   display: inline;
 }
-/* 标题和演讲者备注：只给 runtime 读，版面里永远不显示（display:none 也不进 VT 捕获） */
+/* title and speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
 .vt-title,
 .vt-note {
   display: none;
 }
 
-/* 总览：按 o / a 切换 */
+/* overview: toggled with o / a */
 body:has(.vt-all) {
   display: block;
   place-items: start;
@@ -130,7 +135,7 @@ body:has(.vt-all) {
   inset: auto;
   cursor: pointer;
 }
-/* 一页 = 一个缩略图：组里只露出一帧，其余的不参与 */
+/* one page = one thumbnail: a group exposes one frame, the others stay out */
 .vt-deck.vt-all .vt-slide {
   display: none !important;
 }
@@ -152,7 +157,7 @@ body:has(.vt-all) {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 28%, transparent);
 }
 
-/* 标题栏在上、缩略图在下，所以组的底边就是缩略图的底边，圆点贴右下角即可 */
+/* caption above, thumbnail below, so the group's bottom edge is the thumbnail's and the dots go into the bottom-right corner */
 .vt-cap,
 .vt-dots {
   display: none;
@@ -222,19 +227,25 @@ body:has(.vt-all) {
   animation-duration: var(--vt-dur);
   animation-timing-function: var(--vt-ease);
 }
-/* ── 转场是两帧之间的一对动作 ──────────────────────────────────────────
-   每种效果定义一对：新的一方用 in 进场，旧的一方用 out 退场，后退时两者对调，
-   所以前进后退天然镜像。root（没被标记的内容）按这次过渡的 types 选（runtime 交给
-   startViewTransition 的 ["slide", "back"]，CSS 用 :active-view-transition-type() 认），
-   单边的标记按 runtime 加的 vt-fx-<名字> 选——它自己写了 mark(transition:) 就用
-   自己的，没写就继承这一对（root 用什么它用什么）。两边共用同一组关键帧：
-   推的距离 / 揭开的边写在 --vt-in / --vt-out 里，root 设在 html 上让伪元素继承，
-   标记直接设在自己的伪元素上。
+/* ── a transition is a pair of motions between two frames ─────────────
+   Every effect defines a pair: the new side enters with `in`, the old side
+   leaves with `out`, and going back the two are swapped, so forward and back
+   mirror each other by construction. root (unmarked content) picks the pair by
+   this transition's types (the runtime hands ["slide", "back"] to
+   startViewTransition, the CSS matches with :active-view-transition-type());
+   a one-sided mark with its own mark(transition:) picks it by the
+   vt-fx-<name> class the runtime adds (one without an effect of its own is
+   folded into root instead). Both share one set of keyframes: the push
+   distance / the wipe edge live in --vt-in / --vt-out, set on html for root
+   (the pseudo-elements inherit) and directly on the mark's pseudo-elements.
 
-   fade 是真正的交叉淡化（旧淡出、新淡入）。两张快照要用 plus-lighter 叠：透明度
-   互补的两张不透明图相加在任一时刻正好是 1，底色不变（冻结到中点量过：19 → 19）；
-   normal 叠会比原来亮出一截（19 → 28），旧版「按住旧的」也是为了绕开 normal 的坑，
-   现在不需要了。Chromium 的伪元素算出来的 mix-blend-mode 是 normal，所以要自己写。 */
+   fade is a real cross-fade (old out, new in). The two snapshots must be
+   blended with plus-lighter: two opaque images with complementary opacities
+   then add up to exactly 1 at every instant and the background stays put
+   (frozen at the midpoint: 19 → 19); with normal blending the page brightens
+   (19 → 28). The old "hold the old one" scheme existed to dodge that normal
+   blending pit and is no longer needed. Chromium computes mix-blend-mode as
+   normal on these pseudo-elements, hence the explicit rule. */
 ::view-transition-old(*),
 ::view-transition-new(*) {
   mix-blend-mode: plus-lighter;
@@ -249,7 +260,7 @@ body:has(.vt-all) {
 ::view-transition-new(.vt-fx-fade) {
   animation: vt-fade-in var(--vt-dur) var(--vt-ease) both;
 }
-/* none：直接切。新的立刻在，旧的立刻没 */
+/* none: a cut. The new one is there at once, the old one gone at once. */
 html:active-view-transition-type(none)::view-transition-old(root),
 ::view-transition-old(.vt-fx-none) {
   animation: vt-fade-out 1ms linear both;
@@ -258,7 +269,7 @@ html:active-view-transition-type(none)::view-transition-new(root),
 ::view-transition-new(.vt-fx-none) {
   animation: vt-hold var(--vt-dur) linear both;
 }
-/* slide / rise：推。前进新的从右/下进来、旧的往左/上出去；后退对调。标记按自己的盒子推 */
+/* slide / rise: push. Forward the new page comes in from the right/bottom and the old one leaves to the left/top; back swaps them. A mark pushes by its own box. */
 html:active-view-transition-type(slide),
 ::view-transition-old(.vt-fx-slide),
 ::view-transition-new(.vt-fx-slide) {
@@ -295,8 +306,7 @@ html:active-view-transition-type(rise)::view-transition-new(root),
 ::view-transition-new(.vt-fx-rise) {
   animation: vt-push-in var(--vt-dur) var(--vt-ease) both;
 }
-/* wipe-*：揭开。名字是前沿走的方向（wipe-up 从底边往上扫）：新的从这条边起露出来，旧的从同一条
-   边起被盖掉，任一时刻两者正好拼成整页；后退时前沿反着走。--vt-in 是新的起始裁剪、--vt-out 是旧的终止裁剪 */
+/* wipe-*: reveal. Named by the direction the front travels (wipe-up sweeps up from the bottom edge): the new page appears from that edge while the old page is covered from the same edge, so at every instant the two tile the full page; back runs the front the other way. --vt-in is the new page's starting clip, --vt-out the old page's final clip. */
 html:active-view-transition-type(wipe-left),
 ::view-transition-old(.vt-fx-wipe-left),
 ::view-transition-new(.vt-fx-wipe-left) {
@@ -365,9 +375,10 @@ html:active-view-transition-type(wipe-down)::view-transition-new(root),
 ::view-transition-new(.vt-fx-wipe-down) {
   animation: vt-wipe-in var(--vt-dur) var(--vt-ease) both;
 }
-/* 总览的打开/收起是「整页缩放」：这一整页作为一个组补间，元素级 morph
-   会把它拆散，所以先把标记的名字盖掉（作者样式的 !important 压得过
-   hoist.js 写在元素上的行内名字），让它们并回 root 一起缩放。 */
+/* Opening/closing the overview is a whole-page zoom: the page interpolates as
+   one group, and element-level morphs would tear it apart, so the marks' names
+   are overridden first (an author !important beats the inline names hoist.js
+   wrote on the elements) and they fold back into root to zoom together. */
 html:active-view-transition-type(zoom) .vt-mark {
   view-transition-name: none !important;
 }
@@ -416,7 +427,7 @@ html:active-view-transition-type(zoom) .vt-mark {
   }
 }
 
-/* ── 工具栏 / 激光笔 ─────────────────────────────────────────────────── */
+/* ── toolbar / laser pointer ──────────────────────────────────────────── */
 .vt-bar {
   position: fixed;
   right: 16px;
@@ -496,15 +507,16 @@ html:active-view-transition-type(zoom) .vt-mark {
   letter-spacing: 0.02em;
 }
 
-/* 激光笔：直接换光标。系统光标由合成器绘制，完全跟手；DOM 元素靠
-   pointermove 更新 transform，至少落后一帧。代价是触屏/触控笔下没有
-   光标，而且只能是静态位图（尺寸也有上限，这里取 32×32 最稳）。 */
-/* 同一张图两处用：鼠标是 cursor，触摸/演讲者视图远程指点是 DOM 光点，
-   看起来必须是同一个点。 */
+/* Laser pointer: swap the cursor. The system cursor is drawn by the
+   compositor and tracks the hand exactly; a DOM element updated on pointermove
+   is at least a frame behind. The price: no cursor on touch/pen, and it has to
+   be a static bitmap (with a size limit — 32×32 is the safe choice). */
+/* One image used twice: the cursor for the mouse, the DOM dot for touch and
+   for pointing from the speaker view — they must look like the same dot. */
 html {
   --vt-laser: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='16%25' stop-color='%23ffffff'/%3E%3Cstop offset='34%25' stop-color='%23ff4d4d'/%3E%3Cstop offset='56%25' stop-color='%23ff3c3c' stop-opacity='0.45'/%3E%3Cstop offset='100%25' stop-color='%23ff3c3c' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E");
 }
-/* 非鼠标输入没有光标可换，改用下面的 DOM 光点，这里把系统光标收掉免得重复 */
+/* non-mouse input has no cursor to restyle and uses the DOM dot below; hide the system cursor so there are not two */
 body.vt-lasing.vt-nomouse .vt-deck {
   cursor: none;
 }
@@ -532,25 +544,32 @@ body.vt-lasing .vt-deck {
     none;
 }
 
-/* 工具栏和激光笔是 chrome 不是内容：给它们自己的名字（和页面内容隔开），
-   再把它们的**组**关掉不做动画。
-   不关就会糊，而且原因不在「参与了过渡」：页码从「1 / 7」变成「2.1 / 7」，
-   工具栏宽度 198→210px，浏览器于是把这个框补间，旧快照被拉伸到中间尺寸——
-   整排图标一起拖影。实测（工具栏区域 vs 静止态，mean/255，越小越清晰）：
+/* The toolbar and the laser are chrome, not content: give them their own
+   names (separate from the page content) and then switch their **groups** off
+   so they do not animate.
+   Left on, they blur — and not because they "take part in the transition":
+   the counter changes from "1 / 7" to "2.1 / 7", the toolbar grows 198→210px,
+   the browser interpolates that box and the old snapshot is stretched to the
+   intermediate size — the whole row of icons smears. Measured (toolbar area vs
+   rest, mean/255, lower is sharper):
 
-     t=            40    120    250    350    600
-     自己的名字+默认动画  3.08   4.20   2.77   1.06   0.24
-     name:none        1.48   1.11   0.82   0.05   0.05
-     自己的名字+组不动画  0.52   0.52   0.52   0.00   0.00
+     t=                       40    120    250    350    600
+     own name + default anim  3.08   4.20   2.77   1.06   0.24
+     name:none                1.48   1.11   0.82   0.05   0.05
+     own name + group static  0.52   0.52   0.52   0.00   0.00
 
-   `view-transition-name:none` 确实比现状好，但它不是「不参与过渡」——
-   none 是**默认值**，意思是「不单独成组」，于是被并进 root 快照一起淡入淡出。
-   顺带试过把它塞进 top layer（popover）：最差，过渡期间整个消失，因为
-   view transition 的伪元素树本身就在 top layer 并且画在它上面。
+   `view-transition-name:none` is better than the default but is not "stay out
+   of the transition" — none is the **default**, meaning "no group of its own",
+   so it is folded into the root snapshot and fades with it. Putting it in the
+   top layer (popover) was tried too and is worst: it vanishes for the whole
+   transition, because the view-transition pseudo-tree is itself in the top
+   layer and paints above it.
 
-   backdrop-filter 也要在这里关掉：规范把它复制到 ::view-transition-group() 上，
-   而 opacity 只烤进快照图——过渡期间就是一块看不见的毛玻璃盖在它底下的快照上，
-   视口小的时候工具栏占的面积大，演讲者视图的 iframe 里右下角的字一过渡就糊。 */
+   backdrop-filter has to be switched off here as well: the spec copies it to
+   ::view-transition-group(), while opacity is only baked into the snapshot —
+   during the transition an invisible sheet of frosted glass sits over the
+   snapshot beneath. On a small viewport the toolbar covers a lot, and the text
+   in the speaker view's bottom-right iframe blurs on every transition. */
 ::view-transition-group(vt-bar),
 ::view-transition-group(vt-laser) {
   animation: none;
@@ -572,7 +591,7 @@ body.vt-lasing .vt-deck {
   }
 }
 
-/* 总览里不指点：只把光标收回来，lasing 标志本身不动，退出总览就恢复 */
+/* no pointing in the overview: only the cursor is tucked away; the lasing flag stays and comes back on leaving the overview */
 body.vt-lasing .vt-deck.vt-all {
   cursor: default;
 }

@@ -1,11 +1,13 @@
 /* ── vtslides · runtime ─────────────────────────────────────────────────
-   放映器。三件事：
-   · 转场——翻页/换帧时起一次 View Transition，types 报两个词：效果名和方向，
-     画面全在 deck.css 里按 :active-view-transition-type() 写；加一种效果只改 CSS。
-   · 元素动画——mark(key, s0, s1, …) 的各个状态，按键一步一步走，节点之间
-     由 Web Animations 插值；slide(anim:) 则让一个标记（或它的状态）连续播。
-   · 界面——总览、工具栏、激光笔、演讲者视图。
-   无依赖，file:// 下直接开。                                              */
+   The player. Three jobs:
+   · Transitions — a page/frame change starts one View Transition and reports
+     two type tokens (effect, direction); everything visual lives in deck.css
+     under :active-view-transition-type(). Adding an effect is a CSS-only change.
+   · Element animation — the states of mark(key, s0, s1, …) are stepped through
+     with the keys and interpolated node by node with Web Animations;
+     slide(anim:) plays a mark (or its states) continuously.
+   · Chrome — overview, toolbar, laser pointer, speaker view.
+   No dependencies; opens straight from file://.                            */
 
 (function () {
   "use strict";
@@ -18,10 +20,11 @@
   var n      = slides.length;
   if (!n) return;
 
-  /* ── 组 = 一页，帧 = 这一页的一个版面状态 ─────────────────────────────
-     翻页按帧走，缩略图按组走。标题是组里藏着的 .vt-title，浏览器把它压成纯文本。 */
-  var groups = [];      // { el, title, from, to, pos }  to 不含
-  var gOf    = [];      // 帧下标 → 组下标
+  /* ── group = one page, frame = one layout state of that page ────────
+     Navigation walks frames, the overview shows groups. The title is a hidden
+     .vt-title inside the group; the browser flattens it to plain text. */
+  var groups = [];      // { el, title, from, to, pos }  `to` exclusive
+  var gOf    = [];      // frame index → group index
   Array.prototype.forEach.call(deck.querySelectorAll(".vt-group"), function (el) {
     var t = el.querySelector(".vt-title");
     var g = { el: el, title: t ? t.textContent.trim() : "", from: gOf.length, to: gOf.length };
@@ -33,8 +36,9 @@
   var defaultFx = deck.dataset.transition || "fade";
   var defaultMs = parseInt(deck.dataset.duration, 10) || 700;
 
-  /* 放映时可调的速度倍率：- 慢、= 快、0 还原，乘在每一段时长上，记在
-     localStorage 里下次打开还在。deck(duration:) 是基准，这个是临场的旋钮。 */
+  /* Speed multiplier adjustable while presenting: `-` slower, `=` faster, `0`
+     reset. Multiplies every duration, remembered in localStorage.
+     deck(duration:) is the baseline; this is the presenter's live knob. */
   var speed = 1;
   try { speed = parseFloat(localStorage.getItem("vt-speed")) || 1; } catch (e) {}
   function durMs(ms) { return Math.round(ms / speed); }
@@ -46,27 +50,33 @@
     flash(speed + "×");
   }
 
-  var cur   = -1;       /* 画上去的那一帧 */
-  var want  = -1;       /* 已受理的目标。paint() 在快照捕获完成后才跑（第一次过渡要
-                           100ms+），这期间再来的 next() 要基于目标算，不然两次点击都
-                           变成「去同一页」。只在受理处写，paint() 不碰它——被跳过的
-                           旧过渡的 update 回调会晚一点才跑，让它写就会把目标拨回去 */
+  var cur   = -1;       /* the frame that is painted */
+  var want  = -1;       /* the accepted target. paint() runs only after the old
+                           snapshot is captured (100ms+ the first time); a next()
+                           arriving meanwhile must count from the target, or two
+                           clicks both become "go to the same page". Written only
+                           where a target is accepted — paint() must not touch it:
+                           the update callback of a skipped transition runs late
+                           and would set the target back. */
 
   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   var canVT   = typeof document.startViewTransition === "function";
   var EASE    = getComputedStyle(root).getPropertyValue("--vt-ease").trim() || "ease-in-out";
-  var STATE   = '[data-typst-label^="vt-"][data-typst-label*="@"]';   // 元素动画的一个状态
+  var STATE   = '[data-typst-label^="vt-"][data-typst-label*="@"]';   // one state of an element animation
 
   function clamp(i) { return i < 0 ? 0 : i > n - 1 ? n - 1 : i; }
   function at(i) { return slides[i].vtAt || 0; }
   function over() { return deck.classList.contains("vt-all"); }
 
-  /* ── 位置 = 帧 × 步，展平成一个序列 ─────────────────────────────────
-     对观众来说一页里只有「按一下往前走一格」，帧（转场，View Transitions）和
-     元素动画的步（WAAPI）表现是一样的，只是浏览器 API 不同。所以圆点、计数、
-     进度条、hash、演讲者视图的下一步，都按这个序列算，不区分帧和步。
-     POS 是整个 deck 的位置 { i, at, n }，g.pos 是一页的；abs[i] 是第 i 帧第 0 步
-     的序号，head[i] 是它在页内的序号。 */
+  /* ── positions = frames × steps, flattened into one sequence ───────────
+     To the audience a page only has "press once, advance one notch": a frame
+     (transition, View Transitions) and a step of an element animation (WAAPI)
+     look the same, only the browser API differs. So the dots, the counter, the
+     progress bar, the hash and the speaker view's "next" all use this sequence
+     and never distinguish frames from steps.
+     POS holds every position of the deck as { i, at, n }; g.pos those of one
+     page; abs[i] is the index of frame i at step 0, head[i] its index within
+     the page. */
   var POS = [], head = [], abs = [];
   groups.forEach(function (g) {
     g.pos = [];
@@ -81,11 +91,11 @@
     }
   });
 
-  /* 第 i 帧第 k 步的序号；不传 k 就是这一帧现在的步 */
+  /* index of frame i at step k; without k, at the frame's current step */
   function idx(i, k) { return abs[i] + (k == null ? at(i) : k); }
   function progress(i) { return (POS.length < 2 ? 100 : idx(i) / (POS.length - 1) * 100) + "%"; }
 
-  /* 「3」或者「3.2」——只有多个位置的那一页才带小数点 */
+  /* "3" or "3.2" — only a page with more than one position gets the dot */
   function label(i, k) {
     var g = groups[gOf[i]];
     return (gOf[i] + 1) + (g.pos.length > 1 ? "." + (head[i] + (k == null ? at(i) : k) + 1) : "");
@@ -100,15 +110,17 @@
     announce();
   }
 
-  /* 缩略图、计数、地址栏、演讲者视图都从这儿知道现在在哪：翻页、走一步都发 */
+  /* Thumbnails, counter, address bar and speaker view all learn where we are
+     from here — fired on every page change and every step. */
   function announce() {
     syncThumbs();
     try { history.replaceState(null, "", "#" + label(cur)); } catch (e) {}
     deck.dispatchEvent(new CustomEvent("vt:slide", { detail: { index: cur, step: at(cur) } }));
   }
 
-  /* 悬停预览：把某一组的缩略图临时换成第 f 帧第 k 步，null = 还原。
-     步是帧自己的状态，预览时拨过去、离开时拨回来。 */
+  /* Hover preview: temporarily show frame f at step k in its group's
+     thumbnail; null restores. The step is the frame's own state, so it is
+     moved for the preview and moved back on leave. */
   var peeked = null;
   function peek(f, k) {
     if (peeked) { stepTo(slides[peeked.i], peeked.at, true); peeked = null; }
@@ -120,20 +132,24 @@
     if (g.dots) g.pos.forEach(function (q, d) { g.dots[d].classList.toggle("is-peek", q.i === f && q.at === k); });
   }
 
-  /* 缩略图显示哪一帧：正在这一页上就显示当前帧，否则显示最后一帧走到最后一步
-     （这页搭完的样子，跟讲义一个道理）。 */
+  /* Which frame a thumbnail shows: the current frame while we are on that
+     page, otherwise the last frame at its last step (the finished page, like
+     a handout). */
   function syncThumbs() {
     var now = idx(cur);
     groups.forEach(function (g, k) {
       var here = gOf[cur] === k;
       var pick = here ? cur : g.to - 1;
-      /* 按 want 不按 cur：正要进去的那一页（过渡还没落定）已经落好位了，别拨回去。
-         总览缩放一开始浏览器就不再对真实 DOM 做命中测试，圆点会先收到 pointerleave */
+      /* Judge by `want`, not `cur`: the page we are entering (transition not yet
+         settled) has already been positioned — don't move it back. The moment
+         the overview zoom starts, the browser stops hit-testing the real DOM and
+         the dots receive pointerleave first. */
       if (!here && gOf[want] !== k) stepTo(slides[pick], stepsOf(slides[pick]).n, true);
       for (var i = g.from; i < g.to; i++) slides[i].classList.toggle("is-thumb", i === pick);
       g.el.classList.toggle("is-here", here);
-      /* 圆点是进度不是位置：走过的一律实心，当前那颗再亮一档。
-         规则对所有页统一——已经翻过去的页整排实心，还没到的整排空心。 */
+      /* Dots show progress, not position: everything passed is solid, the current
+         one a notch brighter. Same rule for every page — pages behind us fully
+         solid, pages ahead fully hollow. */
       if (g.dots) g.pos.forEach(function (q, d) {
         g.dots[d].classList.toggle("is-on", q.n <= now);
         g.dots[d].classList.toggle("is-now", q.n === now);
@@ -142,9 +158,10 @@
     });
   }
 
-  /* 缩略图的标题栏和位置指示点。跟工具栏一样由 runtime 自己建——版面里不该有
-     放映器的零件。它们是组的子节点、不是幻灯片的，所以总览缩放（名字挂在组上）
-     不会把标题栏一起放大到全屏。 */
+  /* Thumbnail caption and position dots. Built by the runtime, like the
+     toolbar — the layout must not contain player parts. They are children of
+     the group, not of a slide, so the overview zoom (named on the group) does
+     not blow the caption up to full screen. */
   groups.forEach(function (g, k) {
     var cap = document.createElement("div");
     cap.className = "vt-cap";
@@ -161,8 +178,9 @@
       var el = document.createElement("i");
       el.dataset.frame = q.i;
       el.dataset.at = q.at;
-      el.title = "第 " + (d + 1) + " 步";
-      /* 悬停就把缩略图换成那一步——不用点进去也能看清哪一步是哪一步 */
+      el.title = "Step " + (d + 1);
+      /* hovering swaps the thumbnail to that step — no need to open the page to
+         see which step is which */
       el.addEventListener("pointerenter", function () { peek(+this.dataset.frame, +this.dataset.at); });
       dots.appendChild(el);
       return el;
@@ -171,15 +189,19 @@
     g.el.appendChild(dots);
   });
 
-  /* ── 同一个 key 在一页里出现多次 ────────────────────────────────────
-     View Transitions 一个名字只能配一对，所以「一个变三个」没法直接表达。
-     做法是**在少的那一边复制**：把那一个原地复制两份、三个名字各挂一个，
-     于是三组各有 old 和 new，三份从同一个地方出发飞向三个终点——看起来
-     就是分裂。反过来就是归并。复制品在过渡结束后删掉，改过的名字改回去。
+  /* ── the same key several times on one page ─────────────────────────
+     View Transitions pairs one name with exactly one counterpart, so "one
+     becomes three" cannot be expressed directly. The trick is to **clone on
+     the smaller side**: copy the single one twice in place, give the three a
+     name each, and now three groups each have an old and a new — three copies
+     leave the same spot for three destinations, which reads as a split. The
+     reverse is a merge. Clones are removed and renamed elements restored once
+     the transition ends.
 
-     复制的是提升出来的区域 <svg>，里面只有 <use xlink:href="#g…">，引用的
-     字形 <symbol> 留在底图的 <defs> 里、全文档解析，所以复制不带 id、
-     也不复制任何字形数据。 */
+     What is cloned is the hoisted region <svg>, which only contains
+     <use xlink:href="#g…">; the glyph <symbol>s stay in the base image's
+     <defs> and resolve document-wide, so a clone carries no ids and no glyph
+     data. */
 
   function safe(k) { return k.replace(/[^A-Za-z0-9_-]/g, "-"); }
 
@@ -191,8 +213,9 @@
     return by;
   }
 
-  /* 把 els 摊成 K 个名字：第 i 个名字取第 floor(i*k/K) 个源，
-     同一个源被取第二次就复制一份压在原处。记下动过的，过渡完还原。 */
+  /* Spread els over K names: name i takes source floor(i*k/K); a source taken
+     a second time is cloned in place. Everything touched is recorded and
+     restored after the transition. */
   function spread(els, K, key, undo) {
     var k = els.length, used = {};
     for (var i = 0; i < K; i++) {
@@ -213,18 +236,21 @@
   function balance(from, to, undo) {
     var A = marksOf(from), B = marksOf(to);
     Object.keys(A).forEach(function (k) {
-      if (!B[k] || A[k].length === B[k].length) return;     // 单边的走进出场；数量一样的不用管
+      if (!B[k] || A[k].length === B[k].length) return;     // one-sided keys enter/leave; equal counts need nothing
       var K = Math.max(A[k].length, B[k].length);
       spread(A[k], K, k, undo);
       spread(B[k], K, k, undo);
     });
   }
 
-  /* 单边的标记（这次过渡里名字没配对上的）：自己写了 mark(transition:)（hoist 落成
-     data-vt-fx）的加 vt-fx-<效果>，CSS 按它走进出场；没写的把名字摘掉、并回 root——
-     它就是整页快照的一部分，整页怎么推、怎么揭、怎么淡它就怎么走，天然对齐成一张
-     （单独成组再按自己的盒子推，只挪自己那么宽，看着就是背景走了它没走）。
-     以前靠 :only-child 认单边，Chrome 152 起它在过渡伪元素上不可靠。 */
+  /* One-sided marks (names unmatched in this transition): one that declared its
+     own mark(transition:) (hoist wrote it to data-vt-fx) gets vt-fx-<effect> and
+     the CSS enters/leaves it that way; one that did not has its name dropped and
+     folds back into root — it is then part of the whole-page snapshot and pushes,
+     wipes or fades with the page, aligned as one sheet. (Kept as its own group
+     and pushed by its own box it only moves its own width: the background moves
+     and it seems to stay.) Used to rely on :only-child, which Chrome 152 no
+     longer honours on transition pseudo-elements. */
   function soloize(from, to, undo) {
     var names = function (s) {
       var o = {};
@@ -245,20 +271,24 @@
     tag(to, A);
   }
 
-  /* ── 元素动画（mark(key, s0, s1, …)）────────────────────────────────
-     一个标记的 N 个状态在 SVG 里是 N 个并排的 <g data-typst-label="vt-key@i">，
-     同一张图的不同参数：结构一样、只差数值。任何时候只显示一个。走一步 =
-     换显示哪一个，同时让新状态的每个节点从旧状态对应节点的值出发，动画到
-     它自己的值——transform、path 的 d、颜色、线宽、透明度都是 CSS 属性，
-     交给 Web Animations 插值，补的是几何本身。倒退就是反过来走同一段。
-     结构对不上（节点数或类型不同）的只切换不补间，控制台会说。
-     一帧里有几个这样的标记就一起走，步数取最多的那个，少的走到头就停。 */
+  /* ── element animation (mark(key, s0, s1, …)) ────────────────────────
+     The N states of a mark are N sibling <g data-typst-label="vt-key@i"> in the
+     SVG: the same drawing under different parameters, identical structure, only
+     the numbers differ. Exactly one is shown at any time. One step = show a
+     different one, and animate every node of the new state from the value of
+     the corresponding node in the old state to its own — transform, the path's
+     d, colours, stroke width, opacity are all CSS properties, so Web Animations
+     interpolates the geometry itself. Stepping back plays the same segment in
+     reverse. States whose structure differs (node count or types) only switch,
+     with a console warning. Several such marks on one frame step together; the
+     step count is the largest one, shorter marks stop at their end. */
 
   function stepsOf(s) {
     if (s.vtSteps) return s.vtSteps;
     var marks = [], m = null, spec = animSpec(s);
-    /* 按文档顺序扫，遇到 @0 就起一个新标记：同一个 key 在一帧里出现两次也各是各的。
-       状态里面再套状态不支持——里面的一律当普通节点（hoist 也不提它们）。 */
+    /* Scan in document order and start a new mark at every @0, so the same key
+       twice on one frame stays two marks. States nested inside states are not
+       supported — inner ones count as ordinary nodes (hoist leaves them too). */
     Array.prototype.forEach.call(s.querySelectorAll(STATE), function (g) {
       if (g.parentNode.closest(STATE)) return;
       var l = g.getAttribute("data-typst-label"), at = l.lastIndexOf("@"), i = parseInt(l.slice(at + 1), 10);
@@ -275,37 +305,51 @@
           list.every(function (el, q) { return el.tagName === m.nodes[0][q].tagName; });
       });
       if (!ok) {
-        console.warn("[vtslides] " + m.key + " 的各个状态结构不一样（节点数或类型不同），只能切换、不能补间");
+        console.warn("[vtslides] the states of " + m.key + " differ in structure (node count or types); they will switch instead of interpolate");
         m.nodes = null;
       }
-      /* slide(anim:) 点了名的标记，状态归连续动画用，不算步 */
+      /* a mark named in slide(anim:) lends its states to the continuous animation and is not stepped */
       m.anim = m.key in spec && fromStates(spec[m.key]);
       if (!m.anim) n = Math.max(n, m.states.length - 1);
     });
     return (s.vtSteps = { marks: marks, n: n });
   }
 
-  /* 逐节点对照这些属性。变没变看属性字符串——各状态是同一段代码生成的，相等
-     就是没变。值不自己解析：浏览器早把 SVG 的 presentation attribute 解析成 CSS
-     属性了，getComputedStyle 直接给 CSS 语法——transform 是 matrix()，d 是
-     path()，x 带 px，没写的也算好了（没有 transform 就是 none，fill 继承下来），
-     display:none 的子树里照样能读。表是 SVG 属性名 → 同一个属性在 CSSOM /
-     关键帧里的名字（关键帧只认 IDL 名，传 "stroke-width" 会被静默丢掉）。 */
+  /* The attributes compared node by node. Whether one changed is decided on the
+     attribute string — the states come from the same code, equal string means
+     unchanged. Values are never parsed by hand: the browser has already turned
+     the SVG presentation attributes into CSS properties and getComputedStyle
+     gives CSS syntax — transform as matrix(), d as path(), x with px, defaults
+     filled in (no transform reads "none", fill inherits) — readable inside a
+     display:none subtree as well. The table maps SVG attribute name → the same
+     property's name in the CSSOM / in keyframes (keyframes only accept the IDL
+     name; "stroke-width" is silently dropped). */
   var PROPS = { d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
                 opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
                 x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry" };
 
-  /* 同一位置的节点 list 里，哪些属性不全相同 */
+  /* which attributes are not all equal across the nodes in list (same position in each state) */
   function changed(list) {
     return Object.keys(PROPS).filter(function (a) {
       var v = list[0].getAttribute(a);
       return list.some(function (el) { return el.getAttribute(a) !== v; });
     });
   }
-  /* 节点 el 的这些属性现在的值，关键帧写法 */
+  /* Current values of these attributes on node el, in keyframe form.
+     Every path Typst exports starts with an empty "M 0 0" subpath and the real
+     start is a relative "m x y"; when the start happens to sit on the box origin
+     it writes "M 0 0 l …" instead — one command fewer, and Chrome cannot
+     interpolate between the two forms (the shape snaps at the midpoint while the
+     transform glides — a pendulum rod detaches from its pivot). The computed d
+     is already absolute; dropping that empty subpath makes both forms read
+     "M x y L …". */
   function values(el, attrs, kf) {
     var cs = getComputedStyle(el);
-    attrs.forEach(function (a) { kf[PROPS[a]] = cs[PROPS[a]]; });
+    attrs.forEach(function (a) {
+      var v = cs[PROPS[a]];
+      if (a === "d") v = v.replace(/^path\("M 0 0 M /, 'path("M ');
+      kf[PROPS[a]] = v;
+    });
     return kf;
   }
 
@@ -321,33 +365,40 @@
       var a = Math.min(from, m.states.length - 1), b = Math.min(k, m.states.length - 1);
       m.states.forEach(function (g, i) { g.style.display = i === b ? "inline" : "none"; });
       if (a === b || !live || !m.nodes) return;
-      /* 新状态的节点只给一个起点关键帧（旧状态对应节点的值）；终点是节点自己的属性，
-         播完自然落在那儿，不用收尾 */
+      /* Each node of the new state animates from the value of its counterpart in
+         the old state to its own; the end is the node's own attribute, so it
+         lands there by itself and nothing has to be committed. Both ends go
+         through values() so the d syntax matches. */
       m.nodes[b].forEach(function (el, j) {
         var diff = changed([m.nodes[a][j], el]);
-        if (diff.length) s.vtRun.push(el.animate([values(m.nodes[a][j], diff, { offset: 0 })], { duration: durMs(defaultMs), easing: EASE }));
+        if (diff.length) s.vtRun.push(el.animate([values(m.nodes[a][j], diff, {}), values(el, diff, {})], { duration: durMs(defaultMs), easing: EASE }));
       });
     });
-    /* 瞬时的那些（落位、预览、缩略图）都不是「走了一步」，不发；发的由调用方 paint() 去发 */
+    /* instant moves (landing, previews, thumbnails) are not "a step taken", so
+       they don't announce; the caller's paint() does */
     if (!instant && s === slides[cur]) announce();
   }
 
-  /* 正在播的一步立刻收掉——新状态本来就落在自己的属性上，取消就是跳到终点 */
+  /* Cut a running step short — the new state already rests on its own
+     attributes, so cancelling is jumping to the end. */
   function halt(s) {
     (s.vtRun || []).forEach(function (a) { a.cancel(); });
     s.vtRun = [];
   }
 
-  /* ── 连续动画（slide(anim:)）──────────────────────────────────────
-     <section data-anim='{"dot":{"follow":"track","duration":3000}}'>。
-     不发明 DSL：spec 就是 Web Animations API 的 keyframes + options，原样交给
-     el.animate()。三种关键帧来源：写了 keyframes 就动标记本身；follow 沿同一帧里
-     另一个标记的第一条 <path> 跑（CSS offset-path，合成器上跑，动的只有
-     offset-distance）；两者都没写、标记又带了多个状态，那些状态就是关键帧——
-     每个节点各自一条动画，关键帧是各状态里对应节点的值。
-     路径要换算成 deck 里的 px，所以在这一帧显示出来之后才建、尺寸变了重算；
-     翻页过渡播完才开始（过渡里快照是静止的，播着的话结束时会跳一下），
-     不在台上的帧一律暂停。 */
+  /* ── continuous animation (slide(anim:)) ─────────────────────────────
+     <section data-anim='{"dot":{"follow":"track","duration":3000}}'>.
+     No DSL: the spec is Web Animations keyframes + options and goes to
+     el.animate() as is. Three sources of keyframes: `keyframes` animates the
+     mark itself; `follow` runs it along the first <path> of another mark on the
+     same frame (CSS offset-path, on the compositor, only offset-distance moves);
+     neither given while the mark carries several states — those states are the
+     keyframes, one animation per node, each keyframe the corresponding node's
+     values in that state.
+     The path has to be converted to deck px, so it is built only once the frame
+     is shown, and rebuilt on resize; playback starts after the page transition
+     (snapshots are still, a playing element would jump at the end) and every
+     frame not on stage is paused. */
 
   function animSpec(s) {
     if (!s.vtSpec) { s.vtSpec = {}; try { s.vtSpec = JSON.parse(s.dataset.anim || "{}"); } catch (e) {} }
@@ -361,7 +412,7 @@
       var spec = animSpec(s);
       Object.keys(spec).forEach(function (key) {
         var o = spec[key], el = s.querySelector('.vt-mark[data-vt-key="' + key + '"]');
-        if (!el) { console.warn("[vtslides] anim: 这一帧里没有标记 " + key); return; }
+        if (!el) { console.warn("[vtslides] anim: no mark " + key + " on this frame"); return; }
         var opts = { duration: 1000, iterations: Infinity, easing: "linear" };
         Object.keys(o).forEach(function (k) {
           if (k !== "keyframes" && k !== "follow" && k !== "orient") opts[k] = o[k];
@@ -369,18 +420,19 @@
         var keep = function (a, fit) { a.pause(); s.vtAnims.push({ a: a, fit: fit }); };
         if (fromStates(o)) {
           var m = stepsOf(s).marks.filter(function (m) { return m.key === key; })[0];
-          if (!m || !m.nodes) { console.warn("[vtslides] anim: " + key + " 没有 keyframes、follow，也没有多个状态可播"); return; }
+          if (!m || !m.nodes) { console.warn("[vtslides] anim: " + key + " has no keyframes, no follow and no states to play"); return; }
           m.nodes[0].forEach(function (node, j) {
             var column = m.nodes.map(function (list) { return list[j]; }), diff = changed(column);
             if (diff.length) keep(node.animate(column.map(function (el) { return values(el, diff, {}); }), opts));
           });
         } else if (o.follow) {
           var track = s.querySelector('.vt-mark[data-vt-key="' + o.follow + '"] path');
-          if (!track) { console.warn("[vtslides] anim: " + key + " 要沿着 " + o.follow + " 跑，但这一帧里没有它或它里面没有 path"); return; }
+          if (!track) { console.warn("[vtslides] anim: " + key + " should follow " + o.follow + ", but this frame has no such mark or it has no path"); return; }
           el.style.offsetRotate = o.orient ? "auto" : "0deg";
-          /* path() 的坐标 Chrome 按元素自己的盒子算、规范按包含块算，offset-position
-             也拧不过来。把元素挪到包含块原点，两种解释就重合了；反正它从 0% 起步，
-             静息位置无所谓。 */
+          /* Chrome resolves path() coordinates against the element's own box, the
+             spec against the containing block, and offset-position cannot fix it.
+             Move the element to the containing block's origin and the two
+             readings coincide; it starts at 0% anyway, the rest position is moot. */
           el.style.left = el.style.top = "0";
           keep(el.animate([{ offsetDistance: "0%" }, { offsetDistance: "100%" }], opts),
                function () { el.style.offsetPath = pathIn(track); });
@@ -390,15 +442,15 @@
     s.vtAnims.forEach(function (x) { if (x.fit) x.fit(); });
   }
 
-  /* 把 path 采样成 deck 坐标系（px）里的折线。containing block 就是 .vt-page，
-     和 deck 同框。 */
+  /* Sample a path into a polyline in deck coordinates (px). The containing
+     block is .vt-page, which shares the deck's box. */
   function pathIn(path) {
     var m = path.getScreenCTM(), r = deck.getBoundingClientRect();
     if (!m) return "none";
     var L = path.getTotalLength(), N = 240, d = [];
     for (var i = 0; i <= N; i++) {
-      /* Typst 导出的 d 以 "M 0 0 m …" 开头：原点上有个空子路径，getPointAtLength(0)
-         会落在那儿。从一个极小长度起采，绕开它。 */
+      /* Typst's d starts with "M 0 0 m …": an empty subpath at the origin, where
+         getPointAtLength(0) would land. Start sampling a hair further in. */
       var q = path.getPointAtLength(i ? L * i / N : Math.min(L, 0.01)).matrixTransform(m);
       d.push((i ? "L" : "M") + (q.x - r.left).toFixed(1) + " " + (q.y - r.top).toFixed(1));
     }
@@ -415,11 +467,14 @@
     (slides[cur].vtAnims || []).forEach(function (x) { if (x.fit) x.fit(); });
   }).observe(deck);
 
-  /* ── 过渡 ────────────────────────────────────────────────────────────
-     types 是这次过渡的类型（["slide", "back"]、["zoom"]），交给 API，CSS 用
-     html:active-view-transition-type(slide) 选规则；生命周期浏览器自己管，被跳过的
-     过渡不会把后一次的类型带走。假值 = 不过渡直接落位。setup 在捕获旧快照之前跑
-     （配名字、加效果类、临时名），往 undo 里塞的收尾在播完后跑。 */
+  /* ── transition ──────────────────────────────────────────────────────
+     types are this transition's types (["slide", "back"], ["zoom"]), handed to
+     the API; deck.css selects rules with html:active-view-transition-type(slide).
+     The browser owns their lifetime, so a skipped transition never takes the
+     next one's types with it. A falsy value means no transition: land at once.
+     setup runs before the old snapshot is captured (pairing names, effect
+     classes, temporary names); the clean-ups it pushes into undo run when the
+     transition has finished. */
   function transition(types, update, setup) {
     if (!types) { update(); play(); return; }
     root.style.setProperty("--vt-dur", dur(defaultMs));
@@ -435,10 +490,12 @@
     if (i === want) return;
     var dir  = i > want ? "fwd" : "back";
     var dest = slides[i];
-    /* 页间过渡才用页级的效果（整页推、揭、淡）：进入的那一页决定怎么进，后退时按
-       离开的那一页，所以过渡总是原路倒放。页内帧与帧之间版面没动，只是增量变化，
-       root 一律交叉淡化——相同的部分不变，多出来的那块淡入；元素自己的进出场由
-       mark(transition:) 管。 */
+    /* The page-level effect (push, wipe or fade the whole page) applies between
+       pages only: the page being entered decides, and going back the page being
+       left does, so a transition always replays in reverse. Between frames of
+       one page the layout stays put and only changes incrementally, so root
+       always cross-fades — what is the same stays, what was added fades in;
+       elements enter and leave by their own mark(transition:). */
     var owner = dir === "fwd" ? dest : slides[want];
     var fx    = gOf[i] === gOf[want] ? "fade" : owner.dataset.transition || defaultFx;
     want = i;
@@ -450,9 +507,9 @@
     });
   }
 
-  /* 走到某个位置：同一帧里就是走一步（动画），换了帧就是翻页 */
+  /* go to a position: within the current frame it is a step (animated), otherwise a page change */
   function goto(q) { if (q.i === want) stepTo(slides[q.i], q.at); else go(q.i, q.at); }
-  /* 往前/往后一格。总览里按帧走，不管步。 */
+  /* one notch forward/back; in the overview walk frames, ignore steps */
   function step(d) {
     var q = !over() && POS[idx(want) + d];
     if (q) goto(q); else go(want + d);
@@ -487,13 +544,16 @@
     }
   });
 
-  /* 点击 = 翻页：左 1/3 上一页，其余下一页。主窗口的 deck 和演讲者视图里的
-     「当前页」预览走的是同一个 tap()，只是各自的框不同。
+  /* Click = navigate: left third goes back, the rest forward. The deck in the
+     main window and the "current" preview in the speaker view share tap(),
+     only the box differs.
 
-     绑在 document 上按坐标判断，而不是绑在 deck 上按 target 冒泡：过渡期间
-     浏览器不再对真实 DOM 做命中测试，事件 target 一律是 <html>，绑在 deck 上
-     的监听器在动画播完前一次都收不到——那就是「落定了才能点」。给伪元素
-     加 pointer-events:none 也没用（计算值确实变 none，但 target 还是 html）。 */
+     Bound on document and judged by coordinates rather than on the deck by
+     bubbling target: during a transition the browser no longer hit-tests the
+     real DOM, every event targets <html>, and a listener on the deck hears
+     nothing until the animation is over — that is "click only once it has
+     settled". pointer-events:none on the pseudo-elements does not help (the
+     computed value changes, the target is still html). */
   function frac(pt, el) {
     var r = el.getBoundingClientRect();
     var x = (pt.clientX - r.left) / r.width, y = (pt.clientY - r.top) / r.height;
@@ -506,12 +566,12 @@
       var dot = e.target.closest(".vt-dots i");
       if (dot) { openSlide(+dot.dataset.frame, +dot.dataset.at); return; }
       var g = e.target.closest(".vt-group");
-      if (g) openSlide(slides.indexOf(g.querySelector(".vt-slide.is-thumb")));   // 所见即所得
+      if (g) openSlide(slides.indexOf(g.querySelector(".vt-slide.is-thumb")));   // what you see is what opens
       return;
     }
     if (e.target.closest("a, button, input, select, textarea, pre, table")) return;
-    if (bar && frac(e, bar)) return;         // 过渡期间点在工具栏上，也不当成翻页
-    if (lasing && touching) return;          // 触摸指点中，不当成翻页
+    if (bar && frac(e, bar)) return;         // a click on the toolbar during a transition is not a page turn
+    if (lasing && touching) return;          // pointing by touch is not a page turn
     var q = frac(e, deck);
     if (q) tap(q);
   });
@@ -524,16 +584,18 @@
     ty = t.clientY;
   }, { passive: true });
   document.addEventListener("touchend", function (e) {
-    if (!swiping || lasing) return;          // 激光笔开着时不吃滑动
+    if (!swiping || lasing) return;          // no swiping while the laser is on
     var dx = e.changedTouches[0].clientX - tx;
     var dy = e.changedTouches[0].clientY - ty;
     if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy)) { dx < 0 ? next() : prev(); }
   }, { passive: true });
 
-  /* 滚轮翻页：向下下一页、向上上一页。鼠标滚轮一格 deltaY≈100，一格一页；
-     触控板一次手势是一串小 delta，累加过阈值才翻，翻完清零并冷却 300ms，
-     手势收尾的惯性大多落在冷却期里被吃掉。总览里滚轮是滚网格，不翻页。
-     主窗口的 deck 和演讲者视图的预览用同一个 wheel()。 */
+  /* Wheel navigation: down is forward, up is back. A mouse wheel notch is
+     deltaY≈100, one notch one position; a trackpad gesture is a burst of small
+     deltas, accumulated until a threshold, then reset and cooled down for
+     300ms so the gesture's inertia mostly lands in the cool-down. In the
+     overview the wheel scrolls the grid. The main deck and the speaker
+     preview share wheel(). */
   var wheelAcc = 0, wheelAt = 0;
   function wheel(e) {
     var now = Date.now();
@@ -548,10 +610,10 @@
     if (!over() && frac(e, deck)) wheel(e);
   }, { passive: true });
 
-  /* 地址栏改了就跟过去（replaceState 不触发这个事件，自己发的不会绕回来） */
+  /* follow the address bar (replaceState does not fire this, so our own writes don't loop back) */
   window.addEventListener("hashchange", function () { goto(fromHash()); });
 
-  /* "#3" = 第 3 页第 1 个位置，"#3.4" = 第 3 页第 4 个位置（帧和步展平后数） */
+  /* "#3" = page 3, first position; "#3.4" = page 3, fourth position (frames and steps flattened) */
   function fromHash() {
     var m = /^#(\d+)(?:\.(\d+))?$/.exec(location.hash);
     if (!m) return POS[0];
@@ -566,11 +628,13 @@
     else root.requestFullscreen().catch(function () {});
   }
 
-  /* 总览 ←→ 放映：整页缩放，不做元素级 morph。
-     缩略图和放映页是同一个 .vt-slide，给它一个临时的 view-transition-name，
-     浏览器就把两个状态下的框补间起来 —— 看上去就是这一页放大/缩小到位。
-     同时在 CSS 里用 !important 盖掉每个 .vt-mark 的名字，让标记并回 root：
-     不然上一页残留的标记会各自配对起飞，那是「翻页」的动画，不是「打开」。*/
+  /* Overview ⇄ presenting: a whole-page zoom, no element-level morph.
+     The thumbnail and the shown page are the same .vt-slide; give it a
+     temporary view-transition-name and the browser interpolates its box between
+     the two states — the page zooms into place. The CSS meanwhile overrides
+     every .vt-mark name with !important so the marks fold back into root:
+     otherwise leftovers from the previous page would pair up and fly, which is
+     the "page turn" animation, not "open". */
   function zoomTo(i, update) {
     var dest = groups[gOf[i]].el;
     transition(canVT && !reduced.matches && ["zoom"], update, function (undo) {
@@ -584,8 +648,9 @@
     else zoomTo(cur, function () { deck.classList.add("vt-all"); still(slides[cur]); syncTools(); });
   }
 
-  /* 从总览挑一页进去；不指定步就按缩略图里正显示的那一步。
-     点的是预览中的那个点，就是要它——退出总览时圆点的 pointerleave 别再拨回去。 */
+  /* Open a page from the overview; without a step, at whatever step the
+     thumbnail shows. Clicking the previewed dot means that step — the dots'
+     pointerleave on leaving the overview must not move it back. */
   function openSlide(i, k) {
     want = i;
     peeked = null;
@@ -593,14 +658,15 @@
     zoomTo(i, function () { deck.classList.remove("vt-all"); paint(i); });
   }
 
-  /* 总览里选页 = 打开；放映里 = 普通翻页 */
+  /* choosing a page in the overview opens it; while presenting it is a plain page change */
   function pick(i) { if (over()) openSlide(i); else go(i); }
 
-  /* ── 工具栏 ──────────────────────────────────────────────────────────
-     由 runtime 建，任何 deck 都有。在 .vt-deck 外面、自带 view-transition-name，
-     翻页过渡不会把它带上。一套工具栏可以建在任何文档里：主窗口一份（自动
-     隐藏），演讲者视图一份（常驻右下角）。按钮都指向同一组函数，状态由
-     syncTools() 一起刷。 */
+  /* ── toolbar ─────────────────────────────────────────────────────────
+     Built by the runtime, so every deck has one. Lives outside .vt-deck with
+     its own view-transition-name, so a page transition never drags it along.
+     A toolbar can be built in any document: one in the main window
+     (auto-hiding), one in the speaker view (always shown, bottom right).
+     Buttons call the same functions; syncTools() refreshes them together. */
 
   var ICON = {
     grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
@@ -617,10 +683,12 @@
       (extra || "") + "</svg>";
   }
 
-  /* PDF 下载。同一份 .typ 出的 PDF 就在旁边，观众问「有讲义吗」时不用翻聊天记录。
-     data-pdf="auto"（默认）= 跟本页同名的 .pdf；"none" = 不放这个按钮。
-     download + target=_blank 是配合：能下载就不离开当前页，
-     下载属性被忽略时（跨域、某些 file:// 情形）也只是新开一个标签页。 */
+  /* PDF download. The PDF from the same .typ sits next to the HTML, so
+     "is there a handout?" needs no digging. data-pdf="auto" (default) = the
+     .pdf with this page's name; "none" = no button. download + target=_blank
+     work together: where downloading works the page stays; where the download
+     attribute is ignored (cross-origin, some file:// cases) it merely opens a
+     new tab. */
   var pdfHref = (function () {
     var v = deck.dataset.pdf || "auto";
     if (v === "none") return "";
@@ -644,11 +712,11 @@
     b.count.className = "vt-count";
     b.el.appendChild(b.count);
 
-    b.overview = button("总览 (o)", svg(ICON.grid), toggleOverview);
+    b.overview = button("Overview (o)", svg(ICON.grid), toggleOverview);
     b.el.appendChild(b.overview);
-    b.laser = button("激光笔 (l)", svg(ICON.laser, '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>'), toggleLaser);
+    b.laser = button("Laser pointer (l)", svg(ICON.laser, '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>'), toggleLaser);
     b.el.appendChild(b.laser);
-    b.el.appendChild(button("演讲者视图 (s)", svg(ICON.notes), openSpeaker));
+    b.el.appendChild(button("Speaker view (s)", svg(ICON.notes), openSpeaker));
 
     if (pdfHref) {
       var a = doc.createElement("a");
@@ -657,20 +725,20 @@
       a.download = "";
       a.target = "_blank";
       a.rel = "noopener";
-      a.title = "下载 PDF";
-      a.setAttribute("aria-label", "下载 PDF");
+      a.title = "Download PDF";
+      a.setAttribute("aria-label", "Download PDF");
       a.innerHTML = svg(ICON.down);
       a.addEventListener("click", function (e) { e.stopPropagation(); });
       b.el.appendChild(a);
     }
 
-    b.full = button("全屏 (f)", svg(ICON.full), toggleFullscreen);
+    b.full = button("Full screen (f)", svg(ICON.full), toggleFullscreen);
     b.el.appendChild(b.full);
     return b;
   }
 
-  /* 演讲者视图里的两个预览是这份 HTML 的副本（iframe name="vt-mirror"）：
-     它们只负责显示，不要工具栏。 */
+  /* The two previews in the speaker view are copies of this very HTML
+     (iframe name="vt-mirror"): they only display, no toolbar. */
   var bars = [];
   var bar = null;
   if (window.name !== "vt-mirror") {
@@ -681,7 +749,7 @@
     bar.addEventListener("pointerenter", showBar);
   }
 
-  /* 自动隐藏：工具栏是界面不是内容 */
+  /* auto-hide: the bar is chrome, not content */
   var hideAt = 0, barTimer = null;
 
   function showBar() {
@@ -696,16 +764,19 @@
     }, 300);
   }
 
-  /* ── 激光笔 ──────────────────────────────────────────────────────────
-     鼠标用 CSS cursor 换成光点（零延迟，deck.css 里）；触摸和笔没有光标可换，
-     改走 DOM 光点。按每个事件自己的 pointerType 分流，鼠标和触屏都有的机器
-     也各得其所。演讲者视图在预览上指点时也走 DOM 光点（主窗口没有鼠标）。
+  /* ── laser pointer ───────────────────────────────────────────────────
+     The mouse gets a CSS cursor image (zero latency, in deck.css); touch and
+     pen have no cursor to restyle and get a DOM dot instead. Routed by each
+     event's own pointerType, so a machine with both gets the right one per
+     input. Pointing from the speaker view's preview also uses the DOM dot (the
+     main window has no mouse there).
 
-     lasing 是放映状态，进出总览一律不动它——总览里只是把光标/光点临时收起来
-     （cursor 由 CSS 还原，光点由 route 挡掉），退出总览自然恢复。 */
+     `lasing` is presentation state and untouched by the overview — there the
+     cursor/dot is merely tucked away (the cursor by CSS, the dot by route()),
+     and comes back on leaving the overview. */
 
   var lasing = false;
-  var touching = false;   // 最近一次输入是不是非鼠标
+  var touching = false;   // whether the latest input was non-mouse
   var laser = document.createElement("div");
   laser.className = "vt-laser";
   document.body.appendChild(laser);
@@ -740,12 +811,12 @@
     var text = label(cur) + " / " + gn;
     var fs = !!document.fullscreenElement;
     bars.forEach(function (b) {
-      b.el.ownerDocument.body.classList.toggle("vt-lasing", lasing);   // 演讲者窗口的光标也跟着换
+      b.el.ownerDocument.body.classList.toggle("vt-lasing", lasing);   // the speaker window's cursor follows too
       b.count.textContent = text;
       b.overview.setAttribute("aria-pressed", String(over()));
       b.laser.setAttribute("aria-pressed", String(lasing));
       b.full.innerHTML = svg(fs ? ICON.unfull : ICON.full);
-      b.full.title = fs ? "退出全屏 (f)" : "全屏 (f)";
+      b.full.title = fs ? "Exit full screen (f)" : "Full screen (f)";
       b.full.setAttribute("aria-label", b.full.title);
     });
   }
@@ -753,7 +824,7 @@
   document.addEventListener("fullscreenchange", syncTools);
   deck.addEventListener("vt:slide", syncTools);
 
-  /* 在计数的位置闪一下（速度倍率之类），900ms 后 syncTools 会把页码写回来 */
+  /* flash something (the speed multiplier, say) where the counter is; syncTools writes the page number back after 900ms */
   var flashTimer = null;
   function flash(text) {
     bars.forEach(function (b) { b.count.textContent = text; });
@@ -762,8 +833,9 @@
     showBar();
   }
 
-  /* 界面明暗：deck(theme:) 固定，auto 跟系统。这里只把结论落到
-     <html data-theme>，颜色全在 deck.css 的 token 里；演讲者窗口照抄。 */
+  /* Chrome theme: deck(theme:) fixes it, auto follows the system. Only the
+     verdict lands on <html data-theme>; every colour is a token in deck.css,
+     and the speaker window copies the same tokens. */
   var speaker = null, spk = null, spkFrom = 0;
   var prefersLight = window.matchMedia("(prefers-color-scheme: light)");
   function applyTheme() {
@@ -774,13 +846,16 @@
   prefersLight.addEventListener("change", applyTheme);
   applyTheme();
 
-  /* ── 演讲者视图 ─────────────────────────────────────────────────────
-     独立窗口，能拖到另一块屏幕。里面「当前页 / 下一步」是两个 iframe，
-     装的就是这份 HTML 自己，用 #hash 定到那个位置——deck 本来就按 hash 走，
-     不用再写一套渲染，过渡和元素动画也照常播。窗口是 about:blank、跟主窗口
-     同源，DOM 直接建；iframe 里的副本一律不碰（file:// 下每个文件各是一个
-     origin），只改 src。同步靠 announce() 发出的 vt:slide，不轮询。
-     备注就是这一页 .vt-group 里的 <aside class="vt-note">，原样搬过去。 */
+  /* ── speaker view ────────────────────────────────────────────────────
+     A separate window that can be dragged to another screen. "Current" and
+     "next" are two iframes loading this very HTML, positioned by #hash — the
+     deck already navigates by hash, so no second renderer, and transitions and
+     element animations play there as well. The window is about:blank and
+     same-origin with the main window, so its DOM is built directly; the copies
+     inside the iframes are never touched (under file:// every file is its own
+     origin), only their src changes. Sync comes from the vt:slide events that
+     announce() fires, no polling. The notes are the page's
+     <aside class="vt-note"> inside .vt-group, moved over as is. */
 
   var SPEAKER_CSS =
     "html{color:var(--vt-fg2);font:15px/1.55 ui-sans-serif,system-ui,sans-serif}" +
@@ -801,14 +876,14 @@
     "[hidden]{display:none}" +
     ".note{flex:1;overflow:auto;padding:10px 14px;border-radius:6px;background:var(--vt-panel);" +
       "border:1px solid var(--vt-line);color:var(--vt-fg);font-size:17px}" +
-    ".note:empty::before{content:'这一页没有备注';color:var(--vt-muted)}" +
+    ".note:empty::before{content:'No notes for this page';color:var(--vt-muted)}" +
     ".note>:first-child{margin-top:0}.note>:last-child{margin-bottom:0}" +
     ".note ul,.note ol{padding-left:1.3em}";
 
   var base = location.href.replace(/#.*$/, "");
 
-  /* 界面样式从 deck.css 里原样抄过去：html 上的 token（含明暗两套和 --vt-laser）
-     和选择器以 .vt-bar 开头的工具栏规则。 */
+  /* Copy the chrome styles from deck.css as they are: the tokens on html (both
+     themes and --vt-laser) and every rule whose selector starts with .vt-bar. */
   function chromeCSS() {
     var out = [];
     Array.prototype.forEach.call(document.styleSheets, function (sheet) {
@@ -824,7 +899,7 @@
   function openSpeaker() {
     if (speaker && !speaker.closed) { speaker.focus(); return; }
     speaker = window.open("", "vt-speaker", "popup,width=1040,height=640");
-    if (!speaker) { console.warn("[vtslides] 演讲者视图被浏览器拦下了，请允许本页打开弹窗。"); return; }
+    if (!speaker) { console.warn("[vtslides] the speaker view was blocked by the browser; allow pop-ups for this page."); return; }
 
     var d = speaker.document;
     d.head.innerHTML = "<style>" + chromeCSS() + SPEAKER_CSS + "</style>";
@@ -832,12 +907,12 @@
     ["--vt-page", "--vt-w", "--vt-h"].forEach(function (v) {
       d.documentElement.style.setProperty(v, getComputedStyle(deck).getPropertyValue(v));
     });
-    d.title = "演讲者视图 · " + document.title;
+    d.title = "Speaker view · " + document.title;
     d.body.innerHTML =
       "<div class='prog'><i></i></div>" +
-      "<header><b></b><span></span><time title='点一下归零'>00:00</time></header>" +
+      "<header><b></b><span></span><time title='Click to reset'>00:00</time></header>" +
       "<main><iframe name='vt-mirror'></iframe><div class='note'></div></main>" +
-      "<aside><small>下一页</small><iframe name='vt-mirror'></iframe></aside>";
+      "<aside><small>Next</small><iframe name='vt-mirror'></iframe></aside>";
     spk = {
       page: d.querySelector("header b"), title: d.querySelector("header span"),
       clock: d.querySelector("time"), note: d.querySelector(".note"),
@@ -845,7 +920,7 @@
       nextCap: d.querySelector("aside small"), prog: d.querySelector(".prog i")
     };
 
-    /* 计时：从打开算起，点一下归零 */
+    /* timer: counts from opening, click to reset */
     spkFrom = Date.now();
     spk.clock.addEventListener("click", function () { spkFrom = Date.now(); tick(); });
     var timer = setInterval(function () {
@@ -853,23 +928,25 @@
       tick();
     }, 1000);
 
-    /* 自己的一份工具栏，常驻右下角；按钮和状态都是主窗口的 */
+    /* its own toolbar, always shown bottom right; buttons and state are the main window's */
     var b = buildBar(d);
     b.el.classList.add("is-shown");
     d.body.appendChild(b.el);
     bars.push(b);
     speaker.addEventListener("pagehide", function () { bars.splice(bars.indexOf(b), 1); });
 
-    /* 在这个窗口里按键 = 在主窗口里按键，所以它也是个遥控器 */
+    /* a key pressed in this window is a key pressed in the main window, so it doubles as a remote */
     d.addEventListener("keydown", function (e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       e.preventDefault();
       document.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, cancelable: true }));
     });
 
-    /* 「当前页」预览就是主窗口 deck 的替身：点它 = 点 deck（同一个 frac/tap），
-       激光开着时在上面移动 = 在主窗口上指点。主窗口那边没有鼠标可换光标，
-       走 DOM 光点；坐标按预览框 → 主 deck 框等比换算。 */
+    /* The "current" preview stands in for the main deck: clicking it is
+       clicking the deck (same frac/tap), and moving over it with the laser on
+       points on the main window. That window has no mouse whose cursor could
+       change, so it gets the DOM dot; coordinates map preview box → main deck
+       box proportionally. */
     d.addEventListener("click", function (e) {
       if (e.target.closest("a, button")) return;
       var q = frac(e, spk.now);
@@ -895,15 +972,17 @@
     spk.clock.textContent = (h ? h + ":" : "") + (m < 10 ? "0" : "") + m + ":" + (x < 10 ? "0" : "") + x;
   }
 
-  /* 只改 src：跟当前 URL 只差 fragment 的导航不会重新加载，iframe 里的
-     deck 收到 hashchange 就跟过去。 */
+  /* Only the src changes: a navigation that differs from the current URL by
+     the fragment alone does not reload, the deck inside gets hashchange and
+     follows. */
   function show(frame, hash) {
     var u = base + "#" + hash;
     if (frame.getAttribute("src") !== u) frame.src = u;
   }
 
-  /* 「下一步」预览给的是观众接下来会看到的东西：还在这一页里（下一帧或元素
-     动画的下一步）叫下一步，出了这一页才叫下一页。 */
+  /* The "next" preview shows what the audience will see next: still within
+     this page (next frame, or next step of an element animation) it is the
+     next step; only past the page is it the next page. */
   function syncSpeaker() {
     if (!spk || speaker.closed) return;
     var g = groups[gOf[cur]], nx = POS[idx(cur) + 1];
@@ -912,14 +991,14 @@
     spk.title.textContent = g.title;
     show(spk.now, label(cur));
     spk.next.hidden = !nx;
-    spk.nextCap.textContent = !nx ? "最后一页" : gOf[nx.i] === gOf[cur] ? "下一步" : "下一页";
+    spk.nextCap.textContent = !nx ? "Last page" : gOf[nx.i] === gOf[cur] ? "Next step" : "Next page";
     if (nx) show(spk.next, label(nx.i, nx.at));
     var note = g.el.querySelector(".vt-note");
     spk.note.innerHTML = note ? note.innerHTML : "";
   }
 
   deck.addEventListener("vt:slide", syncSpeaker);
-  /* 主窗口走了就把它收掉，免得留一个不再同步的窗口 */
+  /* close it when the main window goes, so no window is left out of sync */
   window.addEventListener("pagehide", function () { if (speaker && !speaker.closed) speaker.close(); });
 
   /* ── boot ─────────────────────────────────────────────────────────── */
