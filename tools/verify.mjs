@@ -17,12 +17,17 @@ const EXE = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const url = 'file://' + join(OUT, 'demo.html');
 const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--force-color-profile=srgb'] });
 const VP = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 };
+/* the deck opens on the desk; everything here is about the page being presented */
+const present = async p => {
+  await p.evaluate(() => { window.vtslides.mode = 'present'; });
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
+};
 const bare = p => p.evaluate(() => { const b = document.querySelector('.vt-bar'); if (b) b.remove(); });
 
 /* ── 1. frames at rest, compared with the PDF ─────────────────────────── */
 const n = await (async () => {
   const p = await b.newPage(VP);
-  await p.goto(url); await p.waitForTimeout(500); await bare(p);
+  await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
   const n = await p.evaluate(() => window.vtslides.total);
   for (let i = 0; i < n; i++) {
     await p.evaluate(i => window.vtslides.go(i), i);
@@ -44,14 +49,16 @@ execFileSync('pdftoppm', ['-png', '-r', '96', '-scale-to-x', '1280', '-scale-to-
 /* The only valid criterion is "the difference is nothing but hollow glyph
    outlines" — a shift or a missing glyph produces solid blobs. The mean is just
    a magnitude: the anti-aliasing difference between two rasterisers sits around
-   1, the same page shifted by 2px is more than twice that, so 1.5 separates the
-   two. Both images are blurred by 1px first: a hoisted region is its own box and
-   the browser snaps its position to whole pixels (up to half a pixel off), and a
-   theorem box full of small text pushes the mean to 2.3 on that half pixel alone
-   — anti-aliasing, not displacement; blurred, it drops to 1.1 while a real 2px
-   shift stays at 2.5. The real evidence is diff-N.png: outlines or ghosting is
-   obvious to the eye. */
-const LIMIT = 1.5;
+   1, the same page shifted by 2px is more than twice that. Both images are
+   blurred by 1px first: a hoisted region is its own box and the browser snaps
+   its position to whole pixels (up to half a pixel off), and a theorem box full
+   of small text pushes the mean to 2.3 on that half pixel alone —
+   anti-aliasing, not displacement; blurred, it drops to 1.1 while a real 2px
+   shift stays at 2.5. The densest page (theorem, definition and proof, the
+   bodies in italic) sits at 1.65 on that half pixel, and rolling it by a whole
+   2px scores 2.9, so 2 still separates a rasteriser from a displacement. The
+   real evidence is diff-N.png: outlines or ghosting is obvious to the eye. */
+const LIMIT = 2;
 console.log(`PDF vs HTML (mean after a 1px blur, out of 255; limit ${LIMIT})`);
 let worst = 0;
 for (let i = 1; i <= n; i++) {
@@ -76,7 +83,7 @@ console.log(`  worst   ${worst.toFixed(3)}  ${worst < LIMIT ? '✓' : '✗'}   d
 /* ── 2. region decomposition: base with holes / regions only / one region only ── */
 {
   const p = await b.newPage(VP);
-  await p.goto(url); await p.waitForTimeout(500); await bare(p);
+  await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
   await p.evaluate(() => window.vtslides.go(5));      // the page where the A/B boxes overlap
   await p.waitForTimeout(900);
   await p.screenshot({ path: join(SHOT, 'v-full.png') });
@@ -99,7 +106,7 @@ console.log(`  worst   ${worst.toFixed(3)}  ${worst < LIMIT ? '✓' : '✗'}   d
    the animation looks like a jump.                                        */
 for (const [tag, t] of [['morph', 0], ['morph', 130], ['morph', 260], ['morph', 700]]) {
   const p = await b.newPage(VP);
-  await p.goto(url); await p.waitForTimeout(500); await bare(p);
+  await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
   await p.evaluate(async t => {
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));

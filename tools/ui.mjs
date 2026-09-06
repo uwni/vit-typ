@@ -1,6 +1,8 @@
 /* Regressions for the toolbar / laser pointer / overview zoom / touch routing /
    speaker view.   Usage: node tools/ui.mjs                                   */
 import { chromium } from 'playwright';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -12,14 +14,21 @@ const VP = { viewport: { width: 1280, height: 720 } };
 const errs = [];
 /* Page numbers move as the demo grows: the element-animation page (wave) is
    page W, and there are F frames before it. */
-const W = 10, F = 21;
+const W = 11, F = 24;
+/* The deck opens on the desk, whose preview is a second copy of this document:
+   present, then let that copy finish loading, so the page is quiet and the
+   timings below are the deck's own. */
+const present = async p => {
+  await p.evaluate(() => { window.vtslides.mode = 'present'; });
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
+};
 const watch = p => { p.on('pageerror', e => errs.push(e.message));
                      p.on('console', m => m.type() === 'error' && errs.push(m.text())); };
 
 /* ── toolbar: PDF link ─────────────────────────────────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   console.log('toolbar:', JSON.stringify(await p.evaluate(() => {
     const a = document.querySelector('.vt-bar .vt-dl');
     return {
@@ -37,7 +46,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 /* ── the laser pointer must survive the overview ───────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   const snap = () => p.evaluate(() => ({
     lasing: document.body.classList.contains('vt-lasing'),
     pressed: document.querySelector('.vt-bar button[aria-pressed]:nth-of-type(2)').getAttribute('aria-pressed'),
@@ -55,7 +64,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 /* ── opening from the overview = whole-page zoom, not an element-level morph ── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   console.log('overview open:', JSON.stringify(await p.evaluate(async () => {
     const orig = document.startViewTransition.bind(document);
     document.startViewTransition = () => {};
@@ -93,7 +102,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 {
   const ctx = await b.newContext({ ...VP, hasTouch: true });
   const p = await ctx.newPage(); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   const snap = () => p.evaluate(() => ({
     cursor: getComputedStyle(document.querySelector('.vt-deck')).cursor.slice(0, 18),
     nomouse: document.body.classList.contains('vt-nomouse'),
@@ -115,10 +124,84 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
   await ctx.close();
 }
 
+/* ── transition settings: duration, easing and the effects' own knobs ──
+   tools/knobs.typ sets them at all three levels — the deck's default, one
+   page's own, one mark's. The Typst side turns each bundle into one rule and
+   names it after what it holds; the name rides along as a view transition type
+   on the page, as a view-transition-class on the mark. Nothing here is the
+   runtime's: it only divides by the speed multiplier. */
+{
+  const src = join(HERE, 'knobs.typ');
+  const out = join(tmpdir(), 'vt-knobs.html');
+  execFileSync('typst', ['compile', '--root', join(HERE, '..'), '--features', 'html', src, out], { stdio: ['ignore', 'ignore', 'ignore'] });
+  const p = await b.newPage(VP); watch(p);
+  await p.goto('file://' + out); await p.waitForTimeout(400); await present(p);
+  const types = await p.evaluate(() => [...document.querySelectorAll('.vt-slide')].map(s => s.dataset.transition));
+  const fx = go => p.evaluate(async go => {
+    const orig = document.startViewTransition.bind(document); let vt;
+    document.startViewTransition = a => (vt = orig(a));
+    window.vtslides[go](); await vt.ready;
+    const at = ps => { const c = getComputedStyle(document.documentElement, ps); return [c.animationDuration, c.getPropertyValue('--vt-zoom').trim(), c.getPropertyValue('--vt-push').trim()].filter(Boolean).join(' '); };
+    const m = document.querySelector('.vt-mark[data-vt-key="m"]');
+    const r = { types: [...vt.types].join(' '), root: at('::view-transition-new(root)'),
+      mark: m && m.style.viewTransitionName ? at('::view-transition-new(' + m.style.viewTransitionName + ')') : '', markClass: m ? m.style.viewTransitionClass : '' };
+    await vt.finished; return r;
+  }, go);
+  const page2 = await fx('next');
+  const page3 = await fx('next');
+  await p.evaluate(() => { window.vtslides.speed = 2; });
+  const half = await fx('prev');
+  await p.evaluate(() => localStorage.removeItem('vt-speed'));
+  console.log('knobs      :', JSON.stringify({ types, page2, page3, atDoubleSpeed: half }),
+    '(page 2 carries its own bundle: 300ms, zoom 6, push -100%; page 3 the deck\'s 1200ms; the mark its own 900ms; at 2× every duration is halved)');
+  await p.close();
+}
+
+/* ── the desk: where the deck opens ──────────────────────────────────
+   The rail is the deck in thumbnails, the preview a copy of this document at
+   the selected page, the notes that page's. Clicking the rail selects, Enter
+   presents, Esc comes back — and nothing animates or transitions here. */
+{
+  const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); watch(p);
+  await p.goto(url + '#12'); await p.waitForTimeout(1200);
+  const desk = () => p.evaluate(() => {
+    const rail = document.querySelector('.vt-deck'), pane = document.querySelector('.vt-pane');
+    const seen = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    return {
+      mode: window.vtslides.mode, page: window.vtslides.index,
+      thumbs: document.querySelectorAll('.vt-slide.is-thumb').length,
+      here: [...document.querySelectorAll('.vt-group')].findIndex(g => g.classList.contains('is-here')),
+      preview: (document.querySelector('.vt-pane iframe').getAttribute('src') || '').replace(/^.*#/, '#'),
+      notes: document.querySelector('.vt-notes').textContent.slice(0, 18),
+      pane: getComputedStyle(pane).display === 'none' ? 'hidden' : 'shown',
+      railScrolled: rail.scrollTop > 0,
+      inView: seen(document.querySelectorAll('.vt-group')[window.vtslides.index === 0 ? 0 : 11]),
+      bar: document.querySelector('.vt-bar').classList.contains('is-shown'),
+      running: document.getAnimations().filter(a => a.playState === 'running').length,
+    };
+  });
+  const open = await desk();
+  await p.waitForTimeout(2600);   // the toolbar's auto-hide is 2.4 s: at the desk it must not fire
+  const stillShown = await p.evaluate(() => document.querySelector('.vt-bar').classList.contains('is-shown'));
+  await p.evaluate(() => { const g = document.querySelectorAll('.vt-group')[2]; g.querySelector('.vt-slide.is-thumb').click(); });
+  await p.waitForTimeout(700);
+  const picked = await desk();
+  await p.evaluate(() => document.querySelectorAll('.vt-group')[6].querySelectorAll('.vt-dots i')[2].click());
+  await p.waitForTimeout(700);
+  const dot = await desk();
+  await p.keyboard.press('Enter'); await p.waitForTimeout(700);
+  const shown = await desk();
+  await p.keyboard.press('Escape'); await p.waitForTimeout(700);
+  const back = await desk();
+  console.log('desk       :', JSON.stringify({ open, barAfter3s: stillShown, picked, dot, present: shown, esc: back }),
+    '(opens at #12 on the desk: every page a thumb, page 11 here and scrolled into view, the preview at #12, the toolbar shown and staying; a thumbnail selects, a dot selects its step, Enter presents (pane hidden), Esc comes back)');
+  await p.close();
+}
+
 /* ── thumbnails: one per page, title + number, frames as dots ─────── */
 {
   const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   await p.evaluate(() => window.vtslides.go(7));  await p.waitForTimeout(800);
   await p.keyboard.press('o'); await p.waitForTimeout(900);
   console.log('thumbnails :', JSON.stringify(await p.evaluate(() => ({
@@ -144,32 +227,38 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
   await p.close();
 }
 
+/* the motion of a pseudo-element: its animation and the variables deck.css set on it (opacity / transform / clip / timing) */
+const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, ps); return [cs.animationName, ...['--vt-opacity', '--vt-transform', '--vt-s-away', '--vt-clip', '--vt-timing'].map(v => cs.getPropertyValue(v).trim()).filter(Boolean)].join(' '); }`;
+
 /* ── page transition / speed factor / UI theme ─────────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + '#5.4'); await p.waitForTimeout(400);
-  const fx = go => p.evaluate(async go => {
+  await p.goto(url + '#5.4'); await p.waitForTimeout(400); await present(p);
+  const fx = go => p.evaluate(async ([go, MOTION]) => {
+    const motion = eval(MOTION);
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));
     window.vtslides[go](); await vt.ready;
     const r = { vt: [...vt.types].join(' '),
-      root: document.getAnimations().filter(a => /\(root\)/.test(a.effect.pseudoElement) && !/group|pair/.test(a.effect.pseudoElement)).map(a => a.effect.pseudoElement.replace('::view-transition-', '').replace('(root)', '') + ':' + a.animationName).join(),
+      root: { new: motion('::view-transition-new(root)'), old: motion('::view-transition-old(root)') },
       title: document.getAnimations().filter(a => /m-title-1/.test(a.effect.pseudoElement) && !/group|pair/.test(a.effect.pseudoElement)).map(a => a.effect.pseudoElement.replace('::view-transition-', '').replace('(m-title-1)', '') + ':' + a.animationName).join(),
-      titleClass: [...document.querySelectorAll('.vt-mark[data-vt-key="title"]')].map(m => m.style.viewTransitionClass).filter(c => /vt-fx/.test(c)).join() };
+      titleClass: [...document.querySelectorAll('.vt-mark[data-vt-key="title"]')].map(m => m.style.viewTransitionClass).filter(c => /vt-only-(new|old)/.test(c)).join() };
     await vt.finished; return r;
-  }, go);
-  console.log('transition :', JSON.stringify({ '5.4→6 (slide)': await fx('next'), '6→5.4 (back)': await fx('prev'), '5.4→5.3 (default)': await fx('prev') }), '(root old push-out / new push-in; the title mark on page 6 is unpaired with no effect of its own → folds into root, no animation of its own)');
-  /* the page-level effect only governs page changes: give all five frames of page 7 `slide`;
-     entering the page slides, frame-to-frame inside the page still fades */
-  await p.evaluate(() => { document.querySelectorAll('.vt-group')[6].querySelectorAll('.vt-slide').forEach(s => s.dataset.transition = 'slide'); window.vtslides.go(10); });
+  }, [go, MOTION]);
+  console.log('transition :', JSON.stringify({ '5.4→6 (slide)': await fx('next'), '6→5.4 (back)': await fx('prev'), '5.4→5.3 (default)': await fx('prev') }), '(slide: new from translateX(100%), old to translateX(-100%), back the other way round; default: new from opacity 0, old held at 1; the title mark on page 6 is unpaired with no effect of its own → folds into root, no animation of its own)');
+  /* the types on a frame are the transition into it: give page 7's first frame `slide`;
+     entering the page slides, frame-to-frame inside the page still fades (the later frame's types) */
+  await p.evaluate(() => { document.querySelectorAll('.vt-group')[6].querySelector('.vt-slide').dataset.transition = 'enter-slide leave-slide'; window.vtslides.go(10); });
   await p.waitForTimeout(1000);
   console.log('page/frame :', JSON.stringify({ '6→7.1': (await fx('next')).vt, '7.1→7.2': (await fx('next')).vt, '7.2→7.1': (await fx('prev')).vt, '7.1→6': (await fx('prev')).vt }), '(expected slide fwd / fade fwd / fade back / slide back)');
-  const sp = () => p.evaluate(() => ({ dur: document.documentElement.style.getPropertyValue('--vt-dur'), counter: document.querySelector('.vt-count').textContent, stored: localStorage.getItem('vt-speed') }));
+  const sp = () => p.evaluate(() => {
+    return { speed: document.documentElement.style.getPropertyValue('--vt-speed'), counter: document.querySelector('.vt-count').textContent, stored: localStorage.getItem('vt-speed') };
+  });
   await p.keyboard.press('=');  const a = await sp();
   await p.keyboard.press('-');  await p.keyboard.press('-'); const c = await sp();
   await p.keyboard.press('0');  const z = await sp();
   await p.evaluate(() => localStorage.removeItem('vt-speed'));
-  console.log('speed      :', JSON.stringify({ 'press =': a, 'then -,-': c, 'press 0': z }), '(700ms base → 560 / 875 / 700)');
+  console.log('speed      :', JSON.stringify({ 'press =': a, 'then -,-': c, 'press 0': z }), '(the multiplier; deck.css divides every duration by it: 1.25 / 0.8 / 1)');
   const th = () => p.evaluate(() => ({ html: document.documentElement.dataset.theme,
     bar: getComputedStyle(document.querySelector('.vt-bar')).backgroundColor, deck: getComputedStyle(document.querySelector('.vt-deck')).backgroundColor }));
   await p.emulateMedia({ colorScheme: 'light' }); await p.waitForTimeout(50); const light = await th();
@@ -183,16 +272,17 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
    old out": mirrored in time. */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + '#7.2'); await p.waitForTimeout(400);
-  const fx = go => p.evaluate(async go => {
+  await p.goto(url + '#7.2'); await p.waitForTimeout(400); await present(p);
+  const fx = go => p.evaluate(async ([go, MOTION]) => {
+    const motion = eval(MOTION);
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));
     window.vtslides[go](); await vt.ready;
     const out = {};
-    document.getAnimations().forEach(a => { const ps = a.effect.pseudoElement; if (ps && /m-A-1|\(root\)/.test(ps) && !/group|pair/.test(ps)) out[ps.replace('::view-transition-', '')] = a.animationName; });
+    document.getAnimations().forEach(a => { const ps = a.effect.pseudoElement; if (ps && /m-A-1|\(root\)/.test(ps) && !/group|pair/.test(ps)) out[ps.replace('::view-transition-', '')] = motion(ps); });
     await vt.finished; return out;
-  }, go);
-  console.log('mirror     :', JSON.stringify({ forward: await fx('next'), back: await fx('prev') }), '(both directions are old fade-out / new fade-in: a crossfade is symmetric by itself)');
+  }, [go, MOTION]);
+  console.log('mirror     :', JSON.stringify({ forward: await fx('next'), back: await fx('prev') }), '(both directions: root old held at 1 under new from 0, the mark pair old to 0 / new from 0 — symmetric by construction)');
   await p.close();
 }
 
@@ -201,15 +291,16 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
    afterwards. No :only-child — unreliable on transition pseudos since Chrome 152. */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + '#2.1'); await p.waitForTimeout(400);
+  await p.goto(url + '#2.1'); await p.waitForTimeout(400); await present(p);
   const fx = go => p.evaluate(async go => {
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));
     window.vtslides[go](); await vt.ready;
     const out = { eqGroup: document.getAnimations().some(a => /m-eq/.test(a.effect.pseudoElement || '')) };
-    out.foldedName = [...document.querySelectorAll('.vt-mark[data-vt-key="eq"]')].map(m => m.style.viewTransitionName).join();
+    const named = () => [...document.querySelectorAll('.vt-mark[data-vt-key="eq"]')].map(m => m.style.viewTransitionName).join();
+    out.foldedName = named();
     await vt.finished;
-    out.nameAfter = [...document.querySelectorAll('.vt-mark[data-vt-key="eq"]')].map(m => m.style.viewTransitionName).join();
+    out.nameAfter = named();
     return out;
   }, go);
   console.log('unpaired   :', JSON.stringify({ '2.1→2.2 eq enters': await fx('next'), '2.2→2.1 eq leaves': await fx('prev') }), '(during the transition eq has no group of its own and its name is none; restored afterwards)');
@@ -220,7 +311,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
    when leaving, stays on the track after a resize ─────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + `#${W}.6`); await p.waitForTimeout(400);
+  await p.goto(url + `#${W}.6`); await p.waitForTimeout(400); await present(p);
   const onTrack = () => p.evaluate(() => {
     const s = document.querySelector('.vt-slide.is-active');
     const path = s.querySelector('.vt-mark[data-vt-key="track"] path'), dot = s.querySelector('.vt-mark[data-vt-key="dot"]');
@@ -248,15 +339,15 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
    interpolated, mirrored when going back, the page flips only once done ── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + `#${W}`); await p.waitForTimeout(400);
+  await p.goto(url + `#${W}`); await p.waitForTimeout(400); await present(p);
   await p.evaluate(W => { window.__W = W; }, W);
   const st = () => p.evaluate(() => {
     const s = document.querySelector('.vt-slide.is-active');
-    const gs = [...s.querySelectorAll('[data-typst-label*="@"]')];
+    const gs = [...s.querySelectorAll('[data-vt-state]')];
     const shown = gs.filter(g => getComputedStyle(g).display !== 'none');
     const ball = shown.length ? [...shown[0].querySelectorAll('path')].find(q => q.getAttribute('fill') !== 'none') : null;
     const r = ball && ball.getBoundingClientRect();
-    return { shown: shown.map(g => g.getAttribute('data-typst-label').split('@')[1]).join(','),
+    return { shown: shown.map(g => g.dataset.vtAt).join(','),
              step: window.vtslides.step + '/' + window.vtslides.steps, hash: location.hash,
              running: s.getAnimations({ subtree: true }).filter(a => a.playState === 'running').length,
              ball: r ? [+(r.x + r.width / 2).toFixed(1), +(r.y + r.height / 2).toFixed(1)] : null,
@@ -293,12 +384,18 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
      previews that step and leaving restores; clicking a dot opens exactly that step */
   await p.evaluate(() => window.vtslides.go(3)); await p.waitForTimeout(900);
   await p.keyboard.press('o'); await p.waitForTimeout(900);
-  const thumb = () => p.evaluate(() => { const s = document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide.is-thumb'); return [...s.querySelectorAll('[data-typst-label*="@"]')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.getAttribute('data-typst-label').split('@')[1]).join(); });
+  const thumb = () => p.evaluate(() => { const s = document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide.is-thumb'); return [...s.querySelectorAll('[data-vt-state]')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.dataset.vtAt).join(); });
   const dot = (await p.$$(`.vt-group:nth-child(${W}) .vt-dots i`))[2];
   const t0 = await thumb(); await dot.hover(); await p.waitForTimeout(100); const t1 = await thumb();
   await p.mouse.move(10, 10); await p.waitForTimeout(100); const t2 = await thumb();
   await dot.hover(); await p.waitForTimeout(50); await dot.click(); await p.waitForTimeout(1000);
   console.log('steps in overview:', JSON.stringify({ otherPageThumb: t0, hoverThirdDot: t1, leave: t2, open: await p.evaluate(() => location.hash + ' ' + (document.querySelector('.vt-deck').classList.contains('vt-all') ? 'overview' : 'show')) }), `(expected 5 2 5 #${W}.3 show)`);
+  /* a preview of one page put back when another page's group is clicked */
+  await p.keyboard.press('o'); await p.waitForTimeout(900);
+  await (await p.$$(`.vt-group:nth-child(${W}) .vt-dots i`))[1].hover(); await p.waitForTimeout(100);
+  const peeking = await thumb();
+  await p.click('.vt-group:nth-child(3)'); await p.waitForTimeout(1000);
+  console.log('peek, open other:', JSON.stringify({ peeking, opened: await p.evaluate(() => location.hash), peekedPageStep: await p.evaluate(() => document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide').vtAt) }), '(expected 1, #3, 5 — the preview is put back, and a page left behind rests on its last step)');
   await p.close();
 }
 
@@ -306,24 +403,60 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
    effect; the whole-page wipe is checked as well ────────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + '#8.1'); await p.waitForTimeout(400);
-  const fx = (go, re) => p.evaluate(async ([go, re]) => {
+  await p.goto(url + '#9.1'); await p.waitForTimeout(400); await present(p);
+  const fx = (go, re) => p.evaluate(async ([go, re, MOTION]) => {
+    const motion = eval(MOTION);
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));
     window.vtslides[go](); await vt.ready;
     const out = {}, rx = new RegExp(re);
-    document.getAnimations().forEach(a => { const ps = a.effect.pseudoElement; if (ps && rx.test(ps) && !/group|pair/.test(ps)) out[ps.replace('::view-transition-', '')] = a.animationName + ' ' + getComputedStyle(document.documentElement, ps).getPropertyValue(/old/.test(ps) ? '--vt-out' : '--vt-in').trim(); });
-    out.classes = [...document.querySelectorAll('.vt-mark')].filter(m => /vt-fx/.test(m.style.viewTransitionClass)).map(m => m.style.viewTransitionClass).join(';');
+    document.getAnimations().forEach(a => { const ps = a.effect.pseudoElement; if (ps && rx.test(ps) && !/group|pair/.test(ps)) out[ps.replace('::view-transition-', '')] = motion(ps); });
+    out.classes = [...document.querySelectorAll('.vt-mark')].filter(m => /vt-only-(new|old)/.test(m.style.viewTransitionClass)).map(m => m.style.viewTransitionClass).join(';');
     await vt.finished; return out;
-  }, [go, re]);
+  }, [go, re, MOTION]);
   const a = await fx('next', 'm-thm|m-def');
   const b2 = await fx('next', 'm-proof');
   const c = await fx('prev', 'm-proof');
-  await p.evaluate(() => { document.querySelectorAll('.vt-slide')[19].dataset.transition = 'wipe-up'; });   // page 10 frame 1: whole-page reveal
-  await p.evaluate(() => window.vtslides.go(18)); await p.waitForTimeout(900);
+  await p.evaluate(() => { document.querySelectorAll('.vt-slide')[22].dataset.transition = 'enter-wipe-up leave-wipe-up'; });   // page 10 frame 1: whole-page reveal
+  await p.evaluate(() => window.vtslides.go(21)); await p.waitForTimeout(900);
   const d = await fx('next', '\\(root\\)');
-  console.log('enter/leave:', JSON.stringify({ '8.1→8.2 theorem enters': a, '8.2→8.3 proof enters': b2, '8.3→8.2 proof leaves': c, 'whole-page wipe-up': d }),
-    '(new is revealed from --vt-in, old collapses to --vt-out; the paired def carries no fx class)');
+  console.log('enter/leave:', JSON.stringify({ '9.1→9.2 theorem enters': a, '9.2→9.3 proof enters': b2, '9.3→9.2 proof leaves': c, 'whole-page wipe-up': d }),
+    '(new is revealed from its clip, old collapses to its clip; the paired def carries no vt-only class; proof leaves by zoom = opacity 0, scale(3))');
+  await p.close();
+}
+
+/* ── discs (page 8): two paired marks overlap, then each grows and crosses to the
+   other side out of the page — the groups move in opposite directions and
+   widen; the word on frame 3 is one-sided with its own zoom effect ────── */
+{
+  const p = await b.newPage(VP); watch(p);
+  await p.goto(url + '#8.1'); await p.waitForTimeout(600); await present(p);
+  const boxes = () => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('.vt-slide.is-active .vt-mark')].map(m => { const r = m.getBoundingClientRect(); return [m.dataset.vtKey, [r.x, r.width].map(Math.round)]; })));
+  const rest = await boxes();
+  const fly = await p.evaluate(async () => {
+    const orig = document.startViewTransition.bind(document); let vt;
+    document.startViewTransition = a => (vt = orig(a));
+    window.vtslides.next(); await vt.ready;
+    const at = k => { const g = getComputedStyle(document.documentElement, '::view-transition-group(' + document.querySelector('.vt-slide.is-active .vt-mark[data-vt-key="' + k + '"]').style.viewTransitionName + ')'); return [new DOMMatrix(g.transform).e, parseFloat(g.width)].map(Math.round); };
+    const t0 = { L: at('L'), R: at('R') };
+    for (let i = 0; i < 6; i++) await new Promise(r => requestAnimationFrame(r));
+    const t1 = { L: at('L'), R: at('R') };
+    await vt.finished; return { start: t0, later: t1 };
+  });
+  const gone = await boxes();
+  const zoom = await p.evaluate(async () => {
+    const orig = document.startViewTransition.bind(document); let vt;
+    document.startViewTransition = a => (vt = orig(a));
+    window.vtslides.next(); await vt.ready;
+    const nw = getComputedStyle(document.documentElement, '::view-transition-new(' + document.querySelector('.vt-slide.is-active .vt-mark[data-vt-key="word"]').style.viewTransitionName + ')');
+    /* the lens is a quarter of the 1280 stage, σ = c/4 in screen px, c = A (s − 1), and the image's own blur is that over s */
+    const focus = () => { const s = parseFloat(nw.getPropertyValue('--vt-s')), blur = parseFloat(nw.filter.match(/blur\(([\d.]+)px\)/)[1]); return { s: +s.toFixed(3), blur: +blur.toFixed(2), physical: Math.abs(blur - 320 / 4 * (s - 1) / s) < 0.1 }; };
+    const r = { cls: document.querySelector('.vt-mark[data-vt-key="word"]').style.viewTransitionClass, anim: nw.animationName, from: nw.getPropertyValue('--vt-transform').trim() + ' away ' + nw.getPropertyValue('--vt-s-away').trim(), transformAtStart: nw.transform.replace(/\.\d+/g, ''), start: focus() };
+    for (let i = 0; i < 12; i++) await new Promise(r => requestAnimationFrame(r));
+    r.later = focus();
+    await vt.finished; return r;
+  });
+  console.log('discs      :', JSON.stringify({ rest, fly, offPage: gone, zoom }), '(L right and wider, R left and wider; L ends beyond 1280, R below 0; the word: vt-only-new enter-zoom leave-zoom, vt-enter from opacity 0 and scale(3), s 3 → smaller, blur 53.33px → smaller, physical true at both samples)');
   await p.close();
 }
 
@@ -332,7 +465,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 {
   const p = await b.newPage(VP); watch(p);
   const look = async hash => {
-    await p.goto(url + hash); await p.waitForTimeout(1200);
+    await p.goto(url + hash); await p.waitForTimeout(1200); await present(p);
     return p.evaluate(() => {
       const s = document.querySelector('.vt-slide.is-active');
       const an = s.getAnimations({ subtree: true });
@@ -342,9 +475,34 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
                delay: [...new Set(an.map(a => a.effect.getTiming().delay))].join(',') };
     });
   };
-  console.log('balls      :', JSON.stringify(await look('#12')), '(5 svg host animations, 5 keyframes, delay 0…560)');
-  console.log('pendulums  :', JSON.stringify(await look('#13')), '(single: one svg host; double: one 96-keyframe animation per path; no steps)');
-  console.log('sea        :', JSON.stringify(await look('#14')), '(one 25-keyframe animation per path; no steps)');
+  console.log('balls      :', JSON.stringify(await look('#13')), '(5 svg host animations, 5 keyframes, delay 0…560)');
+  console.log('pendulums  :', JSON.stringify(await look('#14')), '(single: one svg host; double: one 96-keyframe animation per path; no steps)');
+  console.log('sea        :', JSON.stringify(await look('#15')), '(one 25-keyframe animation per path; no steps)');
+  await p.close();
+}
+
+/* ── keyframes are read from computed style, which only exists while the frame
+   is on stage: a page entered from elsewhere must animate exactly like one
+   opened directly (a hidden frame reports transform: none) ─────────── */
+{
+  const p = await b.newPage(VP); watch(p);
+  await p.goto(url); await p.waitForTimeout(800); await present(p);
+  await p.evaluate(() => window.vtslides.go(27)); await p.waitForTimeout(1200);
+  console.log('enter later:', JSON.stringify(await p.evaluate(async () => {
+    const s = document.querySelector('.vt-slide.is-active');
+    const anims = s.getAnimations({ subtree: true });
+    const paths = [...s.querySelector('[data-vt-state="double"][data-vt-at="0"]').querySelectorAll('path')];
+    const rods = paths[2], pivot = paths[3];
+    const pc = pivot.getBoundingClientRect(), px = pc.x + pc.width / 2, py = pc.y + pc.height / 2;
+    let worst = 0;
+    for (let i = 0; i < 90; i++) {                       // live: the rod's d runs as SMIL, its transform as a Web Animation
+      await new Promise(r => requestAnimationFrame(r));
+      const q = rods.getPointAtLength(0.01).matrixTransform(rods.getScreenCTM());
+      worst = Math.max(worst, Math.hypot(q.x - px, q.y - py));
+    }
+    const kf = anims.find(a => a.effect.target === rods).effect.getKeyframes();
+    return { rodTransform: kf[0].transform.slice(0, 6), worstPivotGap: +worst.toFixed(2) };
+  })), '(matrix, gap under 1px)');
   await p.close();
 }
 
@@ -356,7 +514,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
    100ms+ the first time. */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   for (let i = 0; i < 5; i++) { await p.mouse.click(900, 360); await p.waitForTimeout(40); }
   await p.mouse.click(200, 360);                                   // left third, mid-transition
   await p.waitForTimeout(1200);
@@ -370,23 +528,87 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
   await p.close();
 }
 
-/* ── the toolbar's backdrop-filter must not enter the transition ─────
-   The spec copies backdrop-filter onto ::view-transition-group(), while
-   opacity is only baked into the snapshot image, so during the transition an
-   invisible sheet of frosted glass blurs the snapshot under it (the larger the
-   toolbar's share of a small viewport, the worse — most visible in the speaker
-   view's iframe). Turned off on the pseudo-element only. */
+/* ── transform keyframes come from the SVG DOM (transformOf): the matrix must
+   be what the browser itself composes for the element — parent CTM⁻¹ × CTM —
+   for every transformed node of a state, and for a translate·rotate·scale list
+   (order matters) ───────────────────────────────────────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
-  console.log('frosted glass:', JSON.stringify(await p.evaluate(async () => {
-    const idle = getComputedStyle(document.querySelector('.vt-bar')).backdropFilter;
+  await p.goto(url + '#14'); await p.waitForTimeout(800); await present(p);
+  console.log('own transform:', JSON.stringify(await p.evaluate(() => {
+    const s = document.querySelector('.vt-slide.is-active');
+    s.getAnimations({ subtree: true }).forEach(a => a.cancel());   // getCTM reads the animated transform while one runs
+    const own = el => { const l = el.transform.baseVal, m = new DOMMatrix(); for (let i = 0; i < l.numberOfItems; i++) m.multiplySelf(l.getItem(i).matrix); return m; };
+    const gap = el => { const a = own(el), b = el.parentNode.getCTM().inverse().multiply(el.getCTM()); return Math.max(...['a', 'b', 'c', 'd', 'e', 'f'].map(k => Math.abs(a[k] - b[k]))); };
+    const els = [...s.querySelectorAll('[data-vt-at="0"] [transform]')];
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    t.setAttribute('transform', 'translate(10 20) rotate(30) scale(2 3)');
+    s.querySelector('[data-vt-at="0"]').appendChild(t);
+    const r = { nodes: els.length, worst: +Math.max(...els.map(gap)).toFixed(6), synthetic: +gap(t).toFixed(6) };
+    t.remove(); return r;
+  })), '(both under 1e-4)');
+  await p.close();
+}
+
+/* ── hasty presses: a transition started while another runs must leave every
+   mark's name intact — on 11.1 press ← twice quickly, then 10.2 → 10.1 must
+   still morph the fig (its group exists), not just cross-fade ───────── */
+{
+  const p = await b.newPage(VP); watch(p);
+  await p.goto(url + `#${W}.1`); await p.waitForTimeout(600); await present(p);
+  await p.keyboard.press('ArrowLeft'); await p.waitForTimeout(120); await p.keyboard.press('ArrowLeft');
+  await p.waitForTimeout(1200);
+  const names = () => p.evaluate(() => [...document.querySelectorAll('.vt-slide.is-active .vt-mark')].map(m => m.dataset.vtKey + '=' + getComputedStyle(m).viewTransitionName).join(' '));
+  const atRest = await names();
+  await p.keyboard.press('ArrowRight'); await p.waitForTimeout(1000);
+  const fig = await p.evaluate(async () => {
+    const orig = document.startViewTransition.bind(document); let vt;
+    document.startViewTransition = a => (vt = orig(a));
+    window.vtslides.prev(); await vt.ready;
+    const r = { figGroup: document.getAnimations().some(a => /group\(m-fig-1\)/.test(a.effect.pseudoElement || '')) };
+    await vt.finished; return r;
+  });
+  console.log('hasty      :', JSON.stringify({ hash: await p.evaluate(() => location.hash), namesAtRest: atRest, '10.2→10.1': fig, after: await names() }), '(every name its own, never none; the fig has a group)');
+  await p.close();
+}
+
+/* ── black screen, key help, Esc ────────────────────────────────────── */
+{
+  const p = await b.newPage(VP); watch(p);
+  await p.goto(url + '#2.1'); await p.waitForTimeout(400); await present(p);
+  const state = () => p.evaluate(() => ({ black: document.body.classList.contains('vt-black'), deck: getComputedStyle(document.querySelector('.vt-deck')).visibility, help: document.querySelector('.vt-help').hidden ? 'hidden' : 'shown', page: window.vtslides.index, overview: document.querySelector('.vt-deck').classList.contains('vt-all') }));
+  const r = {};
+  await p.keyboard.press('b'); await p.waitForTimeout(100); r.black = await state();
+  await p.keyboard.press('ArrowRight'); await p.waitForTimeout(100); r.keyWhileBlack = await state();
+  await p.keyboard.press('.'); await p.waitForTimeout(100); r.back = await state();
+  await p.keyboard.press('?'); await p.waitForTimeout(100); r.help = { ...await state(), rows: await p.evaluate(() => document.querySelectorAll('.vt-help tr').length) };
+  await p.keyboard.press('ArrowRight'); await p.waitForTimeout(100); r.keyWhileHelp = await state();
+  await p.keyboard.press('Escape'); await p.waitForTimeout(100); r.escClosesHelp = await state();
+  await p.keyboard.press('o'); await p.waitForTimeout(900); await p.keyboard.press('Escape'); await p.waitForTimeout(900); r.escClosesOverview = await state();
+  console.log('black/help :', JSON.stringify(r), '(black hides the deck and swallows keys; ? shows 12 rows and swallows keys; Esc closes the help and the overview)');
+  await p.close();
+}
+
+/* ── the toolbar through a transition: hidden it has no group (no invisible
+   sheet of frosted glass over the page), shown its group keeps the glass, so
+   it looks the same before, during and after ─────────────────────────── */
+{
+  const p = await b.newPage(VP); watch(p);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
+  const during = () => p.evaluate(async () => {
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));
     window.vtslides.next(); await vt.ready;
-    return { idle: idle,
-      duringTransition: getComputedStyle(document.documentElement, '::view-transition-group(vt-bar)').backdropFilter };
-  })));
+    const r = { name: getComputedStyle(document.querySelector('.vt-bar')).viewTransitionName,
+      group: document.getAnimations().some(a => /\(vt-bar\)/.test(a.effect.pseudoElement || '')) || !!getComputedStyle(document.documentElement, '::view-transition-group(vt-bar)').backdropFilter.match(/blur/),
+      glass: getComputedStyle(document.documentElement, '::view-transition-group(vt-bar)').backdropFilter };
+    await vt.finished; return r;
+  });
+  await p.waitForFunction(() => !document.querySelector('.vt-bar').classList.contains('is-shown'), null, { timeout: 6000 });   // auto-hide after 2.4 s
+  const hidden = await during();
+  await p.mouse.move(640, 360); await p.waitForTimeout(300);
+  const shown = await during();
+  console.log('toolbar    :', JSON.stringify({ hidden, shown }), '(hidden: name none; shown: vt-bar with blur(8px) on its group)');
   await p.close();
 }
 
@@ -394,7 +616,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 {
   const ctx = await b.newContext(VP);
   const p = await ctx.newPage(); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   console.log('notes      :', JSON.stringify(await p.evaluate(() => ({
     count: document.querySelectorAll('.vt-group > .vt-note').length,
     inLayout: getComputedStyle(document.querySelector('.vt-note')).display,
@@ -407,7 +629,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
     main: await p.evaluate(() => window.vtslides.index),
     popup: await w.evaluate(() => ({
       page: document.querySelector('header b').textContent,
-      note: document.querySelector('.note').textContent.slice(0, 12),
+      note: document.querySelector('.vt-notes').textContent.slice(0, 12),
       next: document.querySelector('aside iframe').hidden ? 'none' : 'yes',
     })),
     iframe: await Promise.all(inner().map(f => f.evaluate(() =>
@@ -425,13 +647,13 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 
   // the popup's own toolbar: pinned bottom-right, state refreshed with the main window; the preview copies have no toolbar
   await p.evaluate(() => window.vtslides.go(0)); await p.waitForTimeout(900);
-  await w.evaluate(() => document.querySelectorAll('.vt-bar button')[1].click());   // laser clicked in the popup
+  await w.evaluate(() => document.querySelector('.vt-bar button[aria-label^="Laser"]').click());   // laser clicked in the popup
   await p.keyboard.press('ArrowRight'); await p.waitForTimeout(900);
   console.log('popup toolbar:', JSON.stringify(await w.evaluate(() => {
     const bar = document.querySelector('.vt-bar'), r = bar.getBoundingClientRect();
     return { bottomRight: [innerWidth - r.right, innerHeight - r.bottom].map(Math.round).join(','),
       visible: getComputedStyle(bar).opacity, page: bar.querySelector('.vt-count').textContent,
-      laser: bar.querySelectorAll('button')[1].getAttribute('aria-pressed') };
+      laser: bar.querySelector('button[aria-label^="Laser"]').getAttribute('aria-pressed') };
   })), 'main window:', JSON.stringify(await p.evaluate(() => ({
     page: document.querySelector('.vt-count').textContent, lasing: document.body.classList.contains('vt-lasing') }))),
     'toolbar in previews:', (await Promise.all(inner().map(f => f.evaluate(() => !!document.querySelector('.vt-bar'))))).join());
@@ -467,7 +689,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
   const before = await prog();
   await w.mouse.move(nowBox.l + nowBox.w * .5, nowBox.t + nowBox.h * .5); await w.mouse.wheel(0, 100); await p.waitForTimeout(400);
   const afterWheel = { page: await idx(), progress: await prog() };
-  const noteBox = await w.evaluate(() => { const q = document.querySelector('.note').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
+  const noteBox = await w.evaluate(() => { const q = document.querySelector('.vt-notes').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
   await w.mouse.move(noteBox.x, noteBox.y); await w.mouse.wheel(0, 100); await p.waitForTimeout(400);
   console.log('popup wheel:', JSON.stringify({ progressBar: before, oneNotchOnPreview: afterWheel, pageAfterNotchOnNotes: await idx() }));
   await ctx.close();
@@ -476,7 +698,7 @@ const watch = p => { p.on('pageerror', e => errs.push(e.message));
 /* ── wheel paging: one notch = one page with a mouse, one gesture (inertia included) = one page on a trackpad, nothing in the overview ── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   const idx = () => p.evaluate(() => window.vtslides.index);
   await p.mouse.move(640, 360);
   await p.mouse.wheel(0, 100); await p.waitForTimeout(350); await p.mouse.wheel(0, 100); await p.waitForTimeout(350);

@@ -12,6 +12,11 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
 
 const SIZES = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 },
                { width: 900, height: 600 }, { width: 1440, height: 900 }];
+/* the deck opens on the desk; everything here is about the page being presented */
+const present = async p => {
+  await p.evaluate(() => { window.vtslides.mode = 'present'; });
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
+};
 const errs = [];
 const seen = [];
 
@@ -19,11 +24,11 @@ for (const vp of SIZES) {
   const p = await b.newPage({ viewport: vp });
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => m.type() === 'error' && errs.push(m.text()));
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   seen.push(await p.evaluate(() =>
     [...document.querySelectorAll('.vt-slide')].map(s =>
       [...s.querySelectorAll('.vt-mark')].map(m =>
-        m.style.viewTransitionName + ' ' +
+        m.dataset.vtKey + ' ' +
         [m.style.left, m.style.top, m.style.width, m.style.height]
           .map(v => (+v.replace('%', '')).toFixed(2)).join(' ')))));
   await p.close();
@@ -48,7 +53,7 @@ console.log('resolution independence: ' + (drift.length
   const p = await b.newPage({ viewport: SIZES[0] });
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => m.type() === 'error' && errs.push(m.text()));
-  await p.goto(url); await p.waitForTimeout(400);
+  await p.goto(url); await p.waitForTimeout(400); await present(p);
   const total = await p.evaluate(() => window.vtslides.total);
   const steps = [];
   for (let i = 1; i < total; i++) {
@@ -89,7 +94,7 @@ console.log('resolution independence: ' + (drift.length
         cloned: during - rest,
         clean: document.querySelectorAll('.vt-mark').length === rest,
         unique: [...document.querySelectorAll('.vt-slide')].every(sl => {
-          const n = [...sl.querySelectorAll('.vt-mark')].map(m => m.style.viewTransitionName);
+          const n = [...sl.querySelectorAll('.vt-mark')].map(m => m.style.viewTransitionName).filter(Boolean);   // a mark no transition has named yet has none
           return n.length === new Set(n).size;      // uniqueness is only required among elements rendered **together**
         }),
       };

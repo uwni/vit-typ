@@ -4,9 +4,8 @@
 #import "@preview/tidy:0.4.3"
 
 #set page(width: 210mm, height: auto, margin: (x: 18mm, y: 16mm), fill: white)
-#set text(font: ("DejaVu Sans", "Noto Sans CJK SC"), size: 10pt, lang: "en")
+#set text(font: ("Noto Sans", "Noto Sans CJK SC"), size: 10pt, lang: "en")
 #set par(justify: false)
-#show raw: set text(font: ("DejaVu Sans Mono", "Noto Sans CJK SC"))
 
 #let docs = tidy.parse-module(read("../lib.typ"), name: "vtslides", require-all-parameters: true)
 

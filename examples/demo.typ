@@ -1,14 +1,28 @@
-// One compile produces examples/out/demo.pdf and examples/out/demo.html:
+// One compile per format:
 //
-//   typst compile --features html,bundle --format bundle examples/demo.typ examples/out
+//   typst compile --root . examples/demo.typ examples/out/demo.pdf
+//   typst compile --root . --features html examples/demo.typ examples/out/demo.html
 //
 // Once published, replace the next line with #import "@preview/vtslides:0.1.0": *
 #import "../lib.typ": *
 #import "@preview/cetz:0.4.1"
+// Other people's packages, unchanged: theorion writes the theorem environments,
+// fletcher draws the commutative diagrams. Both have an HTML branch of their own,
+// and neither of them takes it here — a slide is an html.frame, and inside a frame
+// the target is the paged one, so what they draw is a picture, which is what
+// vtslides can move. `import cosmos.simple: *` brings theorion's environments
+// (amsthm style: numbered, bold supplement, italic body, ∎); fletcher is imported
+// by name so its own `marks` never shadows vtslides' `mark`.
+#import "@preview/theorion:0.6.0": *
+#import cosmos.simple: *
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
+
+#show: show-theorion
 
 #let dim = rgb("#8992a5")
 #let hi = rgb("#f2f4f8")
 #let B(body) = text(size: 40pt, weight: 700, fill: rgb("#7aa2ff"), body)
+#let code(body) = text(size: 20pt, fill: dim, body)
 
 // the small heading in every page's corner; same key everywhere, so it stays put across pages
 #let head(body) = mark("title")[#text(size: 28pt, weight: 700, fill: hi, body)]
@@ -17,105 +31,103 @@
   // ── 1. the same key is the same thing ────────────────────────────────
   // note: speaker notes, HTML only, shown in the window opened with `s`.
   slide(
-    title: "标记，不是坐标",
-    note: "开场：这套东西的核心只有一句话——给要变形的内容起个名字，其余交给 Typst 和浏览器。",
+    title: "Title",
+    note: "→ : the title shrinks into the corner and the subtitle follows it.",
   )[
     #set align(center + horizon)
-    #mark("title")[#text(size: 72pt, weight: 700, fill: hi)[标记，不是坐标]]
+    #mark("title")[#text(size: 72pt, weight: 700, fill: hi)[vtslides]]
 
     #v(16pt)
-    #mark("sub")[#text(size: 26pt, fill: dim)[版面完全由 Typst 决定]]
+    #mark("sub")[#text(size: 26pt, fill: dim)[Typst slides with View Transitions]]
   ]
 
   // Two frames of one page: the second only adds a formula. One thumbnail with two
   // dots; the added line is interpolated in, the page does not jump.
-  let expanded = [
-    #mark("title")[#text(size: 40pt, weight: 700, fill: hi)[标记，不是坐标]]
+  let intro = [
+    #mark("title")[#text(size: 40pt, weight: 700, fill: hi)[vtslides]]
 
-    #v(20pt)
-    这一页的标题小了、跑到左上角了——但源码里没有任何坐标。
-    两页都只是普通的 Typst 排版，只在要变形的地方套了一个 `#mark("title")`。
+    #mark("sub")[#text(size: 22pt, fill: dim)[Typst slides with View Transitions]]
 
-    #v(10pt)
-    #mark("sub")[#text(size: 26pt, fill: dim)[版面完全由 Typst 决定]]
+    #v(40pt)
+    $e^(-x^2)$ has no elementary antiderivative. Its integral over the
+    half-line is nevertheless known exactly:
   ]
 
   slide(
-    title: "版面完全由 Typst 决定",
+    title: "Frames",
     note: [
-      两帧共用一条备注。先讲标题为什么会*自己*缩小到左上角，
-      再按一下出公式：
+      Two frames on this page.
 
-      - 源码里没有坐标
-      - 第二帧只是多了一行
-      note 由 typst 编译成 HTML，因此支持公式 $sqrt(4) = 2$
+      - → adds the formula
+      - → again: it fills the next page
+
+      Its value: $sqrt(pi) / 2 approx 0.886$
     ],
-    expanded,
-    expanded
+    intro,
+    intro
       + [
         #v(16pt)
         #mark("eq")[#math.equation(
           block: true,
-          alt: "高斯积分等于根号 pi 的一半",
+          alt: "the Gaussian integral equals half the square root of pi",
         )[$integral_0^infinity e^(-x^2) dif x = sqrt(pi)/2$]]
       ],
   )
 
-  slide(title: "高斯积分", note: "公式从上一页的小字变成整页大字——同一个 key，浏览器自己补间。")[
+  slide(title: "Gaussian integral", note: "The formula from the previous page, enlarged.")[
     #set align(center + horizon)
     #mark("eq")[#text(size: 44pt)[#math.equation(
       block: true,
-      alt: "高斯积分等于根号 pi 的一半",
+      alt: "the Gaussian integral equals half the square root of pi",
     )[$integral_0^infinity e^(-x^2) dif x = sqrt(pi)/2$]]]
   ]
 
   // ── nesting: the browser lifts the inner mark out of the outer snapshot; each flies on its own ──
   let nest(sz, al) = [
     #set align(al)
-    #mark("outer")[#text(size: sz, fill: hi)[外面 #mark("inner")[#text(fill: rgb("#ff9f45"))[里面]] 后面]]
+    #mark("outer")[#text(size: sz, fill: hi)[The quick #mark("inner")[#text(fill: rgb("#ff9f45"))[brown]] fox]]
   ]
 
   slide(
-    title: "嵌套的标记",
+    title: "Nested marks",
     nest(52pt, center + horizon),
     nest(28pt, left + top),
   )
 
   // ── the same key several times on one page: one-to-many splits, many-to-one merges ──
-  let cell(body) = box(fill: rgb("#2b3a5c"), inset: 14pt, radius: 6pt, text(size: 30pt, weight: 700, fill: hi, body))
+  let cell = box(fill: rgb("#2b3a5c"), inset: 14pt, radius: 6pt, text(size: 30pt, weight: 700, fill: hi)[cell])
 
   slide(
-    title: "分裂与归并",
+    title: "Split and merge",
     [
       #set align(center + horizon)
-      #mark("cell")[#cell[一个]]
+      #mark("cell")[#cell]
     ],
     [
-      #place(dx: 60pt, dy: 180pt, mark("cell")[#cell[一个]])
-      #place(dx: 480pt, dy: 380pt, mark("cell")[#cell[一个]])
-      #place(dx: 880pt, dy: 120pt, mark("cell")[#cell[一个]])
+      #place(dx: 60pt, dy: 180pt, mark("cell")[#cell])
+      #place(dx: 480pt, dy: 380pt, mark("cell")[#cell])
+      #place(dx: 880pt, dy: 120pt, mark("cell")[#cell])
     ],
     // three to two: counts need not divide, name i takes source floor(i·k/K)
     [
-      #place(dx: 220pt, dy: 260pt, mark("cell")[#cell[三变二]])
-      #place(dx: 760pt, dy: 260pt, mark("cell")[#cell[三变二]])
+      #place(dx: 220pt, dy: 260pt, mark("cell")[#cell])
+      #place(dx: 760pt, dy: 260pt, mark("cell")[#cell])
     ],
     [
       #set align(center + horizon)
-      #mark("cell")[#cell[又合回来]]
+      #mark("cell")[#cell]
     ],
   )
 
   // ── 2. overlap and crossing: every mark is its own group ─────────────
   // section page: the whole page pushes in from the right (the deck default is fade); the marked heading morphs regardless
-  slide(title: "重叠与交叉 · 引子", transition: "slide")[
-    #head[重叠与交叉]
+  slide(title: "Overlap", transition: "slide")[
+    #head[Overlap]
 
     #v(24pt)
     #text(size: 24pt, fill: dim)[
-      接下来五页里 A 和 B 会包围盒重叠、分道扬镳、对角交叉、正面对穿。
-      每个标记在过渡里是*自己的一组快照*，所以谁挡谁只是 z-index 的事，
-      不是「算不出来」的事。
+      Two marks, A and B, over five frames: overlapping, parting,
+      crossing diagonally, passing through each other.
     ]
   ]
 
@@ -124,13 +136,13 @@
   // A changes position, size and colour on every frame — five frames read as **one object
   // changing continuously**, not five "vanish and reappear". B only moves, for comparison.
   let ab(ax, ay, bx, by, sz, hue) = [
-    #head[重叠与交叉]
+    #head[Overlap]
     #place(dx: ax, dy: ay, mark("A")[#text(size: sz, weight: 700, fill: hue)[AAAAAAAA]])
     #place(dx: bx, dy: by, mark("B")[#B[BBBBBBBB]])
   ]
 
   slide(
-    title: "重叠与交叉",
+    title: "Overlap",
     ab(40pt, 120pt, 240pt, 160pt, 40pt, rgb("#ff9f45")),
     ab(40pt, 480pt, 800pt, 120pt, 52pt, rgb("#ffd166")),
     ab(800pt, 480pt, 40pt, 120pt, 64pt, rgb("#8ce99a")),
@@ -138,31 +150,73 @@
     ab(800pt, 300pt, 40pt, 300pt, 40pt, rgb("#7aa2ff")),
   )
 
+  // ── discs: two marks that overlap, part and cross on their way out; then a word zooms into place ──
+  // Frame 2 places the discs beyond the page edges: the layout is clipped to the page, but the
+  // transition interpolates the boxes, so each disc grows and crosses the screen as it leaves.
+  // Frame 3 is a one-sided mark with an effect of its own: `zoom` shrinks it from three times
+  // its size into place. Back replays everything in reverse.
+  let amber = rgb("#ff9f45")
+  let blue = rgb("#7aa2ff")
+  let disc(key, cx, r, hue) = place(dx: cx - r, dy: 360pt - r, mark(key)[#circle(radius: r, fill: hue)])
+
+  slide(
+    title: "Discs",
+    note: [Two paired marks: they overlap, then each grows and crosses to the other side, out of the page. The word is one-sided and enters with `zoom`.],
+    [
+      #head[Discs]
+      #disc("L", 560pt, 120pt, amber)
+      #disc("R", 720pt, 120pt, blue)
+    ],
+    [
+      #head[Discs]
+      #disc("L", 1580pt, 240pt, amber)
+      #disc("R", -300pt, 240pt, blue)
+    ],
+    [
+      #head[Discs]
+      #place(center + horizon, mark("word", transition: "zoom")[#text(size: 96pt, weight: 700, fill: hi)[vtslides]])
+      #place(dx: 60pt, dy: 560pt, code[`mark("word", transition: "zoom")`])
+    ],
+  )
+
   // ── theorem environment: three blocks revealed from three different edges ──
   // The enter/leave effect sits on the element that appears: mark(transition:). New on
   // this frame, it enters with its own effect (definition wipes down, theorem wipes up,
   // proof wipes in from the right); going back, the one that disappears leaves with the
   // same effect reversed; the ones present on both frames (definition, theorem) just morph.
-  let env(kind, hue, body) = block(
+  // A pair names the two sides separately: the proof wipes in, and when the page is left
+  // it grows out of the picture (zoom) — turning back, it shrinks into place again.
+  // The environments are theorion's, the box around them is the deck's: the
+  // package numbers, names and closes them (∎), the slide gives them its colour.
+  // The number is written out because a mark that stands on three frames is one
+  // object shown three times — left to the counter, it would count each frame.
+  let env(hue, body) = block(
     width: 100%, inset: (left: 24pt, rest: 16pt), radius: 6pt,
     fill: hue.transparentize(88%), stroke: (left: 3pt + hue),
-    text(size: 22pt, fill: hi)[#text(weight: 700, fill: hue)[#kind]#h(12pt)#body],
+    text(size: 22pt, fill: hi, body),
   )
-  let definition = mark("def", transition: "wipe-down", env("定义", rgb("#7aa2ff"))[
-    数列 $(a_n)$ 是*柯西列*：对任意 $epsilon > 0$，存在 $N$，使得 $m, n > N$ 时 $|a_m - a_n| < epsilon$。
+  let definition = mark("def", transition: "wipe-down", env(rgb("#7aa2ff"))[
+    #definition(number: "1", title: "Cauchy sequence")[
+      A sequence $(a_n)$ is *Cauchy* if for every $epsilon > 0$ there is an $N$
+      such that $|a_m - a_n| < epsilon$ whenever $m, n > N$.
+    ]
   ])
-  let theorem = mark("thm", transition: "wipe-up", env("定理", rgb("#ff9f45"))[实数列收敛，当且仅当它是柯西列。])
-  let proof = mark("proof", transition: "wipe-left", env("证明", rgb("#8ce99a"))[
-    收敛则柯西：$|a_m - a_n| <= |a_m - a| + |a - a_n|$。
-    柯西则有界，由 Bolzano–Weierstrass 取收敛子列 $a_(n_k) -> a$，
-    再用柯西性把整列拉到 $a$。$qed$
+  let cauchy = mark("thm", transition: "wipe-up", env(rgb("#ff9f45"))[
+    #theorem(number: "2")[A real sequence converges if and only if it is Cauchy.]
+  ])
+  let cauchy-proof = mark("proof", transition: (enter: "wipe-left", leave: "zoom"), env(rgb("#8ce99a"))[
+    #proof[
+      Convergent implies Cauchy: $|a_m - a_n| <= |a_m - a| + |a - a_n|$.
+      A Cauchy sequence is bounded, so by Bolzano–Weierstrass it has a convergent
+      subsequence $a_(n_k) -> a$, and the Cauchy condition pulls the whole sequence to $a$.
+    ]
   ])
   slide(
-    title: "定义 · 定理 · 证明",
-    note: [三个 `mark(transition:)`：定义 wipe-down、定理 wipe-up、证明 wipe-left。新出现的按自己的效果进场，后退时倒放退场。],
-    [#head[定义 · 定理 · 证明] #v(20pt) #definition],
-    [#head[定义 · 定理 · 证明] #v(20pt) #definition #v(14pt) #theorem],
-    [#head[定义 · 定理 · 证明] #v(20pt) #definition #v(14pt) #theorem #v(14pt) #proof],
+    title: "Cauchy sequences",
+    note: [The environments come from theorion, the boxes from the deck. Definition wipes down, theorem wipes up, proof wipes in from the right; ← plays each one back. Leaving the page, the proof zooms out.],
+    [#head[Cauchy sequences] #v(20pt) #definition],
+    [#head[Cauchy sequences] #v(20pt) #definition #v(14pt) #cauchy],
+    [#head[Cauchy sequences] #v(20pt) #definition #v(14pt) #cauchy #v(14pt) #cauchy-proof],
   )
 
   // ── 3. CeTZ drawings morph too ───────────────────────────────────────
@@ -179,17 +233,14 @@
   })
 
   slide(
-    title: "CeTZ 也能变形",
+    title: "CeTZ",
     [
       #set align(center + horizon)
       #mark("fig")[#fig(0.6)]
     ],
     [
       #place(dx: 60pt, dy: 40pt, mark("fig")[#fig(1.0)])
-      #place(dx: 60pt, dy: 300pt, text(size: 22pt, fill: dim)[
-        `mark("fig")[#cetz.canvas(…)]` —— canvas 导出的是原生 SVG path，\
-        和文字一样按 key 配对：位置、尺寸补间，内容交叉淡入淡出。
-      ])
+      #place(dx: 60pt, dy: 560pt, code[`mark("fig")[#cetz.canvas(…)]`])
     ],
   )
 
@@ -211,14 +262,12 @@
   })
 
   slide(
-    title: "CeTZ · 元素动画",
-    note: [`mark("wave", ..range(0, 6).map(wave))`：六个状态叠在一处，→ 走一步、← 退一步，走完才翻页。曲线是 path 的 `d` 在插值，小球是 transform 和 fill，"t = 几" 是字形，直接切。],
+    title: "Element animation",
+    note: [→ steps through the six states, ← steps back; the page turns after the last one.],
   )[
-    #head[元素动画]
+    #head[Element animation]
     #place(dx: 120pt, dy: 200pt, mark("wave", ..range(0, 6).map(wave)))
-    #place(dx: 120pt, dy: 560pt, text(size: 22pt, fill: dim)[
-      `mark("wave", ..range(0, 6).map(wave))` —— 同一张图的六个参数，→ 一步一步走。
-    ])
+    #place(dx: 120pt, dy: 560pt, code[`mark("wave", ..range(0, 6).map(wave))`])
   ]
 
   // ── continuous animation: runs while the page rests on this frame, starts after the transition ──
@@ -231,21 +280,21 @@
     (3 * calc.sin(2 * a) + 3.2, 1.6 * calc.sin(3 * a) + 1.8)
   })
   slide(
-    title: "连续动画",
-    note: [小球沿 `mark("track")` 里的 path 循环跑（`follow`），方块是原生 keyframes 旋转。离开这页就暂停。],
+    title: "Continuous animation",
+    note: [The ball runs along the track, the square spins on two keyframes; both pause when the page is left.],
     anim: (
       dot: (follow: "track", duration: 4000),
       spin: (keyframes: ((transform: "rotate(0)"), (transform: "rotate(1turn)")), duration: 6000),
     ),
   )[
-    #head[连续动画]
+    #head[Continuous animation]
     #place(dx: 120pt, dy: 180pt, mark("track")[#cetz.canvas(length: 1cm, {
       import cetz.draw: line
       line(..lissajous, close: true, stroke: 1.5pt + rgb("#7aa2ff"))
     })])
     #place(dx: 120pt, dy: 180pt, mark("dot")[#std.circle(radius: .3cm, fill: rgb("#8ce99a"))])
     #place(dx: 900pt, dy: 300pt, mark("spin")[#std.rect(width: 90pt, height: 90pt, radius: 10pt, fill: rgb("#ff9f45"))])
-    #place(dx: 120pt, dy: 560pt, text(size: 22pt, fill: dim)[
+    #place(dx: 120pt, dy: 560pt, code[
       `anim: (dot: (follow: "track", duration: 4000), spin: (keyframes: …, duration: 6000))`
     ])
   ]
@@ -268,16 +317,16 @@
   )
   let hues = (rgb("#ff9f45"), rgb("#ffd166"), rgb("#8ce99a"), rgb("#66d9e8"), rgb("#7aa2ff"))
   slide(
-    title: "弹跳小球",
-    note: [五个球五条 WAAPI 动画，keyframes 原样写在 `anim:` 里：分段 easing 是重力，落地一帧压扁。],
+    title: "Bouncing balls",
+    note: [Five marks, five keyframe animations: segment easing for gravity, a squash on landing, a delay to stagger them.],
     anim: range(5).map(i => ("ball" + str(i), ball(i))).to-dict(),
   )[
-    #head[弹跳小球]
+    #head[Bouncing balls]
     #for i in range(5) {
       place(dx: 200pt + i * 180pt, dy: 60pt, mark("ball" + str(i))[#std.circle(radius: 28pt, fill: hues.at(i))])
     }
     #place(dx: 120pt, dy: 430pt, std.line(length: 920pt, stroke: 1pt + dim))
-    #place(dx: 120pt, dy: 480pt, text(size: 20pt, fill: dim)[
+    #place(dx: 120pt, dy: 480pt, code[
       `anim: (ball0: (keyframes: (…), duration: 1500, delay: 0), ball1: …)`
     ])
   ]
@@ -339,21 +388,21 @@
     circle(p2, radius: .16, fill: rgb("#8ce99a"), stroke: none)
   })
   slide(
-    title: "单摆与双摆",
-    note: [单摆是两帧 keyframes（绕悬点 rotate，alternate）。双摆在 Typst 里用 RK4 积分出 96 个姿态塞进 `mark`，`anim: (double: (duration: 8000, direction: "alternate"))` 把它们当关键帧连续播。],
+    title: "Pendulums",
+    note: [Left: two keyframes rotating about the pivot. Right: 96 poses integrated with RK4 in Typst, played as keyframes.],
     anim: (
       single: (
         keyframes: ((transform: "rotate(32deg)", transformOrigin: "50% 0"), (transform: "rotate(-32deg)", transformOrigin: "50% 0")),
-        duration: 1400, direction: "alternate", easing: "ease-in-out",
+        duration: 1400, direction: "alternate", easing: (0.42, 0, 0.58, 1),
       ),
       double: (duration: 8000, direction: "alternate"),
     ),
   )[
-    #head[单摆与双摆]
+    #head[Pendulums]
     #place(dx: 260pt, dy: 100pt, mark("single")[#pendulum])
     #place(dx: 560pt, dy: 60pt, mark("double", ..poses.map(pose)))
-    #place(dx: 120pt, dy: 520pt, text(size: 20pt, fill: dim)[
-      左：`keyframes` 绕悬点转。右：RK4 积出 96 个姿态，`mark("double", ..poses.map(pose))`，`anim` 点名连续播。
+    #place(dx: 120pt, dy: 520pt, code[
+      `mark("double", ..poses.map(pose))` + `anim: (double: (duration: 8000, direction: "alternate"))`
     ])
   ]
 
@@ -381,16 +430,161 @@
     })
   })
   slide(
-    title: "海浪",
-    note: [`mark("sea", ..range(0, 25).map(sea))` + `anim: (sea: (duration: 4000))`：三层浪各自的 path 在插值，小船的位置和朝向是 transform 在插值。首尾状态相同，循环无缝。],
+    title: "Waves",
+    note: [Three layers of waves and a boat, 25 states played continuously; first and last state are equal, so the loop is seamless.],
     anim: (sea: (duration: 4000)),
   )[
-    #head[海浪]
+    #head[Waves]
     #place(dx: 100pt, dy: 120pt, mark("sea", ..range(0, 25).map(sea)))
-    #place(dx: 120pt, dy: 560pt, text(size: 20pt, fill: dim)[
-      `mark("sea", ..range(0, 25).map(sea))` —— 三层浪、一条船，25 个状态连续播。
+    #place(dx: 120pt, dy: 560pt, code[
+      `mark("sea", ..range(0, 25).map(sea))` + `anim: (sea: (duration: 4000))`
     ])
+  ]
+
+  // ── Liu Hui's π: an inscribed polygon doubling its sides ──────────────
+  // Two paths interpolate only with the same number of segments, so every state
+  // is drawn with the same 96 points. The points sit *on the vertices*: the
+  // 6-gon has 16 points stacked on each corner, the 12-gon 8, and so on. A
+  // stacked point draws nothing, so each state is exactly its polygon; and on
+  // a step half of every stack stays while the other half swings forward to
+  // the new vertex — the polygon opens like a fan, every moving point in the
+  // same direction, the starting point never moving. The edges are cubics
+  // (control points at a third and two thirds, a straight cubic): the exporter
+  // drops a zero-length *line*, which would break the count, but writes every
+  // cubic. The labels are drawn the same in every state (all five counts, the
+  // current one lit; π with a fixed four decimals) so the glyph count never
+  // changes.
+  let counts = (6, 12, 24, 48, 96)
+  let N = counts.last()
+  let corners(k, r) = range(N).map(j => {
+    let n = counts.at(k)
+    let a = 2 * calc.pi * calc.quo(j * n, N) / n - calc.pi / 2
+    (r * calc.cos(a), r * calc.sin(a))
+  })
+  let lerp(p, q, t) = (p.at(0) + t * (q.at(0) - p.at(0)), p.at(1) + t * (q.at(1) - p.at(1)))
+  let fixed(x) = { let t = str(int(calc.round(x * 10000))); t.slice(0, 1) + "." + t.slice(1) }
+  let exhaust(k) = cetz.canvas(length: 1.5cm, {
+    import cetz.draw: bezier, circle, content, merge-path, rect
+    rect((-3.6, -4.5), (3.6, 4.5), stroke: none)
+    circle((0, 0), radius: 3, stroke: .6pt + dim)
+    let pts = corners(k, 3)
+    merge-path(close: true, fill: rgb("#7aa2ff").transparentize(78%), stroke: 1.5pt + rgb("#7aa2ff"), {
+      for j in range(N) {
+        let (p, q) = (pts.at(j), pts.at(calc.rem(j + 1, N)))
+        bezier(p, q, lerp(p, q, 1 / 3), lerp(p, q, 2 / 3))
+      }
+    })
+    content((0, 3.9), text(size: 22pt, fill: dim)[#counts.enumerate().map(((j, n)) => text(fill: if j == k { hi } else { dim })[#n]).join[ · ]])
+    content((0, -3.8), text(size: 22pt, fill: hi)[#sym.pi ≈ #fixed(counts.at(k) * calc.sin(calc.pi / counts.at(k)))])
+  })
+  slide(
+    title: "Liu Hui's π",
+    note: [→ doubles the sides: 6, 12, 24, 48, 96. The polygon opens like a fan: half of each corner swings forward to the new vertex.],
+  )[
+    #head[Liu Hui's π]
+    #place(dx: 480pt, dy: 90pt, mark("poly", ..range(0, 5).map(exhaust)))
+    #place(dx: 120pt, dy: 560pt, code[`mark("poly", ..range(0, 5).map(exhaust))`])
+  ]
+
+  // ── a polygon gaining sides, a line gaining segments: nothing drawn specially ──
+  // The states differ in segment count. The runtime aligns the paths by padding
+  // the shorter one with zero-length segments at the end of its subpath (they
+  // draw nothing), so the states interpolate: the new vertex grows out of the
+  // last one, the new segment out of the end of the line.
+  let gon(k) = cetz.canvas(length: 1.6cm, {
+    import cetz.draw: content, polygon, rect
+    rect((-3, -3.6), (3, 3), stroke: none)
+    polygon((0, 0), k, radius: 2.5, fill: rgb("#7aa2ff").transparentize(78%), stroke: 1.5pt + rgb("#7aa2ff"))
+    content((0, -3.2), text(size: 22pt, fill: dim)[#k sides])
+  })
+  let walk = ((0, 0), (1.2, 1.4), (2.6, 0.6), (3.4, 2.2), (4.8, 1.0), (6.0, 2.6), (7.2, 1.2))
+  let trail(k) = cetz.canvas(length: 1.6cm, {
+    import cetz.draw: circle, line, rect
+    rect((-0.4, -0.4), (7.6, 3.0), stroke: none)
+    line(..walk.slice(0, k + 2), stroke: 2pt + rgb("#8ce99a"))
+    // the dot is hollow at first and fills in: fill none against a colour fades
+    circle(walk.at(k + 1), radius: .18, fill: if k == 0 { none } else { rgb("#8ce99a") }, stroke: 1pt + rgb("#8ce99a"))
+  })
+  // a line that bends: a line against a curve is written as the straight cubic it is
+  let bend(k) = cetz.canvas(length: 1.6cm, {
+    import cetz.draw: bezier, line, rect
+    rect((-0.3, -1.3), (4.3, 1.3), stroke: none)
+    if k == 0 { line((0, 0), (4, 0), stroke: 2pt + rgb("#ffd166")) }
+    else { bezier((0, 0), (4, 0), (1.3, 0.6 * k), (2.7, -0.6 * k), stroke: 2pt + rgb("#ffd166")) }
+  })
+  slide(
+    title: "Growing shapes",
+    note: [Nothing is drawn specially here: the polygon has one more side per state, the line one more segment, the dot fills in, the straight line bends. The runtime rewrites the shorter or simpler path so the states interpolate.],
+  )[
+    #head[Growing shapes]
+    #place(dx: 160pt, dy: 150pt, mark("gon", ..range(3, 9).map(gon)))
+    #place(dx: 600pt, dy: 160pt, mark("trail", ..range(0, 6).map(trail)))
+    #place(dx: 660pt, dy: 380pt, mark("bend", ..range(0, 3).map(bend)))
+    #place(dx: 120pt, dy: 560pt, code[`mark("gon", ..range(3, 9).map(gon))` · `mark("trail", ..range(0, 6).map(trail))` · `mark("bend", ..range(0, 3).map(bend))`])
+  ]
+
+  // ── 5. someone else's diagrams: fletcher ─────────────────────────────
+  // fletcher puts the objects on a grid and draws the arrows between them. An
+  // object is content, so it can be a mark; an arrow is drawn, so it belongs to
+  // the page and cross-fades with it — and a label is content again, so the
+  // `exists!` wipes in on its own. Adding X grows the grid up and to the left,
+  // which moves everything already on it: same key, so they glide there instead
+  // of jumping.
+  let cd(body) = {
+    set text(size: 30pt, fill: hi)
+    diagram(cell-size: 46mm, edge-stroke: 1.1pt + rgb("#d5d9e2"), node-inset: 9pt, body)
+  }
+  let cospan = {
+    node((1, 0), mark("pbB")[$B$])
+    node((1, 1), mark("pbD")[$D$])
+    node((0, 1), mark("pbC")[$C$])
+    edge((1, 0), (1, 1), $f$, "->")
+    edge((0, 1), (1, 1), $g$, "->")
+  }
+  let square = {
+    cospan
+    node((0, 0), mark("pbA", transition: "zoom")[$B times_D C$])
+    edge((0, 0), (1, 0), $p$, "->")
+    edge((0, 0), (0, 1), $q$, "->")
+  }
+  let universal = {
+    square
+    node((-1, -1), mark("pbX", transition: "rise")[$X$])
+    edge((-1, -1), (1, 0), "->", bend: 30deg)
+    edge((-1, -1), (0, 1), "->", bend: -30deg)
+    edge((-1, -1), (0, 0), mark("pbU", transition: "wipe-right")[$exists!$], "-->")
+  }
+  slide(
+    title: "Pullback",
+    note: [The diagram is fletcher's, the objects are marks. The pullback zooms in, X rises, `∃!` wipes in — and when X arrives the grid grows, so the objects that were already there glide to their new places.],
+    [#head[Pullback] #place(center + horizon, cd(cospan))],
+    [#head[Pullback] #place(center + horizon, cd(square))],
+    [#head[Pullback] #place(center + horizon, cd(universal)) #place(dx: 120pt, dy: 600pt, code[`node((0, 0), mark("pbA", transition: "zoom")[$B times_D C$])`])],
+  )
+
+  // ── the same drawing, one arrow at a time: duality ───────────────────
+  // Two states of one mark, so this is an element animation: every arrow is
+  // there in both, only turned round, and the runtime interpolates path against
+  // path — the heads slide along the arrows and the diagram becomes its dual.
+  let duo(rev) = {
+    set text(size: 30pt, fill: hi)
+    let arrow(a, b, label) = if rev { edge(b, a, label, "->") } else { edge(a, b, label, "->") }
+    diagram(cell-size: 36mm, edge-stroke: 1.1pt + rgb("#d5d9e2"), node-inset: 9pt, {
+      node((0, 0), $P$); node((1, 0), $B$); node((0, 1), $C$); node((1, 1), $D$)
+      arrow((0, 0), (1, 0), $p$)
+      arrow((0, 0), (0, 1), $q$)
+      arrow((1, 0), (1, 1), $f$)
+      arrow((0, 1), (1, 1), $g$)
+    })
+  }
+  slide(
+    title: "Duality",
+    note: [→ turns every arrow round: the limit square becomes the colimit one. The two states are the same drawing, so the arrowheads slide along the arrows rather than fading.],
+  )[
+    #head[Duality]
+    #place(center + horizon, mark("dual", duo(false), duo(true)))
+    #place(dx: 120pt, dy: 600pt, code[`mark("dual", duo(false), duo(true))`])
   ]
 }
 
-#bundle(name: "demo", title: "vtslides — 标记，不是坐标", body)
+#deck(title: "vtslides", body)

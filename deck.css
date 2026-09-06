@@ -31,10 +31,19 @@ html[data-theme="light"] {
   --vt-accent: #2f62d8;
   --vt-on-accent: #ffffff;
 }
+/* The layout's constants come first in this stylesheet, written by the Typst
+   side as a :root block from deck(): --vt-page, its background (content, not
+   chrome, so it does not follow the theme), --vt-w and --vt-h, its size in pt,
+   --vt-duration and --vt-easing, its pace. A transition can set its own
+   duration, easing and effect knobs; the runtime writes only --vt-speed, the
+   presenter's multiplier, which every duration here is divided by — so a
+   duration written anywhere still answers to the speed keys. The stage is the
+   layout's box on screen, as wide as the window allows, as tall as the window
+   allows, whichever binds. */
 html {
+  --vt-speed: 1;
+  --vt-stage: min(100vw, calc(100svh * var(--vt-w) / var(--vt-h)));
   background: var(--vt-bg);
-  --vt-dur: 700ms;
-  --vt-ease: cubic-bezier(0.32, 0.72, 0, 1);
 }
 body {
   margin: 0;
@@ -42,14 +51,16 @@ body {
   display: grid;
   place-items: center;
 }
-/* --vt-page is the layout's background, written on the element by deck(fill:) on the Typst side; it is content, not chrome, and does not follow the theme */
-/* the layout size (--vt-w / --vt-h, in pt) is written on the element by the Typst side together with the background */
 .vt-deck {
   position: relative;
   aspect-ratio: var(--vt-w) / var(--vt-h);
-  width: min(100vw, calc(100svh * var(--vt-w) / var(--vt-h)));
-  background: var(--vt-page, #111318);
+  width: var(--vt-stage);
+  background: var(--vt-page);
   overflow: hidden;
+}
+/* Before the scripts have run (hoist.js lifts the marks, the runtime marks the deck ready) nothing is shown: what the layout looks like at that moment — marks in place, every state of an element animation stacked — is not a frame anyone should see. Only the first frame is laid out, the rest costs nothing until hoist.js shows it to measure. */
+.vt-deck:not([data-ready]) {
+  visibility: hidden;
 }
 .vt-deck:not([data-ready]) .vt-group ~ .vt-group {
   display: none;
@@ -99,16 +110,115 @@ body {
 /* The states of an element animation (mark(key, s0, s1, …)) are stacked in one
    place: only the first shows, the rest are data, and the runtime swaps which
    one shows on every step (inline style overrides these two rules). */
-[data-typst-label^="vt-"][data-typst-label*="@"] {
+[data-vt-state] {
   display: none;
 }
-[data-typst-label^="vt-"][data-typst-label$="@0"] {
+[data-vt-at="0"] {
   display: inline;
 }
 /* title and speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
 .vt-title,
 .vt-note {
   display: none;
+}
+
+/* ── thumbnails: the overview and the desk's rail ─────────────────────
+   Both show every page at once, one frame per group, and differ only in how
+   the thumbnails are arranged: the overview fills the window with a grid,
+   the desk stands them in a column beside the page. */
+.vt-deck:is(.vt-all, .vt-desk) > .vt-group {
+  display: block;
+  position: relative;
+  inset: auto;
+  cursor: pointer;
+}
+/* one page = one thumbnail: a group exposes one frame, the others stay out */
+.vt-deck:is(.vt-all, .vt-desk) .vt-slide {
+  display: none !important;
+}
+.vt-deck:is(.vt-all, .vt-desk) .vt-slide.is-thumb {
+  display: block !important;
+  position: relative;
+  inset: auto;
+  aspect-ratio: var(--vt-w) / var(--vt-h);
+  border: 1px solid var(--vt-line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--vt-page);
+}
+.vt-deck:is(.vt-all, .vt-desk) > .vt-group:hover .vt-slide.is-thumb {
+  border-color: var(--vt-accent);
+}
+.vt-deck:is(.vt-all, .vt-desk) > .vt-group.is-here .vt-slide.is-thumb {
+  border-color: var(--vt-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 28%, transparent);
+}
+
+/* caption above, thumbnail below, so the group's bottom edge is the thumbnail's and the dots go into the bottom-right corner */
+.vt-cap,
+.vt-dots {
+  display: none;
+}
+:is(.vt-all, .vt-desk) .vt-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0 0.2rem 0.3rem;
+  font:
+    500 12px/1.35 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+:is(.vt-all, .vt-desk) .vt-cap b {
+  flex: none;
+  font-weight: 600;
+  color: var(--vt-muted);
+  font-variant-numeric: tabular-nums;
+}
+:is(.vt-all, .vt-desk) .is-here .vt-cap b {
+  color: var(--vt-accent);
+}
+:is(.vt-all, .vt-desk) .vt-cap span {
+  color: var(--vt-fg2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is(.vt-all, .vt-desk) .vt-dots {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 6px;
+  border-radius: 99px;
+  background: var(--vt-glass);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+:is(.vt-all, .vt-desk) .vt-dots i {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--vt-muted);
+  cursor: pointer;
+}
+:is(.vt-all, .vt-desk) .vt-dots i:hover,
+:is(.vt-all, .vt-desk) .vt-dots i.is-peek {
+  border-color: var(--vt-fg);
+}
+:is(.vt-all, .vt-desk) .vt-dots i.is-peek {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-fg) 35%, transparent);
+}
+:is(.vt-all, .vt-desk) .vt-dots i.is-on {
+  background: color-mix(in srgb, var(--vt-accent) 70%, var(--vt-bg));
+  border-color: transparent;
+}
+:is(.vt-all, .vt-desk) .vt-dots i.is-now {
+  background: var(--vt-accent);
+  border-color: var(--vt-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 32%, transparent);
 }
 
 /* overview: toggled with o / a */
@@ -129,301 +239,367 @@ body:has(.vt-all) {
   background: var(--vt-bg);
   overflow: visible;
 }
-.vt-deck.vt-all > .vt-group {
-  display: block;
-  position: relative;
-  inset: auto;
-  cursor: pointer;
-}
-/* one page = one thumbnail: a group exposes one frame, the others stay out */
-.vt-deck.vt-all .vt-slide {
-  display: none !important;
-}
-.vt-deck.vt-all .vt-slide.is-thumb {
-  display: block !important;
-  position: relative;
-  inset: auto;
-  aspect-ratio: var(--vt-w) / var(--vt-h);
-  border: 1px solid var(--vt-line);
-  border-radius: 0.5rem;
-  overflow: hidden;
-  background: var(--vt-page, #111318);
-}
-.vt-deck.vt-all > .vt-group:hover .vt-slide.is-thumb {
-  border-color: var(--vt-accent);
-}
-.vt-deck.vt-all > .vt-group.is-here .vt-slide.is-thumb {
-  border-color: var(--vt-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 28%, transparent);
-}
 
-/* caption above, thumbnail below, so the group's bottom edge is the thumbnail's and the dots go into the bottom-right corner */
-.vt-cap,
-.vt-dots {
+/* ── the desk ─────────────────────────────────────────────────────────
+   Where the deck opens, and what Esc comes back to: the pages down the
+   left, the one they point at beside them, its notes underneath. The rail
+   is the deck itself in thumbnails, so a click there is the same click as
+   in the overview; the preview is a copy of this document positioned by
+   #hash — the same mirror the speaker view uses. */
+body:has(.vt-desk) {
+  display: grid;
+  grid-template-columns: clamp(7rem, 17vw, 14rem) minmax(0, 1fr);
+  place-items: stretch;
+  gap: 14px;
+  padding: 14px;
+  box-sizing: border-box;
+  height: 100svh;
+}
+.vt-deck.vt-desk {
+  position: static;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+  background: transparent;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.vt-deck.vt-desk > .vt-group {
+  flex: none;
+}
+.vt-pane {
   display: none;
 }
-.vt-all .vt-cap {
-  display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  padding: 0 0.2rem 0.3rem;
+body:has(.vt-desk) .vt-pane {
+  display: grid;
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+}
+/* the preview keeps the layout's shape and takes whatever of the cell that
+   leaves — the same formula as the stage, in the cell's own units */
+.vt-view {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+.vt-view .vt-mirror {
+  width: min(100cqw, calc(100cqh * var(--vt-w) / var(--vt-h)));
+}
+/* the toolbar floats over the notes' bottom-right corner: leave it room */
+body:has(.vt-desk) .vt-notes {
+  padding-bottom: 44px;
+}
+/* narrow: the rail keeps the numbers only, and the preview takes the width it
+   is given — the notes get the rest of the height, which is what is short here */
+@media (max-width: 720px) {
+  body:has(.vt-desk) {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+    gap: 8px;
+    padding: 8px;
+  }
+  body:has(.vt-desk) .vt-cap span {
+    display: none;
+  }
+  body:has(.vt-desk) .vt-pane {
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 8px;
+  }
+  .vt-view {
+    container-type: normal;
+    display: block;
+  }
+  .vt-view .vt-mirror {
+    width: 100%;
+  }
+}
+
+/* ── preview and notes ────────────────────────────────────────────────
+   Two components, used by the desk and by the speaker view: a copy of this
+   document showing one position, and one page's notes. */
+.vt-mirror {
+  display: block;
+  box-sizing: border-box;
+  border: 1px solid var(--vt-line);
+  width: 100%;
+  aspect-ratio: var(--vt-w) / var(--vt-h);
+  border-radius: 6px;
+  background: var(--vt-page);
+  pointer-events: none;
+}
+.vt-notes {
+  overflow: auto;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--vt-panel);
+  border: 1px solid var(--vt-line);
+  color: var(--vt-fg);
   font:
-    500 12px/1.35 ui-sans-serif,
+    16px/1.6 ui-sans-serif,
     system-ui,
     sans-serif;
 }
-.vt-all .vt-cap b {
-  flex: none;
-  font-weight: 600;
+.vt-notes:empty::before {
+  content: "No notes for this page";
   color: var(--vt-muted);
-  font-variant-numeric: tabular-nums;
 }
-.vt-all .is-here .vt-cap b {
-  color: var(--vt-accent);
+.vt-notes > :first-child {
+  margin-top: 0;
 }
-.vt-all .vt-cap span {
-  color: var(--vt-fg2);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.vt-notes > :last-child {
+  margin-bottom: 0;
 }
-.vt-all .vt-dots {
-  display: flex;
-  gap: 6px;
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 4px 6px;
-  border-radius: 99px;
-  background: var(--vt-glass);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-.vt-all .vt-dots i {
-  box-sizing: border-box;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1px solid var(--vt-muted);
-  cursor: pointer;
-}
-.vt-all .vt-dots i:hover,
-.vt-all .vt-dots i.is-peek {
-  border-color: var(--vt-fg);
-}
-.vt-all .vt-dots i.is-peek {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-fg) 35%, transparent);
-}
-.vt-all .vt-dots i.is-on {
-  background: color-mix(in srgb, var(--vt-accent) 70%, var(--vt-bg));
-  border-color: transparent;
-}
-.vt-all .vt-dots i.is-now {
-  background: var(--vt-accent);
-  border-color: var(--vt-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 32%, transparent);
+.vt-notes ul,
+.vt-notes ol {
+  padding-left: 1.3em;
 }
 ::view-transition-group(*) {
-  animation-duration: var(--vt-dur);
-  animation-timing-function: var(--vt-ease);
+  animation-duration: calc(var(--vt-duration) / var(--vt-speed));
+  animation-timing-function: var(--vt-easing);
 }
-/* ── a transition is a pair of motions between two frames ─────────────
-   Every effect defines a pair: the new side enters with `in`, the old side
-   leaves with `out`, and going back the two are swapped, so forward and back
-   mirror each other by construction. root (unmarked content) picks the pair by
-   this transition's types (the runtime hands ["slide", "back"] to
-   startViewTransition, the CSS matches with :active-view-transition-type());
-   a one-sided mark with its own mark(transition:) picks it by the
-   vt-fx-<name> class the runtime adds (one without an effect of its own is
-   folded into root instead). Both share one set of keyframes: the push
-   distance / the wipe edge live in --vt-in / --vt-out, set on html for root
-   (the pseudo-elements inherit) and directly on the mark's pseudo-elements.
+/* ── a transition is a pair of effects ────────────────────────────────
+   This block is generated: edit the table in tools/gencss.py and re-run it.
 
-   fade is a real cross-fade (old out, new in). The two snapshots must be
-   blended with plus-lighter: two opaque images with complementary opacities
-   then add up to exactly 1 at every instant and the background stays put
-   (frozen at the midpoint: 19 → 19); with normal blending the page brightens
-   (19 → 28). The old "hold the old one" scheme existed to dodge that normal
-   blending pit and is no longer needed. Chromium computes mix-blend-mode as
-   normal on these pseudo-elements, hence the explicit rule. */
-::view-transition-old(*),
-::view-transition-new(*) {
-  mix-blend-mode: plus-lighter;
+   deck/slide/mark(transition: (enter:, leave:)): how the new side comes in,
+   how the old side goes out; a string is the same effect both ways. The
+   Typst side writes the pair as the transition's types on every frame
+   (data-transition="enter-slide leave-fade") and as a one-sided mark's
+   view-transition-class (the runtime adds the side the mark has, vt-only-new
+   or vt-only-old); the runtime adds fwd or back. Going back replays the pair in reverse: the new side comes in the
+   way the old would have gone out, run backwards, and the old side goes out
+   the way the new would have come in. So each effect has one rule per role
+   — the enter effect's names the new side forward and the old side back,
+   the leave effect's the old side forward and the new side back — and the
+   value is the same in both directions: where the entering side starts is
+   where the leaving side ends.
+
+   Every side runs one animation, vt-enter from where the variables put it
+   to rest, vt-leave from rest to where they put it: --vt-opacity,
+   --vt-transform, --vt-clip (with --vt-clip-rest, the clip at rest — unset,
+   nothing is clipped; a clip at rest would cut the ink overflow the
+   snapshots carry, so only the wipes set it), --vt-s-away (the
+   magnification away from rest, for the zoom's focus), --vt-timing. A side
+   with nothing set holds. A rule that names root sets the variables on
+   the root's own image, never on html: the marks' images would inherit
+   them. Only an image that exists gets an animation — a one-sided mark's
+   new image if it is entering, its old image if it is leaving: WebKit
+   styles both images of every named element whether or not they exist, and
+   an animation given to one that does not exist is never torn down and
+   comes back finished the next time the name is used. */
+::view-transition-new(root),
+::view-transition-new(.vt-only-new) {
+  animation: vt-enter calc(var(--vt-duration) / var(--vt-speed)) var(--vt-timing, var(--vt-easing)) both;
 }
 ::view-transition-old(root),
+::view-transition-old(.vt-only-old) {
+  animation: vt-leave calc(var(--vt-duration) / var(--vt-speed)) var(--vt-timing, var(--vt-easing)) both;
+}
+/* A paired mark morphs: the browser moves its group and cross-fades its two
+   images itself — the old fading out under the new fading in, blended with
+   plus-lighter, so what stays put never dims (the blending rides on the
+   browser's own animation, which an animation of ours would replace). Only
+   the pace is ours. */
 ::view-transition-old(.vt-mo),
-::view-transition-old(.vt-fx-fade) {
-  animation: vt-fade-out var(--vt-dur) var(--vt-ease) both;
+::view-transition-new(.vt-mo) {
+  animation-timing-function: var(--vt-easing);
 }
-::view-transition-new(root),
-::view-transition-new(.vt-mo),
-::view-transition-new(.vt-fx-fade) {
-  animation: vt-fade-in var(--vt-dur) var(--vt-ease) both;
+/* opening or closing the overview: the deck fades into the grid while the page zooms */
+html:active-view-transition-type(overview)::view-transition-new(root) {
+  --vt-opacity: 0;
 }
-/* none: a cut. The new one is there at once, the old one gone at once. */
-html:active-view-transition-type(none)::view-transition-old(root),
-::view-transition-old(.vt-fx-none) {
-  animation: vt-fade-out 1ms linear both;
+/* fade. For root the old page is held beneath the new one fading in: both
+   snapshots are opaque and page-sized, so this is a cross-fade with no dip,
+   the same in both directions, and a frame on which both happen to be fully
+   visible — the last one, when the animations end a frame before the
+   pseudo-elements go — shows the new page, never the old. Paired with
+   another entrance the old page fades out for real. */
+html:active-view-transition-type(fwd):active-view-transition-type(enter-fade)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-fade),
+html:active-view-transition-type(back):active-view-transition-type(enter-fade)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-fade),
+html:active-view-transition-type(fwd):active-view-transition-type(leave-fade)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-fade),
+html:active-view-transition-type(back):active-view-transition-type(leave-fade)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-fade) {
+  --vt-opacity: 0;
 }
-html:active-view-transition-type(none)::view-transition-new(root),
-::view-transition-new(.vt-fx-none) {
-  animation: vt-hold var(--vt-dur) linear both;
+html:active-view-transition-type(enter-fade):active-view-transition-type(leave-fade)::view-transition-old(root) {
+  --vt-opacity: 1;
 }
-/* slide / rise: push. Forward the new page comes in from the right/bottom and the old one leaves to the left/top; back swaps them. A mark pushes by its own box. */
-html:active-view-transition-type(slide),
-::view-transition-old(.vt-fx-slide),
-::view-transition-new(.vt-fx-slide) {
-  --vt-in: translateX(100%);
-  --vt-out: translateX(-100%);
+/* none: at once. The side jumps to its end state on the first frame. */
+html:active-view-transition-type(fwd):active-view-transition-type(enter-none)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-none),
+html:active-view-transition-type(back):active-view-transition-type(enter-none)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-none),
+html:active-view-transition-type(fwd):active-view-transition-type(leave-none)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-none),
+html:active-view-transition-type(back):active-view-transition-type(leave-none)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-none) {
+  --vt-opacity: 0;
+  --vt-timing: step-start;
 }
-html:active-view-transition-type(rise),
-::view-transition-old(.vt-fx-rise),
-::view-transition-new(.vt-fx-rise) {
-  --vt-in: translateY(100%);
-  --vt-out: translateY(-100%);
+/* slide / rise: push, by the width / height of the box. Forward the new one
+   comes in from the right / bottom and the old one leaves to the left / top;
+   back, the other way round; a transition can set how far with push (a
+   negative distance sends them the other way). zoom: the new one shrinks into place from
+   three times its size, fading in, the old one grows away, fading out, the
+   same both ways — and the screen is the focal plane. A side at
+   magnification s sits at 1/s of the focal distance, and a lens of aperture
+   A images each of its points as a circle of confusion c = A (s − 1) on the
+   screen. That is what makes a near thing see-through: a stroke thinner
+   than c shades only part of each point's cone of light, so its shadow is
+   diluted over the circle, faint in proportion — a speck on the glasses is
+   not seen at all. The lens is a quarter of the stage wide, so at three
+   times life a point spreads over half the stage and the text is a haze
+   that condenses as the side lands; a transition can set zoom to start
+   nearer or further. The blur is the Gaussian with the
+   disc's RMS radius, σ = c/4, and an image's filter is applied in its own
+   pixels, before its transform, hence σ/s. --vt-s is the magnification
+   itself, registered so that it interpolates alongside the transform and
+   the blur is recomputed from it every frame. */
+html:active-view-transition-type(fwd):active-view-transition-type(enter-slide)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
+html:active-view-transition-type(back):active-view-transition-type(enter-slide)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-slide) {
+  --vt-transform: translateX(var(--vt-push, 100%));
 }
-html:active-view-transition-type(slide):active-view-transition-type(back),
-html:active-view-transition-type(back)::view-transition-old(.vt-fx-slide),
-html:active-view-transition-type(back)::view-transition-new(.vt-fx-slide) {
-  --vt-in: translateX(-100%);
-  --vt-out: translateX(100%);
+html:active-view-transition-type(fwd):active-view-transition-type(leave-slide)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
+html:active-view-transition-type(back):active-view-transition-type(leave-slide)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-slide) {
+  --vt-transform: translateX(calc(-1 * var(--vt-push, 100%)));
 }
-html:active-view-transition-type(rise):active-view-transition-type(back),
-html:active-view-transition-type(back)::view-transition-old(.vt-fx-rise),
-html:active-view-transition-type(back)::view-transition-new(.vt-fx-rise) {
-  --vt-in: translateY(-100%);
-  --vt-out: translateY(100%);
+html:active-view-transition-type(fwd):active-view-transition-type(enter-rise)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
+html:active-view-transition-type(back):active-view-transition-type(enter-rise)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-rise) {
+  --vt-transform: translateY(var(--vt-push, 100%));
 }
-html:active-view-transition-type(slide)::view-transition-old(root),
-html:active-view-transition-type(rise)::view-transition-old(root),
-::view-transition-old(.vt-fx-slide),
-::view-transition-old(.vt-fx-rise) {
-  animation: vt-push-out var(--vt-dur) var(--vt-ease) both;
+html:active-view-transition-type(fwd):active-view-transition-type(leave-rise)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
+html:active-view-transition-type(back):active-view-transition-type(leave-rise)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
+  --vt-transform: translateY(calc(-1 * var(--vt-push, 100%)));
 }
-html:active-view-transition-type(slide)::view-transition-new(root),
-html:active-view-transition-type(rise)::view-transition-new(root),
-::view-transition-new(.vt-fx-slide),
-::view-transition-new(.vt-fx-rise) {
-  animation: vt-push-in var(--vt-dur) var(--vt-ease) both;
+html:active-view-transition-type(fwd):active-view-transition-type(enter-zoom)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-zoom),
+html:active-view-transition-type(back):active-view-transition-type(enter-zoom)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-zoom),
+html:active-view-transition-type(fwd):active-view-transition-type(leave-zoom)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-zoom),
+html:active-view-transition-type(back):active-view-transition-type(leave-zoom)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-zoom) {
+  --vt-aperture: calc(var(--vt-stage) / 4);
+  --vt-opacity: 0;
+  --vt-transform: scale(var(--vt-zoom, 3));
+  --vt-s-away: var(--vt-zoom, 3);
+  filter: blur(calc(var(--vt-aperture) / 4 * (var(--vt-s) - 1) / var(--vt-s)));
 }
-/* wipe-*: reveal. Named by the direction the front travels (wipe-up sweeps up from the bottom edge): the new page appears from that edge while the old page is covered from the same edge, so at every instant the two tile the full page; back runs the front the other way. --vt-in is the new page's starting clip, --vt-out the old page's final clip. */
-html:active-view-transition-type(wipe-left),
-::view-transition-old(.vt-fx-wipe-left),
-::view-transition-new(.vt-fx-wipe-left) {
-  --vt-in: inset(0 0 0 100%);
-  --vt-out: inset(0 100% 0 0);
+/* wipe-*: reveal, named by the direction the front travels (wipe-up sweeps
+   up from the bottom edge): the new one appears from that edge while the old
+   one is covered from the same edge, so at every instant the two tile the
+   box; back runs the front the other way. */
+html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-left)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-left),
+html:active-view-transition-type(back):active-view-transition-type(enter-wipe-left)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-wipe-left) {
+  --vt-clip: inset(0 0 0 100%);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-right),
-::view-transition-old(.vt-fx-wipe-right),
-::view-transition-new(.vt-fx-wipe-right) {
-  --vt-in: inset(0 100% 0 0);
-  --vt-out: inset(0 0 0 100%);
+html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-left)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-left),
+html:active-view-transition-type(back):active-view-transition-type(leave-wipe-left)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-wipe-left) {
+  --vt-clip: inset(0 100% 0 0);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-up),
-::view-transition-old(.vt-fx-wipe-up),
-::view-transition-new(.vt-fx-wipe-up) {
-  --vt-in: inset(100% 0 0 0);
-  --vt-out: inset(0 0 100% 0);
+html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-right)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-right),
+html:active-view-transition-type(back):active-view-transition-type(enter-wipe-right)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-wipe-right) {
+  --vt-clip: inset(0 100% 0 0);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-down),
-::view-transition-old(.vt-fx-wipe-down),
-::view-transition-new(.vt-fx-wipe-down) {
-  --vt-in: inset(0 0 100% 0);
-  --vt-out: inset(100% 0 0 0);
+html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-right)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-right),
+html:active-view-transition-type(back):active-view-transition-type(leave-wipe-right)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-wipe-right) {
+  --vt-clip: inset(0 0 0 100%);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-left):active-view-transition-type(back),
-html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-left),
-html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-left) {
-  --vt-in: inset(0 100% 0 0);
-  --vt-out: inset(0 0 0 100%);
+html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-up)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-up),
+html:active-view-transition-type(back):active-view-transition-type(enter-wipe-up)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-wipe-up) {
+  --vt-clip: inset(100% 0 0 0);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-right):active-view-transition-type(back),
-html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-right),
-html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-right) {
-  --vt-in: inset(0 0 0 100%);
-  --vt-out: inset(0 100% 0 0);
+html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-up)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-up),
+html:active-view-transition-type(back):active-view-transition-type(leave-wipe-up)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-wipe-up) {
+  --vt-clip: inset(0 0 100% 0);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-up):active-view-transition-type(back),
-html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-up),
-html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-up) {
-  --vt-in: inset(0 0 100% 0);
-  --vt-out: inset(100% 0 0 0);
+html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-down)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-down),
+html:active-view-transition-type(back):active-view-transition-type(enter-wipe-down)::view-transition-old(root),
+html:active-view-transition-type(back)::view-transition-old(.enter-wipe-down) {
+  --vt-clip: inset(0 0 100% 0);
+  --vt-clip-rest: inset(0);
 }
-html:active-view-transition-type(wipe-down):active-view-transition-type(back),
-html:active-view-transition-type(back)::view-transition-old(.vt-fx-wipe-down),
-html:active-view-transition-type(back)::view-transition-new(.vt-fx-wipe-down) {
-  --vt-in: inset(100% 0 0 0);
-  --vt-out: inset(0 0 100% 0);
-}
-html:active-view-transition-type(wipe-left)::view-transition-old(root),
-html:active-view-transition-type(wipe-right)::view-transition-old(root),
-html:active-view-transition-type(wipe-up)::view-transition-old(root),
-html:active-view-transition-type(wipe-down)::view-transition-old(root),
-::view-transition-old(.vt-fx-wipe-left),
-::view-transition-old(.vt-fx-wipe-right),
-::view-transition-old(.vt-fx-wipe-up),
-::view-transition-old(.vt-fx-wipe-down) {
-  animation: vt-wipe-out var(--vt-dur) var(--vt-ease) both;
-}
-html:active-view-transition-type(wipe-left)::view-transition-new(root),
-html:active-view-transition-type(wipe-right)::view-transition-new(root),
-html:active-view-transition-type(wipe-up)::view-transition-new(root),
-html:active-view-transition-type(wipe-down)::view-transition-new(root),
-::view-transition-new(.vt-fx-wipe-left),
-::view-transition-new(.vt-fx-wipe-right),
-::view-transition-new(.vt-fx-wipe-up),
-::view-transition-new(.vt-fx-wipe-down) {
-  animation: vt-wipe-in var(--vt-dur) var(--vt-ease) both;
+html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-down)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-down),
+html:active-view-transition-type(back):active-view-transition-type(leave-wipe-down)::view-transition-new(root),
+html:active-view-transition-type(back)::view-transition-new(.leave-wipe-down) {
+  --vt-clip: inset(100% 0 0 0);
+  --vt-clip-rest: inset(0);
 }
 /* Opening/closing the overview is a whole-page zoom: the page interpolates as
    one group, and element-level morphs would tear it apart, so the marks' names
    are overridden first (an author !important beats the inline names hoist.js
    wrote on the elements) and they fold back into root to zoom together. */
-html:active-view-transition-type(zoom) .vt-mark {
+html:active-view-transition-type(overview) .vt-mark {
   view-transition-name: none !important;
 }
-@keyframes vt-hold {
+@property --vt-s {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+@keyframes vt-enter {
   from {
-    opacity: 1;
+    opacity: var(--vt-opacity, 1);
+    transform: var(--vt-transform, none);
+    clip-path: var(--vt-clip, none);
+    --vt-s: var(--vt-s-away, 1);
   }
   to {
     opacity: 1;
+    transform: none;
+    clip-path: var(--vt-clip-rest, none);
+    --vt-s: 1;
   }
 }
-@keyframes vt-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-@keyframes vt-fade-in {
+@keyframes vt-leave {
   from {
-    opacity: 0;
-  }
-}
-@keyframes vt-push-in {
-  from {
-    transform: var(--vt-in);
-  }
-}
-@keyframes vt-push-out {
-  to {
-    transform: var(--vt-out);
-  }
-}
-@keyframes vt-wipe-in {
-  from {
-    clip-path: var(--vt-in);
+    opacity: 1;
+    transform: none;
+    clip-path: var(--vt-clip-rest, none);
+    --vt-s: 1;
   }
   to {
-    clip-path: inset(0);
-  }
-}
-@keyframes vt-wipe-out {
-  from {
-    clip-path: inset(0);
-  }
-  to {
-    clip-path: var(--vt-out);
+    opacity: var(--vt-opacity, 1);
+    transform: var(--vt-transform, none);
+    clip-path: var(--vt-clip, none);
+    --vt-s: var(--vt-s-away, 1);
   }
 }
 
@@ -452,12 +628,12 @@ html:active-view-transition-type(zoom) .vt-mark {
   transition:
     opacity 0.18s ease,
     transform 0.18s ease;
-  view-transition-name: vt-bar;
 }
 .vt-bar.is-shown {
   opacity: 1;
   transform: none;
   pointer-events: auto;
+  view-transition-name: vt-bar;
 }
 .vt-bar button,
 .vt-bar a {
@@ -565,24 +741,22 @@ body.vt-lasing .vt-deck {
    transition, because the view-transition pseudo-tree is itself in the top
    layer and paints above it.
 
-   backdrop-filter has to be switched off here as well: the spec copies it to
-   ::view-transition-group(), while opacity is only baked into the snapshot —
-   during the transition an invisible sheet of frosted glass sits over the
-   snapshot beneath. On a small viewport the toolbar covers a lot, and the text
-   in the speaker view's bottom-right iframe blurs on every transition. */
+   The toolbar is named only while it is shown: the spec copies backdrop-filter
+   to ::view-transition-group() while opacity is only baked into the snapshot,
+   so a hidden toolbar with a group of its own would be an invisible sheet of
+   frosted glass over the page. Shown, the group keeps the glass, and the
+   toolbar looks the same during a transition as before and after it. */
 ::view-transition-group(vt-bar),
-::view-transition-group(vt-laser) {
+::view-transition-group(vt-laser),
+::view-transition-old(vt-bar),
+::view-transition-old(vt-laser),
+::view-transition-new(vt-bar),
+::view-transition-new(vt-laser) {
   animation: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 ::view-transition-old(vt-bar),
 ::view-transition-old(vt-laser) {
-  animation: vt-fade-out 1ms linear both;
-}
-::view-transition-new(vt-bar),
-::view-transition-new(vt-laser) {
-  animation: vt-hold var(--vt-dur) linear both;
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -591,7 +765,140 @@ body.vt-lasing .vt-deck {
   }
 }
 
-/* no pointing in the overview: only the cursor is tucked away; the lasing flag stays and comes back on leaving the overview */
-body.vt-lasing .vt-deck.vt-all {
+/* no pointing where the page is a thumbnail: only the cursor is tucked away; the lasing flag stays and comes back on leaving */
+body.vt-lasing .vt-deck:is(.vt-all, .vt-desk) {
   cursor: default;
+}
+
+/* ── black screen (b / .) ─────────────────────────────────────────────── */
+body.vt-black {
+  background: #000;
+}
+body.vt-black > * {
+  visibility: hidden;
+}
+
+/* ── key help (?) ─────────────────────────────────────────────────────── */
+.vt-help {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.5);
+  font:
+    14px/1.5 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--vt-fg2);
+  cursor: pointer;
+}
+.vt-help[hidden] {
+  display: none;
+}
+.vt-help table {
+  padding: 14px 22px;
+  border-spacing: 0 3px;
+  border-radius: 10px;
+  background: var(--vt-panel);
+  border: 1px solid var(--vt-line);
+}
+.vt-help td {
+  padding: 1px 6px;
+}
+.vt-help kbd {
+  font: inherit;
+  color: var(--vt-fg);
+  background: var(--vt-line);
+  border-radius: 4px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* ── speaker view ─────────────────────────────────────────────────────
+   A separate window, about:blank: the runtime copies this whole stylesheet
+   into it and puts .vt-speaker on its <html>, so the tokens, the toolbar and
+   these rules come from one file, the layout's constants with them. */
+.vt-speaker {
+  color: var(--vt-fg2);
+  font:
+    15px/1.55 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.vt-speaker body {
+  margin: 0;
+  height: 100vh;
+  min-height: 0;
+  padding: 12px;
+  display: grid;
+  place-items: stretch;
+  gap: 12px;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.vt-speaker .prog {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin: -12px -12px 0;
+  background: var(--vt-line);
+}
+.vt-speaker .prog i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--vt-accent);
+  transition: width 0.3s var(--vt-easing);
+}
+.vt-speaker header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--vt-muted);
+}
+.vt-speaker header b {
+  color: var(--vt-fg);
+  font-variant-numeric: tabular-nums;
+}
+.vt-speaker header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vt-speaker header time {
+  margin-left: auto;
+  font:
+    600 26px/1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--vt-fg);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.vt-speaker main,
+.vt-speaker aside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.vt-speaker small {
+  color: var(--vt-muted);
+}
+.vt-speaker [hidden] {
+  display: none;
+}
+.vt-speaker main {
+  cursor: default;
+}
+.vt-speaker body.vt-lasing main {
+  cursor:
+    var(--vt-laser) 16 16,
+    none;
+}
+.vt-speaker .vt-notes {
+  flex: 1;
+  min-height: 0;
 }

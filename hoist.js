@@ -25,6 +25,7 @@
   var was = shown.map(function (s) { return s.style.display; });
   shown.forEach(function (s) { s.style.display = "block"; });
 
+  var groups = [].slice.call(document.querySelectorAll(".vt-group"));
   document.querySelectorAll(".vt-slide > .vt-page").forEach(function (page) {
     var root = page.querySelector("svg");
     if (!root) return;
@@ -43,18 +44,21 @@
     var inv = root.getScreenCTM().inverse();
     var toRoot = function (el) { return inv.multiply(el.getScreenCTM()); };
 
+    /* The label grammar is read here and nowhere else; the runtime and the CSS
+       see attributes: vt-key → data-vt-key on the host, vt-key@i →
+       data-vt-state / data-vt-at on the state <g>. What a mark declares about
+       itself is not in the label: the Typst side writes it into vtMarks, by key. */
     var byKey = {};
-    var STATE = '[data-typst-label^="' + PREFIX + '"][data-typst-label*="@"]';
     page.querySelectorAll("[data-typst-label]").forEach(function (g) {
       var l = g.getAttribute("data-typst-label");
       if (l.slice(0, PREFIX.length) !== PREFIX) return;    // leave the author's own labels alone
       /* The states of an element animation (vt-key@i) and any marks inside them
          stay put: the runtime pairs the nodes of the states one by one, and one
          moved away would no longer line up. The outer vt-key is hoisted as usual. */
-      if (l.indexOf("@") >= 0 || g.parentNode.closest(STATE)) return;
-      /* "vt-thm|wipe-up": after the bar is this mark's own enter/leave effect */
-      var parts = l.slice(PREFIX.length).split("|"), k = parts[0];
-      g.vtFx = parts[1];
+      var at = l.lastIndexOf("@");
+      if (at >= 0) { g.dataset.vtState = l.slice(PREFIX.length, at); g.dataset.vtAt = l.slice(at + 1); return; }
+      if (g.parentNode.closest("[data-vt-state]")) return;
+      var k = l.slice(PREFIX.length);
       (byKey[k] = byKey[k] || []).push(g);
     });
 
@@ -66,15 +70,18 @@
     var plan = [];
     Object.keys(byKey).forEach(function (key) {
       /* One label instance = one <g> = one region. The same key several times
-         on a page is **allowed** — each is its own region, the name carries the
-         occurrence index, and the runtime pairs them by count (one-to-many =
-         split, many-to-one = merge). */
-      byKey[key].forEach(function (n, i) {
+         on a page is **allowed** — each is its own region; the runtime names
+         them by occurrence and pairs them by count (one-to-many = split,
+         many-to-one = merge). */
+      byKey[key].forEach(function (n) {
         var box = bbox(n, toRoot);
-        if (!box || box[2] <= box[0] || box[3] <= box[1]) return;
+        if (!box || box[2] <= box[0] || box[3] <= box[1]) {
+          console.warn("[vtslides] mark " + key + " on page " + (groups.indexOf(page.closest(".vt-group")) + 1) + " has no box and is not hoisted: it neither morphs nor enters on its own");
+          return;
+        }
         /* record the **parent's** CTM — the node's own transform attribute travels
            with it, so using its own CTM would apply it twice */
-        plan.push({ key: key, at: i, node: n, box: box, mat: toRoot(n.parentNode) });
+        plan.push({ key: key, node: n, box: box, mat: toRoot(n.parentNode) });
       });
     });
 
@@ -98,8 +105,6 @@
       host.style.width = (w / vb.width * 100) + "%";
       host.style.height = (h / vb.height * 100) + "%";
       host.dataset.vtKey = p.key;
-      if (p.node.vtFx) host.dataset.vtFx = p.node.vtFx;
-      host.style.viewTransitionName = "m-" + p.key.replace(/[^A-Za-z0-9_-]/g, "-") + "-" + (p.at + 1);
 
       var wrap = document.createElementNS(NS, "g");
       wrap.setAttribute("transform", "matrix(" + [m.a, m.b, m.c, m.d, m.e, m.f].join(" ") + ")");
