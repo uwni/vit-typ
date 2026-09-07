@@ -241,10 +241,21 @@
      data-vt-key; the key's characters are the Typst side's assertion).
      Given once, at load; spread() renames for one transition and restores. */
   function nameOf(key, i) { return "m-" + key + "-" + (i + 1); }
+  /* A name each, and whatever its object declared: the pair of effects and the
+     names of its settings, as the Typst side wrote them into vtMarks. A mark
+     that morphs carries them too — the effects then match no animation rule
+     (those want the side, vt-only-new or vt-only-old, which soloize puts in
+     front of vt-mo), while the settings still reach its images. */
   function name() {
     slides.forEach(function (s) {
       var by = marksOf(s);
-      Object.keys(by).forEach(function (k) { by[k].forEach(function (m, i) { m.style.viewTransitionName = nameOf(k, i); }); });
+      Object.keys(by).forEach(function (k) {
+        var own = vtMarks[k];
+        by[k].forEach(function (m, i) {
+          m.style.viewTransitionName = nameOf(k, i);
+          if (own) m.style.viewTransitionClass = "vt-mo " + own.transition;
+        });
+      });
     });
   }
 

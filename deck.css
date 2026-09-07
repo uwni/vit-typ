@@ -196,29 +196,32 @@ body {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
+/* three states, one shape: what is still ahead is an outline, what has been
+   passed is filled in the muted colour, the position we are on is filled in the
+   accent */
 :is(.vt-all, .vt-desk) .vt-dots i {
   box-sizing: border-box;
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1px solid var(--vt-muted);
+  border: 1px solid var(--vt-accent);
   cursor: pointer;
 }
+:is(.vt-all, .vt-desk) .vt-dots i.is-on {
+  background: var(--vt-muted);
+  border-color: var(--vt-muted);
+}
+:is(.vt-all, .vt-desk) .vt-dots i.is-now {
+  background: var(--vt-accent);
+  border-color: var(--vt-accent);
+}
+/* pointing at one says so whatever state it is in, so this comes last */
 :is(.vt-all, .vt-desk) .vt-dots i:hover,
 :is(.vt-all, .vt-desk) .vt-dots i.is-peek {
   border-color: var(--vt-fg);
 }
 :is(.vt-all, .vt-desk) .vt-dots i.is-peek {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-fg) 35%, transparent);
-}
-:is(.vt-all, .vt-desk) .vt-dots i.is-on {
-  background: color-mix(in srgb, var(--vt-accent) 70%, var(--vt-bg));
-  border-color: transparent;
-}
-:is(.vt-all, .vt-desk) .vt-dots i.is-now {
-  background: var(--vt-accent);
-  border-color: var(--vt-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 32%, transparent);
 }
 
 /* overview: toggled with o / a */
@@ -365,8 +368,6 @@ body:has(.vt-desk) .vt-notes {
   animation-timing-function: var(--vt-easing);
 }
 /* ── a transition is a pair of effects ────────────────────────────────
-   This block is generated: edit the table in tools/gencss.py and re-run it.
-
    deck/slide/mark(transition: (enter:, leave:)): how the new side comes in,
    how the old side goes out; a string is the same effect both ways. The
    Typst side writes the pair as the transition's types on every frame
@@ -410,6 +411,20 @@ body:has(.vt-desk) .vt-notes {
 ::view-transition-new(.vt-mo) {
   animation-timing-function: var(--vt-easing);
 }
+/* A group interpolates as a box, and each of its two images is drawn into that
+   box — stretched to fill it, which is right for a mark that keeps its shape
+   and wrong for one that grows on one side: an assembly that gains a corner
+   would smear while it grows. fit: "none" draws both images at their own size
+   instead, anchored where the transition asks, so what was already there stays
+   where it was and only the new part appears. The anchor is the corner that
+   does not move. */
+::view-transition-old(.vt-mo),
+::view-transition-new(.vt-mo),
+::view-transition-old(.vt-only-old),
+::view-transition-new(.vt-only-new) {
+  object-fit: var(--vt-fit, fill);
+  object-position: var(--vt-anchor, 50% 50%);
+}
 /* opening or closing the overview: the deck fades into the grid while the page zooms */
 html:active-view-transition-type(overview)::view-transition-new(root) {
   --vt-opacity: 0;
@@ -421,12 +436,12 @@ html:active-view-transition-type(overview)::view-transition-new(root) {
    pseudo-elements go — shows the new page, never the old. Paired with
    another entrance the old page fades out for real. */
 html:active-view-transition-type(fwd):active-view-transition-type(enter-fade)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-fade),
 html:active-view-transition-type(back):active-view-transition-type(enter-fade)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-fade),
 html:active-view-transition-type(back)::view-transition-old(.enter-fade),
 html:active-view-transition-type(fwd):active-view-transition-type(leave-fade)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-fade),
 html:active-view-transition-type(back):active-view-transition-type(leave-fade)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-fade),
 html:active-view-transition-type(back)::view-transition-new(.leave-fade) {
   --vt-opacity: 0;
 }
@@ -435,12 +450,12 @@ html:active-view-transition-type(enter-fade):active-view-transition-type(leave-f
 }
 /* none: at once. The side jumps to its end state on the first frame. */
 html:active-view-transition-type(fwd):active-view-transition-type(enter-none)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-none),
 html:active-view-transition-type(back):active-view-transition-type(enter-none)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-none),
 html:active-view-transition-type(back)::view-transition-old(.enter-none),
 html:active-view-transition-type(fwd):active-view-transition-type(leave-none)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-none),
 html:active-view-transition-type(back):active-view-transition-type(leave-none)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-none),
 html:active-view-transition-type(back)::view-transition-new(.leave-none) {
   --vt-opacity: 0;
   --vt-timing: step-start;
@@ -448,7 +463,8 @@ html:active-view-transition-type(back)::view-transition-new(.leave-none) {
 /* slide / rise: push, by the width / height of the box. Forward the new one
    comes in from the right / bottom and the old one leaves to the left / top;
    back, the other way round; a transition can set how far with push (a
-   negative distance sends them the other way). zoom: the new one shrinks into place from
+   negative distance sends them the other way). On a mark they also fade, for
+   the reason given where that rule stands. zoom: the new one shrinks into place from
    three times its size, fading in, the old one grows away, fading out, the
    same both ways — and the screen is the focal plane. A side at
    magnification s sits at 1/s of the focal distance, and a lens of aperture
@@ -465,36 +481,51 @@ html:active-view-transition-type(back)::view-transition-new(.leave-none) {
    itself, registered so that it interpolates alongside the transform and
    the blur is recomputed from it every frame. */
 html:active-view-transition-type(fwd):active-view-transition-type(enter-slide)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
 html:active-view-transition-type(back):active-view-transition-type(enter-slide)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
 html:active-view-transition-type(back)::view-transition-old(.enter-slide) {
   --vt-transform: translateX(var(--vt-push, 100%));
 }
 html:active-view-transition-type(fwd):active-view-transition-type(leave-slide)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
 html:active-view-transition-type(back):active-view-transition-type(leave-slide)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
 html:active-view-transition-type(back)::view-transition-new(.leave-slide) {
   --vt-transform: translateX(calc(-1 * var(--vt-push, 100%)));
 }
 html:active-view-transition-type(fwd):active-view-transition-type(enter-rise)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
 html:active-view-transition-type(back):active-view-transition-type(enter-rise)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
 html:active-view-transition-type(back)::view-transition-old(.enter-rise) {
   --vt-transform: translateY(var(--vt-push, 100%));
 }
 html:active-view-transition-type(fwd):active-view-transition-type(leave-rise)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
 html:active-view-transition-type(back):active-view-transition-type(leave-rise)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
 html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
   --vt-transform: translateY(calc(-1 * var(--vt-push, 100%)));
 }
+/* A page pushed by its own width is off the screen when it gets there, and
+   that is the whole of the effect. A mark is pushed by *its* width, so it
+   arrives beside where it started, still on the page and still opaque — and
+   the image would then simply cease to exist. So on a mark, and only there,
+   the push fades. */
+html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
+html:active-view-transition-type(back)::view-transition-old(.enter-slide),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
+html:active-view-transition-type(back)::view-transition-old(.enter-rise),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
+html:active-view-transition-type(back)::view-transition-new(.leave-slide),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
+html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
+  --vt-opacity: 0;
+}
 html:active-view-transition-type(fwd):active-view-transition-type(enter-zoom)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-zoom),
 html:active-view-transition-type(back):active-view-transition-type(enter-zoom)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-zoom),
 html:active-view-transition-type(back)::view-transition-old(.enter-zoom),
 html:active-view-transition-type(fwd):active-view-transition-type(leave-zoom)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-zoom),
 html:active-view-transition-type(back):active-view-transition-type(leave-zoom)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-zoom),
 html:active-view-transition-type(back)::view-transition-new(.leave-zoom) {
   --vt-aperture: calc(var(--vt-stage) / 4);
   --vt-opacity: 0;
@@ -507,57 +538,57 @@ html:active-view-transition-type(back)::view-transition-new(.leave-zoom) {
    one is covered from the same edge, so at every instant the two tile the
    box; back runs the front the other way. */
 html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-left)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-left),
 html:active-view-transition-type(back):active-view-transition-type(enter-wipe-left)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-left),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-left) {
   --vt-clip: inset(0 0 0 100%);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-left)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-left),
 html:active-view-transition-type(back):active-view-transition-type(leave-wipe-left)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-left),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-left) {
   --vt-clip: inset(0 100% 0 0);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-right)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-right),
 html:active-view-transition-type(back):active-view-transition-type(enter-wipe-right)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-right),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-right) {
   --vt-clip: inset(0 100% 0 0);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-right)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-right),
 html:active-view-transition-type(back):active-view-transition-type(leave-wipe-right)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-right),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-right) {
   --vt-clip: inset(0 0 0 100%);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-up)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-up),
 html:active-view-transition-type(back):active-view-transition-type(enter-wipe-up)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-up),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-up) {
   --vt-clip: inset(100% 0 0 0);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-up)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-up),
 html:active-view-transition-type(back):active-view-transition-type(leave-wipe-up)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-up),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-up) {
   --vt-clip: inset(0 0 100% 0);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-down)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-down),
 html:active-view-transition-type(back):active-view-transition-type(enter-wipe-down)::view-transition-old(root),
+html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-down),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-down) {
   --vt-clip: inset(0 0 100% 0);
   --vt-clip-rest: inset(0);
 }
 html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-down)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-down),
 html:active-view-transition-type(back):active-view-transition-type(leave-wipe-down)::view-transition-new(root),
+html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-down),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-down) {
   --vt-clip: inset(100% 0 0 0);
   --vt-clip-rest: inset(0);

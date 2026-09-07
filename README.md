@@ -13,13 +13,16 @@ the runtime navigates, tidies the DOM once at load, and hands the browser two
 states.
 
 ```sh
-typst compile --root . examples/demo.typ examples/out/demo.pdf
-typst compile --root . --features html examples/demo.typ examples/out/demo.html
+typst compile --root . examples/tutorial.typ examples/out/tutorial.pdf
+typst compile --root . --features html examples/tutorial.typ examples/out/tutorial.html
 ```
 
-One compile per format, from the same file. Open `examples/out/demo.html` in a
-browser (double-clicking the file works — no server needed); the PDF beside it
+One compile per format, from the same file. Open `examples/out/tutorial.html` in
+a browser (double-clicking the file works — no server needed); the PDF beside it
 under the same name is what the toolbar's download button offers.
+`examples/tutorial.typ` is the tutorial deck: twenty-six pages, each one the code
+on the left and what it does on the right, going through every call in the API
+and saying when to reach for it.
 
 Requires Typst 0.15 (`html`) and a browser with same-document View
 Transitions including transition types and `view-transition-class`, and CSS `d`
@@ -35,14 +38,16 @@ verified in Chromium (`tools/`).
 #let body = {
   slide[
     #set align(center + horizon)
-    #mark("title")[#text(size: 72pt, weight: 700)[vtslides]]
+    #mark("title")[#text(size: 76pt, weight: 700)[vtslides]]
+
+    #mark("sub")[#text(size: 26pt)[Typst slides with View Transitions]]
   ]
 
   slide[
-    #mark("title")[#text(size: 40pt, weight: 700)[vtslides]]
+    #mark("title")[#text(size: 26pt, weight: 700)[A deck in ten lines]]
 
-    $e^(-x^2)$ has no elementary antiderivative. Its integral over the
-    half-line is nevertheless known exactly:
+    `deck` is the document, `slide` is a page, `mark` names what should
+    travel. Everything else is ordinary Typst.
   ]
 }
 
@@ -56,8 +61,8 @@ time, never written by hand (`tools/check.mjs` prints it, as percentages of the
 page):
 
 ```
-slide 1:  m-title  37.7% 41.6%  24.4% × 7.7%
-slide 2:  m-title   4.7%  8.3%  13.6% × 4.3%
+slide 1:  m-title  37.0% 35.1%  25.8% × 8.2%
+slide 2:  m-title   4.7%  8.3%  21.0% × 2.8%
 ```
 
 `deck` is the document: `#show: deck.with(title: "My talk")` at the top and
@@ -90,7 +95,7 @@ The test is one sentence: **did the layout change, or is one object moving?**
 | `deck(width:, height:)` | Layout size, default 1280pt × 720pt. The PDF page size; each HTML frame reads `page.width` / `page.height`, and the player's aspect ratio follows. |
 | `deck(pdf:)` | Target of the toolbar's download link. `auto` = the `.pdf` beside the HTML with the same name, `none` = no button, a string is used as is. |
 | `deck(duration:)` | Default transition duration in milliseconds, 700. A single transition can set its own (`transition: (effect: "zoom", duration: 400)`); `-` / `=` / `0` scale whatever is written. |
-| `deck(transition:)` | Default **page-to-page** transition: `"fade"` (default, crossfade), `"slide"` (horizontal push — forward, the new page comes in from the right), `"rise"` (vertical push), `"zoom"` (the new one shrinks into place from three times its size, fading in, the old one grows away, fading out; the screen is the focal plane and the lens a quarter of the stage wide, so whichever is larger than life is nearer than the focus and each of its points spreads over a circle that grows with the magnification — a stroke thinner than the circle casts only a diluted shadow, and text arrives as a haze that condenses as it lands), `"wipe-left"` / `"wipe-right"` / `"wipe-up"` / `"wipe-down"` (reveal, named by the direction the front travels), `"none"` (that side switches at once). A string is the same effect both ways; `(enter: "slide", leave: "fade")` names how the new page comes in and how the old one goes out separately (`in` would be the natural key, but it is a Typst keyword). The same dictionary carries this transition's own settings — `duration` in ms, `easing` as four numbers, `zoom` (how many times life size the zoom starts at) and `push` (how far slide and rise travel, negative the other way): `(effect: "zoom", duration: 400, zoom: 6)`. A setting is a variable `deck.css` reads, so a typo is a compile error; the Typst side writes each bundle as one CSS rule and names it after what it holds, and the name rides along as a view transition type on the page (or a `view-transition-class` on a mark). The presenter's speed keys still divide every duration. `none` runs no transition between pages at all. Governs unmarked content only; paired marks morph regardless. Not used between frames of one page, which always crossfade. |
+| `deck(transition:)` | Default **page-to-page** transition: `"fade"` (default, crossfade), `"slide"` (horizontal push — forward, the new page comes in from the right), `"rise"` (vertical push; a page travels the width or height of the screen and is gone when it arrives, a mark only its own, so on a mark the push fades as it goes), `"zoom"` (the new one shrinks into place from three times its size, fading in, the old one grows away, fading out; the screen is the focal plane and the lens a quarter of the stage wide, so whichever is larger than life is nearer than the focus and each of its points spreads over a circle that grows with the magnification — a stroke thinner than the circle casts only a diluted shadow, and text arrives as a haze that condenses as it lands), `"wipe-left"` / `"wipe-right"` / `"wipe-up"` / `"wipe-down"` (reveal, named by the direction the front travels), `"none"` (that side switches at once). A string is the same effect both ways; `(enter: "slide", leave: "fade")` names how the new page comes in and how the old one goes out separately (`in` would be the natural key, but it is a Typst keyword). The same dictionary carries this transition's own settings — `duration` in ms, `easing` as four numbers, `zoom` (how many times life size the zoom starts at) and `push` (how far slide and rise travel, negative the other way): `(effect: "zoom", duration: 400, zoom: 6)`. A side can be spelled out to carry its own: `(enter: (effect: "slide", duration: 200), leave: (effect: "fade", duration: 900))` — settings beside the effects are the whole transition's, settings inside a side are that side's and beat them. `fit: "none"` with `anchor: right + bottom` is for a mark that wraps a whole assembly: a group interpolates as a box and its images are stretched into it, so an assembly that grows on one side would smear; drawn at their own size and pinned to the corner that does not move, what was already there stays where it was and only the new part appears. A setting is a variable `deck.css` reads, so a typo is a compile error; the Typst side writes each bundle as one CSS rule and names it after what it holds, and the name rides along as a view transition type on the page (or a `view-transition-class` on a mark). The presenter's speed keys still divide every duration. `none` runs no transition between pages at all. Governs unmarked content only; paired marks morph regardless. Not used between frames of one page, which always crossfade. |
 | `deck(theme:)` | Light/dark theme of the player chrome (toolbar, overview, speaker view): `auto` (follows the system), `"dark"`, `"light"`. The layout's colours are Typst's. |
 | `deck(fill:)` | Layout background, default `#111318`. The PDF uses `page(fill:)`; the HTML paints the same value under the slides and thumbnails, independent of the chrome theme. |
 | `deck(font:)` | Font stack with glyph-by-glyph fallback, default `("DejaVu Sans", "Noto Sans CJK SC")`. |
@@ -102,6 +107,17 @@ The test is one sentence: **did the layout change, or is one object moving?**
 | `mark(key)[…]` | Names a piece of content. The same key on two adjacent pages pairs them. |
 | `mark(transition:)` | This object's **own** enter/leave effect (same names as above, a string or an `(enter:, leave:)` pair). Applies only when the mark is one-sided in a transition; a paired mark morphs regardless. Unset, the mark folds into the page. One object, one effect: given on any occurrence of the key it holds for all, and two occurrences may not disagree. Keys are letters, digits, `_` and `-`. |
 | `mark(key, s0, s1, …)` | **Element animation**: N states of one object, stepped with `→` / `←`. The PDF shows the last state. |
+| `reveal(n, (step, at) => …)` | Frames from **one** description: the body is rendered once per frame and each part says when it arrives — `at(2, thing)`. Before its frame, content keeps its space (so nothing is ever re-laid-out and nothing jumps) and anything else is `none`, which switches a stroke or a fill off. |
+| `layers(key, meet: …, a, b, …)` | Layers of one picture, each its own mark (`key-1`, `key-2`, …). The last one sizes the stack; a `none` layer is left out, which is how one arrives — and when it does, the layers already there glide to their new place as whole pictures instead of being redrawn. `meet` is the corner the arriving layer does not push (`bottom + right` for a picture that grows up and left). It has to be said: lining the layers up by the point they share needs that point's position, and HTML export does not give positions — inside `html.frame` sizes are available (`measure` and `layout` both answer) but every position reads as zero, two elements 60pt apart alike. That is Typst's own line, "Introspection (except for concrete positions)" ([typst#5512](https://github.com/typst/typst/issues/5512)); the PDF target reports them properly, and when it lifts here `meet` can be derived instead of said. If there is no such corner the picture grows both ways and nothing can hold the layers together — use `reveal` and let it stay still. |
+| `build(a, b, c)` | Frames that accumulate: `a`, then `a` and `b`, then all three. For things that flow — a list, a stack of blocks — where later parts are meant to push the layout. |
+
+In a formula a term is marked by handing it over as an equation —
+`$ #mark("sq")($x^2$) + #mark("lin")($b x$) = c $` — not as bare math: a mark
+boxes what it is given, and a box lays its content out as markup, which would
+set `b x` upright in the body font. Wrapped as an equation it is typeset exactly
+as it would be unmarked. The operators are then the page's: they cross-fade,
+which is invisible where they stay put and a double image where they move, so a
+formula whose operators travel wants them marked too.
 
 `window.vtslides` exposes `{ go, next, prev, index, total, step, steps, speed, mode, deck }`
 (`step`, `speed` and `mode` are writable; `mode` is `"desk"`, `"present"` or
@@ -170,7 +186,7 @@ is, and the runtime rewrites what the browser would refuse so that it can:
   its end. Where both states agree, nothing is touched. Coordinates are copied
   verbatim; one pass, linear in the length. To choose where new vertices come
   from, draw every state with the same points and stack the spare ones where
-  they should start (the Liu Hui page of the demo).
+  they should start (the tutorial's "Designing the states" page).
 - `fill` or `stroke` of `none` against a colour becomes `transparent`, so the
   paint fades in.
 - What has no in-between — text that changes, a path against an arc, states
@@ -282,6 +298,25 @@ rail is the deck itself in the overview's thumbnails, and the preview is a copy
 of this same HTML at a `#page.position` hash — the same mirror the speaker view
 uses, so there is one renderer and the preview plays the real transitions.
 
+One rule explains what these are for: the browser interpolates a mark's **box**
+and cross-fades its two **pictures** — the parts inside the pictures are not
+moved. So **what moves has to be one picture**, and anything that is re-laid-out
+between frames cannot glide, it can only cross-fade with its older self.
+
+`reveal` is how you keep a picture from being re-laid-out: write it once, say
+when each part arrives, and what has not arrived yet still takes its space. That
+is the whole trick — the layout is identical on every frame, so the marks morph
+instead of the page shifting under them. `layers` is for the other half: when
+something arrives *outside* what is already there and does make the picture
+bigger, put it in a layer of its own, and the layers already on the page glide to
+their new place as whole pictures. A layer that has to reach into an earlier one
+(an arrow into a diagram it does not draw) draws that one's anchors hidden, so
+the package still lays them out in the same place.
+
+The tutorial's assembly page is the two together, and it is the whole of that page:
+one diagram where `A`, `p` and `q` arrive at step 2, and one layer with `X` and
+its arrows arriving at step 3 — the square glides over as it lands.
+
 The **overview** shows one thumbnail per page: the current frame if you are on
 that page, otherwise the finished page (last frame, last step). Opening a page
 from it zooms that page into place; turning pages morphs elements. Those are
@@ -306,7 +341,14 @@ window.
 **Identity is a label.** `mark(key)` attaches the Typst label `vt-key` to a box
 around the content. Typst's SVG export writes a label as a `<g data-typst-label>`
 *wrapping* the content, so the subtree is the boundary — nothing is inferred
-from geometry. On the PDF side a label costs nothing, so no code is gated by
+from geometry. The box is what makes that possible at all: of everything that
+can stand in a paragraph, only `box` and `block` carry a label into the SVG. A
+label on a `rect`, a `circle`, a cetz canvas, an equation, `emph` or bare text
+produces no group, and the mark would silently not exist; `block` is block-level
+and breakable, which rules it out for a term inside a formula or a word inside a
+sentence. A box wraps its content like ordinary text but is atomic, so a mark
+wider than the rest of the line takes a line of its own — marking a word, a
+title or a figure is free, marking a whole sentence mid-paragraph is not. On the PDF side a label costs nothing, so no code is gated by
 backend. The label is identity and nothing else: what a mark declares about
 itself (`transition:`) is collected by `query` on the Typst side and written
 into the HTML as a table by key (`const vtMarks = {…}`), which the runtime
@@ -400,7 +442,7 @@ deck.css            page SVG layout, slide switching, desk, overview, transition
 hoist.js            lifts marked <g>s into HTML-level <svg> hosts with a view-transition-name
 paths.js            path data: two states whose paths are not the same list of commands, reconciled (pure functions)
 runtime.js          navigation, element-animation steps, continuous animation, toolbar, laser, desk, overview zoom, speaker view
-examples/demo.typ   the example deck
+examples/tutorial.typ  the tutorial deck: the API, page by page, code beside result
 docs/api.typ        API reference, generated by tidy from lib.typ
 tools/paths.mjs     paths.js under Node against a table of cases
 tools/check.mjs     region geometry at four window sizes, pairing chains, clone clean-up, console errors

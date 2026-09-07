@@ -14,7 +14,7 @@ rmSync(SHOT, { recursive: true, force: true });
 mkdirSync(SHOT, { recursive: true });
 
 const EXE = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
-const url = 'file://' + join(OUT, 'demo.html');
+const url = 'file://' + join(OUT, 'tutorial.html');
 const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '--force-color-profile=srgb'] });
 const VP = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 };
 /* the deck opens on the desk; everything here is about the page being presented */
@@ -44,7 +44,7 @@ const n = await (async () => {
 })();
 
 execFileSync('pdftoppm', ['-png', '-r', '96', '-scale-to-x', '1280', '-scale-to-y', '720',
-  join(OUT, 'demo.pdf'), join(SHOT, 'pdf')]);
+  join(OUT, 'tutorial.pdf'), join(SHOT, 'pdf')]);
 
 /* The only valid criterion is "the difference is nothing but hollow glyph
    outlines" — a shift or a missing glyph produces solid blobs. The mean is just

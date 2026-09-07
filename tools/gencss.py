@@ -9,11 +9,13 @@ import os
 
 def T(*types): return "html" + "".join(":active-view-transition-type(" + t + ")" for t in types)
 def enter_side(x):   # the side the pair's enter effect governs: the new side forward, the old side back
-    return [T("fwd", "enter-" + x) + "::view-transition-new(root)", T("fwd") + "::view-transition-new(.enter-" + x + ")",
-            T("back", "enter-" + x) + "::view-transition-old(root)", T("back") + "::view-transition-old(.enter-" + x + ")"]
+    return [T("fwd", "enter-" + x) + "::view-transition-new(root)", T("back", "enter-" + x) + "::view-transition-old(root)"] + enter_mark(x)
 def leave_side(x):   # the side the pair's leave effect governs: the old side forward, the new side back
-    return [T("fwd", "leave-" + x) + "::view-transition-old(root)", T("fwd") + "::view-transition-old(.leave-" + x + ")",
-            T("back", "leave-" + x) + "::view-transition-new(root)", T("back") + "::view-transition-new(.leave-" + x + ")"]
+    return [T("fwd", "leave-" + x) + "::view-transition-old(root)", T("back", "leave-" + x) + "::view-transition-new(root)"] + leave_mark(x)
+def enter_mark(x):   # the same role, on a one-sided mark rather than on the page
+    return [T("fwd") + "::view-transition-new(.enter-" + x + ")", T("back") + "::view-transition-old(.enter-" + x + ")"]
+def leave_mark(x):
+    return [T("fwd") + "::view-transition-old(.leave-" + x + ")", T("back") + "::view-transition-new(.leave-" + x + ")"]
 def rule(sels, decls): return ",\n".join(sels) + " {\n" + "".join("  " + d + ";\n" for d in decls) + "}\n"
 
 out = []
@@ -61,6 +63,20 @@ out.append("""/* ── a transition is a pair of effects ───────�
 ::view-transition-new(.vt-mo) {
   animation-timing-function: var(--vt-easing);
 }
+/* A group interpolates as a box, and each of its two images is drawn into that
+   box — stretched to fill it, which is right for a mark that keeps its shape
+   and wrong for one that grows on one side: an assembly that gains a corner
+   would smear while it grows. fit: "none" draws both images at their own size
+   instead, anchored where the transition asks, so what was already there stays
+   where it was and only the new part appears. The anchor is the corner that
+   does not move. */
+::view-transition-old(.vt-mo),
+::view-transition-new(.vt-mo),
+::view-transition-old(.vt-only-old),
+::view-transition-new(.vt-only-new) {
+  object-fit: var(--vt-fit, fill);
+  object-position: var(--vt-anchor, 50% 50%);
+}
 /* opening or closing the overview: the deck fades into the grid while the page zooms */
 html:active-view-transition-type(overview)::view-transition-new(root) {
   --vt-opacity: 0;
@@ -79,7 +95,8 @@ out.append(rule(enter_side("none") + leave_side("none"), ["--vt-opacity: 0", "--
 out.append("""/* slide / rise: push, by the width / height of the box. Forward the new one
    comes in from the right / bottom and the old one leaves to the left / top;
    back, the other way round; a transition can set how far with push (a
-   negative distance sends them the other way). zoom: the new one shrinks into place from
+   negative distance sends them the other way). On a mark they also fade, for
+   the reason given where that rule stands. zoom: the new one shrinks into place from
    three times its size, fading in, the old one grows away, fading out, the
    same both ways — and the screen is the focal plane. A side at
    magnification s sits at 1/s of the focal distance, and a lens of aperture
@@ -100,6 +117,13 @@ out.append(rule(enter_side("slide"), ["--vt-transform: translateX(var(--vt-push,
 out.append(rule(leave_side("slide"), ["--vt-transform: translateX(calc(-1 * var(--vt-push, 100%)))"]))
 out.append(rule(enter_side("rise"), ["--vt-transform: translateY(var(--vt-push, 100%))"]))
 out.append(rule(leave_side("rise"), ["--vt-transform: translateY(calc(-1 * var(--vt-push, 100%)))"]))
+out.append("""/* A page pushed by its own width is off the screen when it gets there, and
+   that is the whole of the effect. A mark is pushed by *its* width, so it
+   arrives beside where it started, still on the page and still opaque — and
+   the image would then simply cease to exist. So on a mark, and only there,
+   the push fades. */
+""")
+out.append(rule(sum((f(x) for f in (enter_mark, leave_mark) for x in ("slide", "rise")), []), ["--vt-opacity: 0"]))
 out.append(rule(enter_side("zoom") + leave_side("zoom"), [
     "--vt-aperture: calc(var(--vt-stage) / 4)", "--vt-opacity: 0",
     "--vt-transform: scale(var(--vt-zoom, 3))", "--vt-s-away: var(--vt-zoom, 3)",
