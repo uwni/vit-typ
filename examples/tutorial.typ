@@ -720,7 +720,85 @@
     )
   ]
 
-  // ── 17. continuous animation: keyframes ────────────────────────────
+  // ── 17. dashes ─────────────────────────────────────────────────────
+  let R = 1.35
+  let CIRC = 2 * calc.pi * R // the ring's length, in canvas units
+  let LEN = CIRC / 4 // the ink on it
+  let SU = 1.25cm // the canvas's unit, as a length on the page
+  let frame(f) = rect(
+    width: 190pt,
+    height: 142pt,
+    radius: 6pt,
+    stroke: (
+      paint: hi,
+      thickness: 2.5pt,
+      // the period stays 12pt, so every dash keeps its place and grows
+      // forward into its own gap: the gaps close, the pattern does not slide
+      dash: (array: (6pt + 6pt * f, 6pt - 6pt * f), phase: 0pt),
+    ),
+  )
+  let ring(f) = cetz.canvas(length: SU, {
+    import cetz.draw: circle, rect
+    rect((-1.62, -1.62), (1.62, 1.62), stroke: none)
+    circle((0, 0), radius: R, stroke: 0.8pt + dim.transparentize(55%))
+    circle(
+      (0, 0),
+      radius: R,
+      // an empty dash, a gap up to where the ink starts, the ink, then a gap
+      // longer than the path: one run placed anywhere, moved by one number
+      stroke: (
+        paint: blue,
+        thickness: 3pt,
+        dash: (array: (0pt, f * (CIRC - LEN) * SU, LEN * SU, 2 * CIRC * SU), phase: 0pt),
+      ),
+    )
+  })
+  let cap(body) = text(size: 15pt, fill: dim, body)
+  let inked(j) = {
+    let f = j / 4
+    grid(
+      columns: 2,
+      column-gutter: 40pt,
+      align: horizon + center,
+      // The captions are the same words in every state on purpose: a number
+      // that changes changes its glyphs, the states then differ in structure,
+      // and the whole mark falls back to a cross-fade.
+      stack(spacing: 16pt, frame(f), cap[the gaps close]),
+      stack(spacing: 16pt, ring(f), cap[the ink travels]),
+    )
+  }
+  slide(
+    title: "Dashes",
+    note: [Both of these are one property. Growing a line from its end needs no dash — pad the states with points and `paths.js` aligns them — but a pattern cannot be written in points at all, and a piece of ink sliding along a path would mean re-listing that path's vertices in every state, which is geometry in motion and judders at the state rate. Here the box and the ring are the same points in every state and only four numbers move.],
+  )[
+    #lesson(
+      "Dashes",
+      [`stroke-dasharray` interpolates like any other property. It is worth reaching for when what you want is *not* expressible as points: a pattern, or ink that moves along a path that stays still.],
+      src(```typ
+      // gaps close: the period stays 12pt, so the dashes grow
+      // forward into their own gaps instead of sliding along
+      #let frame(f) = rect(..., stroke: (dash: (
+        array: (6pt + 6pt * f, 6pt - 6pt * f), phase: 0pt)))
+
+      // ink placed anywhere on the path: an empty dash, a gap
+      // up to where it starts, the ink, a gap longer than the
+      // path. Never `phase:` — Typst writes it to
+      // stroke-dashoffset without flipping the sign, and the
+      // PDF and the browser then disagree.
+      #let ring(f) = cetz.canvas(length: 1cm, {
+        circle((0, 0), radius: R, stroke: (dash: (
+          array: (0pt, f * (CIRC - LEN) * 1cm, LEN * 1cm,
+                  2 * CIRC * 1cm), phase: 0pt)))
+      })
+
+      #mark("ink", ..range(5).map(inked))
+      ```),
+      screen(align(center + horizon, mark("ink", ..range(5).map(inked)))),
+      when: [Not for a line that simply grows from its end: give the states their points and let `paths.js` pad the shorter one. Reach for a dash when points cannot say it. Every state must carry the attribute — write the solid box as a zero gap, not as no dash — or the states differ in their attributes and the whole node cross-fades instead.],
+    )
+  ]
+
+  // ── 18. continuous animation: keyframes ────────────────────────────
   let ball(i) = (
     keyframes: (
       (transform: "translateY(0) scale(1, 1)", transformOrigin: "50% 100%", easing: "cubic-bezier(.45, 0, 1, .55)"),
@@ -771,7 +849,7 @@
     )
   ]
 
-  // ── 18. follow ─────────────────────────────────────────────────────
+  // ── 19. follow ─────────────────────────────────────────────────────
   let lissajous = range(0, 121).map(i => {
     let a = i / 120 * 2 * calc.pi
     (3.1 * calc.sin(2 * a) + 3.3, 1.5 * calc.sin(3 * a) + 1.7)
@@ -814,7 +892,7 @@
     )
   ]
 
-  // ── 19. states played over time ────────────────────────────────────
+  // ── 20. states played over time ────────────────────────────────────
   // A treble clef, outlined the way a handwriting tutorial draws one. Not the
   // boundary of the filled glyph — that is four separate curves, the silhouette
   // and the three holes the stroke encloses — but the outline of the *pen*: the
@@ -859,13 +937,21 @@
   )
   let M = 45 // harmonics kept: the fastest turns 28 times a turn, under the S / 2 below
   let C = 6 // epicycle circles drawn
-  let S = 60 // states in one turn
-  let P = 180 // pen samples round the outline — how finely it is drawn
+  let S = 120 // states in one turn
+  let P = 360 // pen samples: the curve's own resolution
+  let SUB = calc.quo(P, S) // samples per piece — a piece is a little polyline
   let step = calc.quo(P, S) // a whole number: state j puts the pen on sample step * j
-  let L = step // pen samples per arc, so every arc ends where some state's pen is
-  let K = calc.quo(P, L) // arcs the outline is cut into
-  let TAIL = 20 // arcs the light reaches back over: the length of the tail
-  let HEADARCS = 3 // the front of the tail, drawn by a dash instead of by arcs
+  let TAIL = 40 // pieces the light reaches back over: a third of the turn
+  let DOT = 0.035 // the pen's radius
+  // One piece per state, and that is the whole design: a piece spans exactly
+  // what the pen travels between two states, so the piece the pen is crossing
+  // can carry its own dash and the browser fills it from 0 to 1 over exactly the
+  // keyframe in which the pen crosses it — the ink ends on the pen at every
+  // instant, not only on the states. Pieces shorter than that would be crossed
+  // several per keyframe and would fill together, which is a comb, not a pen.
+  // How finely a piece is *drawn* is a separate question: it is a polyline of
+  // SUB samples, so the curve is as smooth as P makes it and the corners inside
+  // a piece are proper joins.
 
   // komet's fft is a WASM plugin: complex in, complex out, run at compile time.
   // Its "backward" normalisation puts no factor on the forward transform, so a
@@ -894,22 +980,19 @@
   }
   let chains = range(S).map(j => chain(2 * calc.pi * j / S))
   let pen = range(P).map(i => chain(2 * calc.pi * i / P).last())
-  // cumulative arc length round the closed outline, in canvas units
-  let arc = {
-    let out = (0.0,)
-    let a = 0.0
-    for i in range(P) {
-      let (x0, y0) = pen.at(i)
-      let (x1, y1) = pen.at(calc.rem(i + 1, P))
-      a += calc.sqrt(calc.pow(x1 - x0, 2) + calc.pow(y1 - y0, 2))
-      out.push(a)
+  // each piece's own length on the page: the dash that fills it is measured in
+  // absolute lengths, and the pieces are not equal — the pen is sampled in the
+  // series' time, so it covers more ground on the straight runs
+  let U = 4.20cm // one canvas unit
+  let seg = range(S).map(a => {
+    let t = 0.0
+    for k in range(SUB) {
+      let (x0, y0) = pen.at(calc.rem(a * SUB + k, P))
+      let (x1, y1) = pen.at(calc.rem(a * SUB + k + 1, P))
+      t += calc.sqrt(calc.pow(x1 - x0, 2) + calc.pow(y1 - y0, 2))
     }
-    out
-  }
-  let TOTAL = arc.last()
-  let U = 4.20cm // one canvas unit, as a length on the page
-  let HEAD = TOTAL * HEADARCS / K
-  let BIG = 4 * TOTAL
+    t * U
+  })
   let epicycles(j) = cetz.canvas(length: 4.20cm, {
     import cetz.draw: circle, line, rect
     // the widest the circles ever reach, over every state: pin it, or the
@@ -919,52 +1002,36 @@
     let ch = chains.at(j)
     for i in range(C) { circle(ch.at(i), radius: coef.at(i).r, stroke: 0.4pt + dim.transparentize(48%)) }
     line(..ch, stroke: 0.5pt + hi.transparentize(30%))
-    // The tail. The pen leaves ink where it passes and the ink fades where it
-    // lies: arc a is the same points in every state, so there is no geometry to
-    // interpolate — the states move the light, not the line. Gone, not removed:
-    // the states of a mark must have the same nodes, so a dead arc stays in the
-    // drawing at zero opacity. The arcs stop HEADARCS short of the pen; the
-    // front is the dash's, below.
-    for a in range(K) {
-      let age = calc.rem(step * j - (a + 1) * L + P * 4, P) / L
-      let f = if age < HEADARCS { 0.0 } else { calc.max(0.0, 1 - (age - HEADARCS) / (TAIL - HEADARCS)) }
+    // The trail. The pieces never move — a piece is the same two points in every
+    // state — so there is no geometry to interpolate; what the states move is
+    // the light on each piece, and how much of it is inked. Both are numbers the
+    // browser interpolates, so both are continuous in time. Gone, not removed:
+    // the states of a mark must have the same nodes, so a dead piece stays in
+    // the drawing at zero opacity and zero ink.
+    for a in range(S) {
+      let age = calc.rem(j - a + S * 4, S)
+      // ink only where the pen has already been, and only as far back as the
+      // tail reaches: the piece ahead of the pen must be empty at the state, or
+      // it would empty itself while it brightens and put ink in front of the pen
+      let ink = if age >= 1 and age <= TAIL { 1.0 } else { 0.0 }
+      let f = calc.max(0.0, 1 - calc.max(0.0, age - 1) / TAIL)
       line(
-        ..range(L + 1).map(i => pen.at(calc.rem(a * L + i, P))),
-        stroke: (paint: blue.transparentize(100% - 100% * f), thickness: (0.3 + 2.2 * f) * 1pt),
+        ..range(SUB + 1).map(k => pen.at(calc.rem(a * SUB + k, P))),
+        stroke: (
+          paint: blue.transparentize(100% - 100% * f),
+          thickness: (0.3 + 2.2 * f) * 1pt,
+          // butt, so that two pieces meeting end to end do not paint the same
+          // millimetre twice — with a translucent stroke that would bead at every
+          // joint. The turn inside a piece is a proper join, and the turn at a
+          // joint is small because the curve is sampled far finer than the pieces.
+          cap: "butt",
+          join: "round",
+          dash: (array: (ink * seg.at(a), 4 * seg.at(a)), phase: 0pt),
+        ),
       )
     }
-    // The front. An arc can only light up whole, so between two states the lit
-    // edge sits still while the pen moves on: it is right on every state and
-    // wrong in between. So the front is not an arc but a dash on one fixed path
-    // — the whole outline — whose ink runs from the pen back HEAD units. Nothing
-    // moves but four numbers, and the edge tracks the pen continuously. The
-    // position goes in the array, not in `phase`: Typst exports `phase` to
-    // stroke-dashoffset without flipping its sign, so the PDF and the browser
-    // would draw it in different places. The second copy carries the part that
-    // runs past the seam, and both stay continuous as the head crosses it.
-    let a = arc.at(step * j)
-    let h = calc.min(a, HEAD)
-    for (start, len) in ((a - h, h), (TOTAL - (HEAD - h), HEAD - h)) {
-      line(
-        ..range(P).map(i => pen.at(i)),
-        close: true,
-        stroke: (paint: blue, thickness: 2.5pt, dash: (array: (0pt, start * U, len * U, BIG * U), phase: 0pt)),
-      )
-    }
-    // The pen. Not a circle placed at a point — a point is a coordinate, and a
-    // coordinate interpolates in a straight line, so between two states it would
-    // cut the corner and leave both the curve and the ink behind. A zero-length
-    // dash with a round cap on the same fixed path is a dot too, and its place
-    // is the same arc length the ink ends at: one number, so the two cannot come
-    // apart.
-    line(
-      ..range(P).map(i => pen.at(i)),
-      close: true,
-      stroke: (
-        paint: green, thickness: 7pt, cap: "round",
-        dash: (array: (0pt, a * U, 0pt, BIG * U), phase: 0pt),
-      ),
-    )
+    // The pen, at the end of the chain.
+    circle(pen.at(step * j), radius: DOT, fill: green, stroke: none)
   })
   slide(
     title: "States played over time",
@@ -976,16 +1043,17 @@
       end of the chain is the pen.
 
       One turn of the series is one period, so the last state *is* the first and the loop
-      has no seam to hide: `direction` stays `normal`. The whole outline is there in every
-      The outline is cut into #K arcs that never move, and what the states move is the
-      light on them: an arc lights up as the pen leaves it and fades where it lies, gone
-      #TAIL arcs later. Nothing is displaced from one state to the next, so there is no
-      geometry for the browser to interpolate — the earlier version, whose strokes were
-      listed relative to the pen, moved 180 vertices every state and juddered at exactly
-      the keyframe rate. An arc can only light up whole, though, so the front of the tail
-      is drawn instead as a dash on one fixed copy of the outline: the dash pattern is four
-      numbers, they interpolate, and the lit edge follows the pen between states as well as
-      on them.
+      has no seam to hide: `direction` stays `normal`. The outline is cut into #S pieces
+      that never move — one per state, so a piece spans exactly what the pen travels
+      between two of them — and what the states move is the light on each piece and how
+      much of it is inked. Nothing is displaced from one state to the next, so there is no
+      geometry for the browser to interpolate; the first version of this page listed the
+      trail's strokes relative to the pen, moved 180 vertices every state, and juddered at
+      exactly the keyframe rate. The piece the pen is crossing carries its own dash, and
+      the browser fills that dash over exactly the keyframe in which the pen crosses it,
+      so the ink ends on the pen at every instant and not only on the states. How finely a
+      piece is drawn is a separate question: each is a polyline of #SUB samples of the
+      curve, so the outline is smooth and the corners inside a piece are proper joins.
     ],
     anim: (clef: (duration: 6000)),
   )[
@@ -1005,18 +1073,19 @@
         }
         out.sorted(key: e => -e.r).slice(0, M)
       }
-      // epicycles(j) draws the chain at t = 2πj/S, over arcs of the
-      // outline lit by how far behind the pen each one lies
+      // epicycles(j) draws the chain at t = 2πj/S over the outline,
+      // whose pieces are lit by how far behind the pen they lie
+      // and inked by how much of them the pen has crossed
       #slide(anim: (clef: (duration: 6000)))[
         #mark("clef", ..range(S + 1).map(epicycles))
       ]
       ```),
       screen(align(center + horizon, mark("clef", ..range(S + 1).map(epicycles)))),
-      when: [A mark named this way counts no steps, and the PDF shows its first state. The states are a sampling rate, and between two of them every vertex moves in a straight line at a constant speed: anything turning faster than S/2 is aliased, and geometry re-listed per state changes velocity at every keyframe. Hence #M vectors, and a trail that moves light over fixed arcs.],
+      when: [A mark named this way counts no steps, and the PDF shows its first state. The states are a sampling rate, and between two of them every number moves at a constant rate: anything turning faster than S/2 is aliased, and geometry re-listed per state changes velocity at every keyframe. Hence #M vectors, and a trail that is fixed pieces with moving light and moving ink.],
     )
   ]
 
-  // ── 20. waves ──────────────────────────────────────────────────────
+  // ── 21. waves ──────────────────────────────────────────────────────
   let sea(k) = cetz.canvas(length: 1.15cm, {
     import cetz.draw: circle, content, line, rect
     let phi = k / 24 * 2 * calc.pi
@@ -1069,7 +1138,7 @@
     )
   ]
 
-  // ── 21. CeTZ ───────────────────────────────────────────────────────
+  // ── 22. CeTZ ───────────────────────────────────────────────────────
   let fig(r) = cetz.canvas(length: 1.3cm, {
     import cetz.draw: circle, content, line, rect
     circle((0, 0), radius: r, fill: amber, stroke: none)
@@ -1102,7 +1171,7 @@
     )),
   )
 
-  // ── 22. Third party packages ────────────────────────────────────
+  // ── 23. Third party packages ────────────────────────────────────
   let duo(rev) = {
     set text(size: 24pt, fill: hi)
     let arrow(a, b, label) = if rev { edge(b, a, label, "->") } else { edge(a, b, label, "->") }
@@ -1143,7 +1212,7 @@
     )
   ]
 
-  // ── 23. inside a formula ───────────────────────────────────────────
+  // ── 24. inside a formula ───────────────────────────────────────────
   let sq = mark.with("sq")
   let rhs = mark.with("rhs")
   let half = mark.with("half", transition: "rise")
@@ -1177,7 +1246,7 @@
     )),
   )
 
-  // ── 24. the deck ───────────────────────────────────────────────────
+  // ── 25. the deck ───────────────────────────────────────────────────
   let opt(name, what) = (text(size: 17pt, fill: gold, raw(name)), text(size: 16pt, fill: dim, what))
   slide(
     title: "The deck",
@@ -1220,7 +1289,7 @@
     )
   ]
 
-  // ── 25. presenting ─────────────────────────────────────────────────
+  // ── 26. presenting ─────────────────────────────────────────────────
   let krow(k, what) = (key(k), text(size: 16pt, fill: dim, what))
   slide(
     title: "Presenting",
@@ -1260,7 +1329,7 @@
     )
   ]
 
-  // ── 26. choosing ───────────────────────────────────────────────────
+  // ── 27. choosing ───────────────────────────────────────────────────
   let pick(q, a, hue) = (
     block(
       width: 100%,

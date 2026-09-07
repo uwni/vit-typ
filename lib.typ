@@ -72,7 +72,7 @@
 /// it. Not named `version`: that is a Typst built-in, and `import: *` would
 /// shadow it.
 /// -> str
-#let _version = toml("typst.toml").package.version
+#let version = version(toml("typst.toml").package.version.split(".").map(int))
 
 /// The document's target, as `deck` sets it. `mark` needs to know which
 /// backend it is in, but inside `html.frame` `target()` is always `"paged"`
@@ -125,7 +125,14 @@
   let t = type(v)
   if t == str { v } else if t == alignment {
     // an anchor is a corner, and CSS writes a corner as two percentages
-    let pc = (left: "0%", center: "50%", right: "100%", top: "0%", horizon: "50%", bottom: "100%")
+    let pc = (
+      left: "0%",
+      center: "50%",
+      right: "100%",
+      top: "0%",
+      horizon: "50%",
+      bottom: "100%",
+    )
     pc.at(repr(v.x), default: "50%") + " " + pc.at(repr(v.y), default: "50%")
   } else if t in (int, float) {
     str(v) + if k == "duration" { "ms" }
@@ -526,7 +533,7 @@
           "data-duration": str(duration),
           "data-easing": easing.map(str).join(" "),
           "data-theme": if theme == auto { "auto" } else { theme },
-          "data-version": _version,
+          "data-version": str(version),
           "data-pdf": if pdf == auto { "auto" } else if pdf == none { "none" } else { pdf },
         ),
         body,

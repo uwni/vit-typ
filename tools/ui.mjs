@@ -15,8 +15,9 @@ const errs = [];
 /* Page numbers move as the tutorial grows. W is the element-animation page
    (the wave), F the number of frames before it; T is the theorem page (three
    marks with entrances of their own), L the assembly page (layers), Z the page
-   whose own transition sets the zoom knobs, and C the continuous pages. */
-const W = 14, F = 32, T = 10, L = 13, Z = 12, BALLS = 17, FOLLOW = 18, CLEF = 19, SEA = 20;
+   whose own transition sets the zoom knobs, DASH the page whose states differ
+   only in their dash pattern, and the rest the continuous pages. */
+const W = 14, F = 32, T = 10, L = 13, Z = 12, DASH = 17, BALLS = 18, FOLLOW = 19, CLEF = 20, SEA = 21;
 /* The deck opens on the desk, whose preview is a second copy of this document:
    wait for this copy to be ready, present, then let that one finish loading, so
    the page is quiet and the timings below are the deck's own. A tutorial page is
@@ -518,6 +519,34 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.close();
 }
 
+/* ── a step whose states differ in one property only: the dash page's two
+   shapes must interpolate their dash arrays and nothing else — no cross-fade,
+   no geometry. A caption with a changing number would change glyph counts and
+   drop the whole mark back to a cross-fade, so this also guards that. ── */
+{
+  const p = await b.newPage(VP); watch(p);
+  await p.goto(url + '#' + DASH); await p.waitForTimeout(900); await present(p);
+  const steps = await p.evaluate(() => window.vit.steps);
+  await p.evaluate(() => window.vit.next()); await p.waitForTimeout(60);
+  console.log('dashes     :', JSON.stringify({ steps, ...await p.evaluate(() => {
+    const s = document.querySelector('.vt-slide.is-active');
+    const an = s.getAnimations({ subtree: true });
+    const props = {};
+    for (const a of an) for (const k of Object.keys(a.effect.getKeyframes()[0] || {}))
+      if (!['offset', 'computedOffset', 'easing', 'composite'].includes(k)) props[k] = (props[k] || 0) + 1;
+    /* A dash pattern has to begin with a dash, so ink anywhere but the path's
+       start needs a leading dash of zero length — and a zero-length dash with a
+       round cap is painted as a dot, sitting on the path's first point for ever.
+       Every such path must therefore have butt caps. */
+    const roundZeroDashes = [...s.querySelectorAll('path')].filter(q => {
+      const d = (getComputedStyle(q).strokeDasharray || '').split(',').map(parseFloat);
+      return d.length === 4 && d[0] === 0 && getComputedStyle(q).strokeLinecap !== 'butt';
+    }).length;
+    return { animations: an.length, props, roundZeroDashes };
+  }) }), '(4 steps; one step animates two nodes on strokeDasharray alone, and no zero-length dash carries a round cap)');
+  await p.close();
+}
+
 /* ── states as continuous keyframes, host keyframes with delay: the three showy
    pages each run on their own and count no steps ───────────────────── */
 {
@@ -536,7 +565,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
     });
   };
   console.log('balls      :', JSON.stringify(await look('#' + BALLS)), '(5 svg host animations, 5 keyframes, delay 0…560)');
-  console.log('clef       :', JSON.stringify(await look('#' + CLEF)), '(one 61-keyframe animation per moving path; 71 paths — 60 tail arcs whose paint alone animates, two copies of the outline whose dash pattern animates, 6 circles, the chain, the pen and the pinned rect — of which the rect and the circle on the origin never move, so 69; no steps)');
+  console.log('clef       :', JSON.stringify(await look('#' + CLEF)), '(one 121-keyframe animation per moving path; 129 paths — 120 pieces of the outline whose paint and ink animate, 6 circles, the chain, the pen and the pinned rect — of which the rect and the circle on the origin never move, so 127; no steps)');
   console.log('sea        :', JSON.stringify(await look('#' + SEA)), '(one 25-keyframe animation per path; no steps)');
   await p.close();
 }
@@ -545,10 +574,11 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
    is on stage: a page entered from elsewhere must animate exactly like one
    opened directly (a hidden frame reports transform: none). Both readings seek
    to the same times, so they are comparable to the pixel. The same probe checks
-   the clef's front — the pen, the end of the ink and the nearest lit arc, all as
-   lengths along the one outline — BETWEEN two states as well as on one, because
-   anything quantised to the arcs lines up on every state and runs past the pen
-   in between. ────────────────────────────────────────────────────── */
+   what the clef's trail is built on: a piece is exactly as long as the pen
+   travels between two states, so the piece the pen is crossing fills its own
+   dash at the pen's own rate. Read across one keyframe: the ink must end on the
+   pen at every instant, not only on the states, and no piece ahead of the head
+   may carry ink. ─────────────────────────────────────────────────── */
 {
   const probe = async (p, F) => {
     await p.goto(url + (F == null ? '#' + CLEF : '')); await p.waitForTimeout(800); await present(p);
@@ -557,46 +587,40 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
       const s = document.querySelector('.vt-slide.is-active');
       const anims = s.getAnimations({ subtree: true });
       const paths = [...s.querySelector('[data-vt-state="clef"][data-vt-at="0"]').querySelectorAll('path')];
-      const dashOf = q => (getComputedStyle(q).strokeDasharray || '').split(',').map(parseFloat);
-      const wOf = q => parseFloat(getComputedStyle(q).strokeWidth) || 0;
-      /* found by what they are, not by where they sit: the three dashed copies of
-         the outline are the pen (the widest, a round cap on a zero-length dash),
-         the ink, and the ink's wrap past the seam; everything else is a tail arc */
-      const dashed = paths.filter(q => dashOf(q).length === 4);
-      const arcs = paths.filter(q => dashOf(q).length !== 4);
+      /* found by what they are, not by where they sit: the pen is the only
+         filled path, a piece of the trail is one whose dash pattern animates */
+      const pen = paths.find(q => (q.getAttribute('fill') || 'none') !== 'none');
+      const inked = new Set(anims.filter(a => 'strokeDasharray' in (a.effect.getKeyframes()[0] || {})).map(a => a.effect.target));
+      const pieces = paths.filter(q => inked.has(q));
+      const N = pieces.length;
       const out = {};
-      for (const t of [2000, 2050]) {                    // on a state, then half way to the next
+      for (const t of [2000, 2012, 2025, 2037]) {        // across one keyframe
         for (const a of anims) { a.pause(); a.currentTime = t; }
         await new Promise(r => requestAnimationFrame(r));
-        const dot = dashed.slice().sort((x, y) => wOf(y) - wOf(x))[0];
-        const head = dashed.slice().sort((x, y) => dashOf(y)[2] - dashOf(x)[2])[0];
-        const L = dot.getTotalLength();
-        const at = dot.getPointAtLength(dashOf(dot)[1]).matrixTransform(dot.getScreenCTM());
-        const end = head.getPointAtLength(dashOf(head)[1] + dashOf(head)[2]).matrixTransform(head.getScreenCTM());
-        /* the lit arcs must all stay behind the pen: measure the nearest lit one */
-        let nearest = 1e9;
-        for (const q of arcs) {
-          if (wOf(q) < 1.2) continue;
-          for (const s2 of [0, q.getTotalLength()]) {
-            const z = q.getPointAtLength(s2).matrixTransform(q.getScreenCTM());
-            nearest = Math.min(nearest, Math.hypot(z.x - at.x, z.y - at.y));
-          }
-        }
-        out['t' + t] = { at: { x: +at.x.toFixed(1), y: +at.y.toFixed(1) },
-                         penKeyframes: anims.find(a => a.effect.target === dot).effect.getKeyframes().length,
-                         inkEndsAtPen: +Math.hypot(end.x - at.x, end.y - at.y).toFixed(2),
-                         nearestLitArc: +nearest.toFixed(1), outline: +L.toFixed(0) };
+        const c = pen.getBoundingClientRect();
+        const at = { x: +(c.x + c.width / 2).toFixed(1), y: +(c.y + c.height / 2).toFixed(1) };
+        const V = pieces.map(q => ({ q, d: (getComputedStyle(q).strokeDasharray || '').split(',').map(parseFloat), L: q.getTotalLength() }));
+        /* the head of the ink: it has ink and the piece after it has none */
+        let h = -1;
+        for (let i = 0; i < N; i++) if (V[i].d[0] > 0.05 && V[(i + 1) % N].d[0] <= 0.05) h = i;
+        const z = V[h].q.getPointAtLength(Math.min(V[h].d[0], V[h].L)).matrixTransform(V[h].q.getScreenCTM());
+        let ahead = 0;
+        for (let k = 1; k <= 6; k++) if (V[(h + k) % N].d[0] > 0.05) ahead = k;
+        out['t' + t] = { at, penKeyframes: anims.find(a => a.effect.target === pen).effect.getKeyframes().length,
+                         headFill: +(V[h].d[0] / V[h].L).toFixed(2),
+                         inkEndToPen: +Math.hypot(z.x - at.x, z.y - at.y).toFixed(2),
+                         piecesOfInkAhead: ahead, pieces: N };
       }
       return out;
     });
   };
   const p = await b.newPage(VP); watch(p);
   const direct = await probe(p, null);
-  const later = await probe(p, 37);
-  console.log('clef front :', JSON.stringify(direct), '(the ink ends on the pen at both times, under 1px; the nearest lit arc stays a head-length behind, ~60px)');
+  const later = await probe(p, 38);
+  console.log('clef trail :', JSON.stringify(direct), '(the head fills 0…1 across the keyframe and the ink ends on the pen throughout, under 1px; nothing carries ink ahead of it)');
   console.log('enter later:', JSON.stringify(later), 'same place:',
               later.t2000.at.x === direct.t2000.at.x && later.t2000.at.y === direct.t2000.at.y,
-              '(entered from page 37, seeked to the same times: identical to the reading above)');
+              '(entered from page 38, seeked to the same times: identical to the reading above)');
   await p.close();
 }
 

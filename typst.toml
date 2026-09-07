@@ -9,4 +9,4 @@ repository = "https://github.com/uwni/vit-typ"
 keywords = ["slides", "presentation", "html", "animation", "view-transitions"]
 categories = ["presentation"]
 compiler = "0.15.0"
-exclude = ["examples", "tools"]
+exclude = ["examples", "tools", "packages"]
