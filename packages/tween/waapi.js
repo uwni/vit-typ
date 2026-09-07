@@ -14,6 +14,16 @@ window.waapi = window.waapi || (function () {
 
    var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
 
+   /* A followed path is sampled in the element's own pixels, so it is measured
+      again whenever the layout can have moved. The list is of measurements, not
+      of animations — those the browser keeps. */
+   /* The list a host carried over for the declarations that could not ride on
+      an element of their own. A page with none has no such variable. */
+   function decls() { return typeof tweenDecls === "undefined" ? [] : tweenDecls; }
+
+   var fits = [];
+   addEventListener("resize", function () { fits.forEach(function (f) { f(); }); });
+
    var api = {
       /* Options as the spec writes them — duration and delay in ms, iterations
          (null: without end), direction, easing as the four numbers of a cubic
@@ -74,17 +84,34 @@ window.waapi = window.waapi || (function () {
       /* The browser's own answer to "should anything move at all". */
       reduced: function () { return reduced.matches; },
 
-      /* Whatever the Typst side declared: one element, its keyframes and its
-         options, riding on it as data. Applied once per element, so a document
-         that grows more of them later only has to say so again. */
+ /* Whatever the Typst side declared: one element, its keyframes and its
+         options. Where an element could be written they ride on it as data;
+         inside a frame, where only a label crosses, they ride on an ordinal
+         into the list the host carried over. Applied once per element, so a
+         document that grows more of them later only has to say so again. */
       apply: function (root) {
-         (root || document).querySelectorAll("[data-waapi]").forEach(function (el) {
+         var r = root || document;
+         var start = function (el, o) {
             if (el.dataset.waapiOn) return;
             el.dataset.waapiOn = "1";
-            var o;
-            try { o = JSON.parse(el.dataset.waapi); } catch (e) { return; }
-            var a = api.animate(el, o.keyframes, o, o.name ? "waapi:" + o.name : "waapi");
+            var role = o.name ? "waapi:" + o.name : "waapi", a;
+            if (o.follow) {
+               var track = document.querySelector('[data-typst-label="' + o.follow + '"] path');
+               if (!track) { console.info("[waapi] nothing labelled " + o.follow + " carries a path to follow"); return; }
+               var run = api.follow(el, track, { duration: o.duration, delay: o.delay, iterations: o.iterations, direction: o.direction, easing: o.easing, orient: o.orient, role: role }, null);
+               fits.push(run.fit);
+               run.fit();
+               a = run.anim;
+            } else a = api.animate(el, o.keyframes, o, role);
             if (!o.play || reduced.matches) a.pause();
+         };
+         r.querySelectorAll("[data-waapi]").forEach(function (el) {
+            var o; try { o = JSON.parse(el.dataset.waapi); } catch (e) { return; }
+            start(el, o);
+         });
+         r.querySelectorAll('[data-typst-label^="waapi@"]').forEach(function (el) {
+            var o = decls()[+el.getAttribute("data-typst-label").slice(6)];
+            if (o) start(el, o);
          });
       }
    };

@@ -25,6 +25,9 @@ window.tween = (function () {
    };
    var noted = {};
 
+   /* What a host carried over for us, if anything. */
+   function decls() { return typeof tweenDecls === "undefined" ? [] : tweenDecls; }
+
    /* What differs across the nodes in list (same position in each state):
       `props`, the attributes in PROPS that are not all equal, and `other`, true
       if anything else differs (a glyph's href, say) — something that cannot be
@@ -115,7 +118,7 @@ window.tween = (function () {
    if (document.readyState === "loading") addEventListener("DOMContentLoaded", function () { tag(); });
    else tag();
 
-   return {
+   var api = {
       tag: tag,
 
       /* The containers in a subtree, outermost only: a drawing whose states
@@ -168,6 +171,53 @@ window.tween = (function () {
          return { frames: frames, fade: fade };
       },
 
+      /* Whether this drawing plays its states rather than leaving them to be
+         stepped — it said so itself, in the one place a declaration can be
+         written. A host that steps drawings asks; it does not read labels. */
+      plays: function (box) {
+         return !!box.closest('[data-tween-play],[data-typst-label^="tween-play@"]');
+      },
+
+      /* These states, played over time instead of stepped: one animation per
+         node, each keyframe that node's values in that state. The nodes that
+         move are the first state's — the one the stylesheet shows — so nothing
+         is displayed that was not already there. What comes back is the
+         browser's animations; whoever asked for them owns them, and pausing,
+         resuming and cancelling are theirs. */
+      play: function (box, o, role) {
+         var lists = api.nodes(api.states(box), box.dataset.tween || "a drawing");
+         if (!lists) return [];
+         return lists[0].map(function (node, j) {
+            var f = api.frames(lists.map(function (l) { return l[j]; }), box.dataset.tween || "a drawing");
+            return f.frames ? waapi.animate(node, f.frames, o, role) : null;
+         }).filter(Boolean);
+      },
+
+      /* Whatever a drawing declared about itself, where it could say it: at the
+         top of an HTML document tween makes its own frame and can wrap it, so a
+         page with no host at all plays by itself. Inside a host that makes the
+         frames, only the label crosses into the SVG — the host carries the
+         options, and drives this with play() above. */
+      apply: function (root) {
+         var r = root || document;
+         var start = function (el, o) {
+            if (el.dataset.tweenPlayOn) return;
+            el.dataset.tweenPlayOn = "1";
+            api.boxes(el).forEach(function (box) {
+               var as = api.play(box, o, "tween:play");
+               if (waapi.reduced()) as.forEach(function (a) { a.pause(); });
+            });
+         };
+         r.querySelectorAll("[data-tween-play]").forEach(function (el) {
+            var o; try { o = JSON.parse(el.dataset.tweenPlay); } catch (e) { return; }
+            start(el, o);
+         });
+         r.querySelectorAll('[data-typst-label^="tween-play@"]').forEach(function (el) {
+            var o = decls()[+el.getAttribute("data-typst-label").slice(11)];
+            if (o) start(el, o);
+         });
+      },
+
       /* For what has no in-between: a glyph that changes, a path that cannot be
          aligned, states of a different structure altogether. The old is kept on
          stage and fades out while the new fades in, with plus-lighter inside an
@@ -189,4 +239,8 @@ window.tween = (function () {
          return { anims: anims, undo: function () { cleanup.forEach(function (f) { f(); }); cleanup = []; } };
       }
    };
+
+   if (document.readyState === "loading") addEventListener("DOMContentLoaded", function () { api.apply(); });
+   else api.apply();
+   return api;
 })();

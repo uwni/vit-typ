@@ -8,7 +8,7 @@
 /// canvas moves in a blog post as it does in a deck.
 ///
 /// ```typ
-/// #import "@preview/cetz:0.4.1"
+/// #import "@preview/cetz:0.5.2"
 /// #import "@preview/tween-cetz:0.1.0": tweened
 ///
 /// #let cz = tweened(cetz)                            // once, per file
@@ -137,7 +137,7 @@
 /// binding does).
 /// -> dictionary
 #let tweened(
-  /// The CeTZ module, as your document imports it: `#import "@preview/cetz:0.4.1"`.
+  /// The CeTZ module, as your document imports it: `#import "@preview/cetz:0.5.2"`.
   /// -> module
   cetz,
 ) = {
@@ -145,7 +145,7 @@
   let gone = needs.cetz.filter(k => k not in m)
   assert(
     gone.len() == 0,
-    message: "tweened() takes the cetz module itself — #import \"@preview/cetz:0.4.1\" — and this has no " + gone.join(", no "),
+    message: "tweened() takes the cetz module itself — and this has no " + gone.join(", no "),
   )
   for (mod, names) in needs {
     if mod == "cetz" { continue }
@@ -168,17 +168,17 @@
 
   // The states of one element: measured in the outer canvas, each drawn again
   // in a canvas of its own, and the stack placed back where the element was.
-  let stated(states) = d.get-ctx(ctx => {
+  let stated(states, play: none, still: -1) = d.get-ctx(ctx => {
     assert(
       "length" in ctx and "transform" in ctx,
       message: "cetz " + repr(cetz.version) + " sets up a canvas context tween-cetz does not recognise",
     )
-    // The box: what every state draws, in the space the drawables already live
-    // in. Measured, not drawn — a group's border anchors would do, but they are
-    // found on a path and come back a hair off, and a hair is a pixel.
-    let bs = states
-      .map(s => cetz.process.many(ctx, cetz.util.resolve-body(ctx, s)).bounds)
-      .filter(b => b != none)
+    // Every state, processed once — the box it draws, in the space the drawables
+    // already live in, and the context it leaves behind. Measured, not drawn: a
+    // group's border anchors would do, but they are found on a path and come
+    // back a hair off, and a hair is a pixel.
+    let done = states.map(s => cetz.process.many(ctx, cetz.util.resolve-body(ctx, s)))
+    let bs = done.map(m => m.bounds).filter(b => b != none)
     assert(
       bs.len() > 0,
       message: "an element with states has to draw something, and this one draws nothing at all",
@@ -206,7 +206,8 @@
     // The first state stays here, with its ink switched off: its name, its
     // anchors, its paths and the current point are the outer canvas's, so
     // anchors, relative coordinates and `intersections` see what they always
-    // saw. It does not size anything — the placement below does.
+    // saw — the paths have to be *here*, as drawables, or `intersections` has
+    // nothing to hit. It does not size anything — the placement below does.
     d.hide(states.first(), bounds: false)
     d.scope({
       // Placed with the transform reset: a coordinate is put through the CTM on
@@ -222,7 +223,7 @@
         padding: 0,
         frame: none,
         auto-scale: false,
-        tween.tween(..states.map(inner)),
+        tween.tween(..states.map(inner), play: play, still: still),
       )
     })
   })
@@ -243,23 +244,30 @@
   for (name, f) in has {
     surface.insert(name, if type(f) == function { wrap(f) } else { f })
   }
-  surface + (
-    over: over,
-    /// Several bodies, several states of one drawing. Write a function of the
-    /// parameter and feed it values:
-    ///
-    /// ```typ
-    /// states(..range(4).map(k => {
-    ///   line((0, 0), (k, 1.5))
-    ///   circle((k, 1.5), radius: .2)
-    /// }))
-    /// ```
-    ///
-    /// One function, several arguments, so the states are the same drawing
-    /// under different numbers by construction — same structure, same number of
-    /// elements, only the numbers differ, which is what the browser needs to
-    /// interpolate rather than cross-fade. The PDF shows the last one.
-    states: (..bodies) => stated(bodies.pos()),
-    canvas: cetz.canvas,
+  (
+    surface
+      + (
+        over: over,
+        /// Several bodies, several states of one drawing. Write a function of the
+        /// parameter and feed it values:
+        ///
+        /// ```typ
+        /// states(..range(4).map(k => {
+        ///   line((0, 0), (k, 1.5))
+        ///   circle((k, 1.5), radius: .2)
+        /// }))
+        /// ```
+        ///
+        /// One function, several arguments, so the states are the same drawing
+        /// under different numbers by construction — same structure, same number of
+        /// elements, only the numbers differ, which is what the browser needs to
+        /// interpolate rather than cross-fade. The PDF shows the last one.
+        states: (..bodies) => stated(
+      bodies.pos(),
+      play: bodies.named().at("play", default: none),
+      still: bodies.named().at("still", default: -1),
+    ),
+        canvas: cetz.canvas,
+      )
   )
 }

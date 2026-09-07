@@ -15,11 +15,9 @@
 /// its own — it ships here.
 #import "waapi.typ"
 
-/// Whether the document being written is an HTML one. `target()` cannot say so
-/// from inside an `html.frame` — the frame is laid out as paper — so a host
-/// that puts drawings inside frames says it once, at the top of the document.
-#let html-target = state("tween-html", false)
-#let host(body) = { html-target.update(true); body }
+/// `waapi`'s own, re-exported: a host says once that the document is an HTML
+/// one (`host`), and carries what the drawings declared (`declarations`).
+#let (html-target, host, declarations) = (waapi.html-target, waapi.host, waapi.declarations)
 
 /// N states of one drawing, stacked in one box: the first one is in the flow,
 /// the rest are placed on top of it, so the box is the size of the first and
@@ -42,9 +40,19 @@
   /// A name, for a host that drives this drawing from elsewhere.
   /// -> none | str
   name: none,
-  /// Which state the PDF shows, as an index — `-1` is the last.
+  /// Which state the PDF shows, as an index — `-1` is the last. A drawing that
+  /// is played rather than stepped wants `0`, the page at rest, unless its loop
+  /// closes and the two are the same.
   /// -> int
   still: -1,
+  /// Play the states over time instead of leaving them to be stepped: Web
+  /// Animations options as `waapi.animate` takes them (`duration` in ms,
+  /// `delay`, `iterations` — `none` is without end —, `direction`, `easing`).
+  /// The drawing says this about itself, and it holds wherever the drawing is:
+  /// at the top of an HTML document it starts by itself, and inside a host's
+  /// frames the host carries the declaration (see `declarations`).
+  /// -> none | dictionary
+  play: none,
 ) = {
   let s = states.pos()
   assert(s.len() > 0, message: "tween needs at least one state")
@@ -68,9 +76,12 @@
        out as, and the host says so once with `host`. Neither: this is the PDF,
        which has no runtime and shows one state. */
     let stacked = [#box(stack)#lbl]
-    if target() == "html" { html.frame(stacked) } else if html-target.get() { stacked } else {
-      box(s.at(still))
-    }
+    if target() == "html" {
+      let framed = html.frame(stacked)
+      if play == none { framed } else { waapi.declared("tween-play", play, framed) }
+    } else if html-target.get() {
+      if play == none { stacked } else { waapi.declared("tween-play", play, stacked) }
+    } else { box(s.at(still)) }
   }
 }
 

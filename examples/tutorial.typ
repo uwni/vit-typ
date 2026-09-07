@@ -9,7 +9,15 @@
 //
 // Once published, replace the next line with #import "@preview/vit:0.1.0": *
 #import "../lib.typ": *
-#import "@preview/cetz:0.4.1"
+// Element animation — stepped and played alike — is tween's, not the deck's.
+// Once published, replace the next line with #import "@preview/tween:0.1.0": tween, waapi
+#import "../packages/tween/lib.typ": tween, waapi
+#import "@preview/cetz:0.5.2"
+// What moves *inside* a canvas is the element animation's, not the page's: this
+// hands back cetz.draw with `over(…)` allowed in place of any argument. Once
+// published, replace the next line with #import "@preview/tween-cetz:0.1.0": tweened
+#import "../packages/tween-cetz/lib.typ": tweened
+#let cz = tweened(cetz)
 // Third party packages, unchanged: theorion writes the theorem environments,
 // fletcher draws the commutative diagrams. Both have an HTML branch of their own,
 // and neither of them takes it here — a slide is an html.frame, and inside a frame
@@ -203,7 +211,7 @@
         at(3, mark("w-co", transition: "rise", card(
           "Continuous animation",
           "An object moving on its own, with nobody pressing anything.",
-          "slide(anim: (key: …))",
+          "mark(anim: …)",
           "Web Animations, running while the page rests here.",
           green,
         ))),
@@ -589,16 +597,22 @@
   )
 
   // ── 14. element animation ──────────────────────────────────────────
-  let wave(t) = cetz.canvas(length: 1.25cm, {
+  let wave = cetz.canvas(length: 1.25cm, {
     import cetz.draw: circle, content, line, rect
+    let (states,) = cz
+    // the box and the axis are the canvas's own, drawn once
     rect((-0.5, -2.1), (8.5, 2.1), stroke: none)
     line((0, 0), (8, 0), stroke: .5pt + blue.darken(40%))
-    let amp = 0.3 + 0.18 * t
-    let f(x) = amp * calc.sin(1.2 * x - 0.5 * t)
-    line(..range(0, 41).map(i => (i * 0.2, f(i * 0.2))), stroke: 1.5pt + blue)
-    let x = 1.4 * t
-    circle((x, f(x)), radius: .25, stroke: none, fill: color.mix((green, 100% - t * 20%), (amber, t * 20%)))
-    content((4, -1.7), text(size: 30pt, fill: dim)[t = #t])
+    states(
+      ..range(0, 6).map(t => {
+        let amp = 0.3 + 0.18 * t
+        let f(x) = amp * calc.sin(1.2 * x - 0.5 * t)
+        line(..range(0, 41).map(i => (i * 0.2, f(i * 0.2))), stroke: 1.5pt + blue)
+        let x = 1.4 * t
+        circle((x, f(x)), radius: .25, stroke: none, fill: color.mix((green, 100% - t * 20%), (amber, t * 20%)))
+        content((4, -1.7), text(size: 30pt, fill: dim)[t = #t])
+      }),
+    )
   })
   slide(
     title: "Element animation",
@@ -606,46 +620,68 @@
   )[
     #lesson(
       "Element animation",
-      [Several bodies in *one* `mark` are the states of one object. `→` moves to the next, `←` back along the same path, and the browser interpolates the SVG nodes.],
+      [Several bodies are the states of one drawing: `tween(s0, s1, …)`, or `states(…)` inside a canvas, where only what moves is a state. A drawing needs no `mark` — a mark is identity between pages, and this is motion inside one. `→` moves to the next, `←` back along the same path, and the browser interpolates the SVG nodes.],
       src(```typ
-      #let wave(t) = cetz.canvas({
+      #import "@preview/tween-cetz:0.1.0": tweened
+      #let cz = tweened(cetz)          // once, per file
+
+      #let wave = cetz.canvas({
         import cetz.draw: circle, line, rect, content
+        let (states,) = cz
         rect((-0.5, -2.1), (8.5, 2.1), stroke: none)  // pin the box
-        let amp = 0.3 + 0.18 * t
-        let f(x) = amp * calc.sin(1.2 * x - 0.5 * t)
-        line(..range(0, 41).map(i => (i * .2, f(i * .2))))
-        circle((1.4 * t, f(1.4 * t)), radius: .25, fill: …)
-        content((4, -1.7), [t = #t])
+        line((0, 0), (8, 0))              // the axis never moves
+        states(..range(0, 6).map(t => {   // …these do
+          let amp = 0.3 + 0.18 * t
+          let f(x) = amp * calc.sin(1.2 * x - 0.5 * t)
+          line(..range(0, 41).map(i => (i * .2, f(i * .2))))
+          circle((1.4 * t, f(1.4 * t)), radius: .25, fill: …)
+          content((4, -1.7), [t = #t])
+        }))
       })
 
-      #slide[#mark("wave", ..range(0, 6).map(wave))]
+      #slide[#wave]
       ```),
-      screen(align(center + horizon, mark("wave", ..range(0, 6).map(wave)))),
+      screen(align(center + horizon, wave)),
       when: [The states are *one drawing under different parameters*: write `f(t)`, feed it a few values.],
     )
   ]
 
   // ── 15. what interpolates ──────────────────────────────────────────
-  let gon(k) = cetz.canvas(length: 0.9cm, {
+  let gon = cetz.canvas(length: 0.9cm, {
     import cetz.draw: content, polygon, rect
+    let (states,) = cz
     rect((-2.6, -3.1), (2.6, 2.6), stroke: none)
-    polygon((0, 0), k, radius: 2.2, fill: blue.transparentize(78%), stroke: 1.5pt + blue)
-    content((0, -2.8), text(size: 26pt, fill: dim)[#k sides])
+    states(
+      ..range(3, 9).map(k => {
+        polygon((0, 0), k, radius: 2.2, fill: blue.transparentize(78%), stroke: 1.5pt + blue)
+        content((0, -2.8), text(size: 26pt, fill: dim)[#k sides])
+      }),
+    )
   })
   let walk = ((0, 0), (1.2, 1.4), (2.6, 0.6), (3.4, 2.2), (4.8, 1.0), (6.0, 2.6), (7.2, 1.2))
-  let trail(k) = cetz.canvas(length: 0.9cm, {
+  let trail = cetz.canvas(length: 0.9cm, {
     import cetz.draw: circle, line, rect
+    let (states,) = cz
     rect((-0.4, -0.4), (7.6, 3.0), stroke: none)
-    line(..walk.slice(0, k + 2), stroke: 2pt + green)
-    // the dot is hollow at first and fills in: fill none against a colour fades
-    circle(walk.at(k + 1), radius: .18, fill: if k == 0 { none } else { green }, stroke: 1pt + green)
+    states(
+      ..range(0, 6).map(k => {
+        line(..walk.slice(0, k + 2), stroke: 2pt + green)
+        // the dot is hollow at first and fills in: fill none against a colour fades
+        circle(walk.at(k + 1), radius: .18, fill: if k == 0 { none } else { green }, stroke: 1pt + green)
+      }),
+    )
   })
-  let bend(k) = cetz.canvas(length: 0.9cm, {
+  let bend = cetz.canvas(length: 0.9cm, {
     import cetz.draw: bezier, line, rect
+    let (states,) = cz
     rect((-0.3, -1.4), (4.3, 1.4), stroke: none)
-    if k == 0 { line((0, 0), (4, 0), stroke: 2pt + gold) } else {
-      bezier((0, 0), (4, 0), (1.3, 0.6 * k), (2.7, -0.6 * k), stroke: 2pt + gold)
-    }
+    states(
+      ..range(0, 3).map(k => {
+        if k == 0 { line((0, 0), (4, 0), stroke: 2pt + gold) } else {
+          bezier((0, 0), (4, 0), (1.3, 0.6 * k), (2.7, -0.6 * k), stroke: 2pt + gold)
+        }
+      }),
+    )
   })
   slide(
     title: "What interpolates",
@@ -655,14 +691,17 @@
       "What interpolates",
       [The states' SVG nodes are compared one by one, and every property that differs is handed to `el.animate()`. Paths that are not the same list of commands are reconciled first.],
       src(```typ
-      #mark("gon", ..range(3, 9).map(gon))     // a side more
-      #mark("trail", ..range(0, 6).map(trail)) // a segment more
-      #mark("bend", ..range(0, 3).map(bend))   // a line becomes a curve
+      // each is one canvas, and inside it one states(…)
+      states(..range(3, 9).map(k => polygon((0, 0), k)))  // a side more
+      states(..range(0, 6).map(k => line(..walk.slice(0, k + 2))))
+      states(..range(0, 3).map(k =>                       // a line
+        if k == 0 { line((0, 0), (4, 0)) }                // becomes
+        else { bezier((0, 0), (4, 0), c1(k), c2(k)) }))   // a curve
       ```),
       screen[
-        #place(dx: 10pt, dy: 30pt, mark("gon", ..range(3, 9).map(gon)))
-        #place(dx: 230pt, dy: 14pt, mark("trail", ..range(0, 6).map(trail)))
-        #place(dx: 250pt, dy: 190pt, mark("bend", ..range(0, 3).map(bend)))
+        #place(dx: 10pt, dy: 30pt, gon)
+        #place(dx: 230pt, dy: 14pt, trail)
+        #place(dx: 250pt, dy: 190pt, bend)
       ],
       when: [`none` against a colour becomes `transparent`. What has no in-between — text, an arc — cross-fades.],
     )
@@ -681,21 +720,29 @@
     let t = str(int(calc.round(x * 10000)))
     t.slice(0, 1) + "." + t.slice(1)
   }
-  let exhaust(k) = cetz.canvas(length: 1.12cm, {
+  let exhaust = cetz.canvas(length: 1.12cm, {
     import cetz.draw: bezier, circle, content, merge-path, rect
+    let (states,) = cz
     rect((-3.6, -4.6), (3.6, 4.6), stroke: none)
     circle((0, 0), radius: 3, stroke: .6pt + dim)
-    let pts = corners(k, 3)
-    merge-path(close: true, fill: blue.transparentize(78%), stroke: 1.5pt + blue, {
-      for j in range(N) {
-        let (p, q) = (pts.at(j), pts.at(calc.rem(j + 1, N)))
-        bezier(p, q, lerp(p, q, 1 / 3), lerp(p, q, 2 / 3))
-      }
-    })
-    content((0, 3.9), text(size: 22pt, fill: dim)[#(
-      counts.enumerate().map(((j, n)) => text(fill: if j == k { hi } else { dim })[#n]).join[ · ]
-    )])
-    content((0, -3.9), text(size: 22pt, fill: hi)[#sym.pi ≈ #fixed(counts.at(k) * calc.sin(calc.pi / counts.at(k)))])
+    states(
+      ..range(0, 5).map(k => {
+        let pts = corners(k, 3)
+        merge-path(close: true, fill: blue.transparentize(78%), stroke: 1.5pt + blue, {
+          for j in range(N) {
+            let (p, q) = (pts.at(j), pts.at(calc.rem(j + 1, N)))
+            bezier(p, q, lerp(p, q, 1 / 3), lerp(p, q, 2 / 3))
+          }
+        })
+        content((0, 3.9), text(size: 22pt, fill: dim)[#(
+          counts.enumerate().map(((j, n)) => text(fill: if j == k { hi } else { dim })[#n]).join[ · ]
+        )])
+        content((0, -3.9), text(
+          size: 22pt,
+          fill: hi,
+        )[#sym.pi ≈ #fixed(counts.at(k) * calc.sin(calc.pi / counts.at(k)))])
+      }),
+    )
   })
   slide(
     title: "Designing the states",
@@ -713,9 +760,9 @@
         (r * calc.cos(a), r * calc.sin(a))   // spares stacked
       })
       // edges drawn as cubics: a zero-length *line* is dropped
-      #mark("poly", ..range(0, 5).map(exhaust))
+      #states(..range(0, 5).map(exhaust))   // inside the canvas
       ```),
-      screen(align(center + horizon, mark("poly", ..range(0, 5).map(exhaust)))),
+      screen(align(center + horizon, exhaust)),
       when: [Same for the labels: all five counts are drawn in every state, π keeps four decimals.],
     )
   ]
@@ -737,36 +784,42 @@
       dash: (array: (6pt + 6pt * f, 6pt - 6pt * f), phase: 0pt),
     ),
   )
-  let ring(f) = cetz.canvas(length: SU, {
-    import cetz.draw: circle, rect
+  let ring = cetz.canvas(length: SU, {
+    import cetz.draw: rect
+    let (circle, over) = cz
     rect((-1.62, -1.62), (1.62, 1.62), stroke: none)
     circle((0, 0), radius: R, stroke: 0.8pt + dim.transparentize(55%))
     circle(
       (0, 0),
       radius: R,
       // an empty dash, a gap up to where the ink starts, the ink, then a gap
-      // longer than the path: one run placed anywhere, moved by one number
+      // longer than the path: one run placed anywhere, moved by one number —
+      // and the number is the only thing over() varies, so the ring itself is
+      // one circle in one canvas from first state to last
       stroke: (
         paint: blue,
         thickness: 3pt,
-        dash: (array: (0pt, f * (CIRC - LEN) * SU, LEN * SU, 2 * CIRC * SU), phase: 0pt),
+        dash: (
+          array: over(..range(5).map(j => (0pt, j / 4 * (CIRC - LEN) * SU, LEN * SU, 2 * CIRC * SU))),
+          phase: 0pt,
+        ),
       ),
     )
   })
   let cap(body) = text(size: 15pt, fill: dim, body)
-  let inked(j) = {
-    let f = j / 4
-    grid(
-      columns: 2,
-      column-gutter: 40pt,
-      align: horizon + center,
-      // The captions are the same words in every state on purpose: a number
-      // that changes changes its glyphs, the states then differ in structure,
-      // and the whole mark falls back to a cross-fade.
-      stack(spacing: 16pt, frame(f), cap[the gaps close]),
-      stack(spacing: 16pt, ring(f), cap[the ink travels]),
-    )
-  }
+  // The box is Typst's own rect, so its states are a mark's; the ring is one
+  // canvas whose interior moves. Both are on the same frame, and the frame
+  // steps everything on it together.
+  let inked = grid(
+    columns: 2,
+    column-gutter: 40pt,
+    align: horizon + center,
+    // The captions are the same words in every state on purpose: a number
+    // that changes changes its glyphs, the states then differ in structure,
+    // and the whole mark falls back to a cross-fade.
+    stack(spacing: 16pt, tween(..range(5).map(j => frame(j / 4))), cap[the gaps close]),
+    stack(spacing: 16pt, ring, cap[the ink travels]),
+  )
   slide(
     title: "Dashes",
     note: [Both of these are one property. Growing a line from its end needs no dash — pad the states with points and `paths.js` aligns them — but a pattern cannot be written in points at all, and a piece of ink sliding along a path would mean re-listing that path's vertices in every state, which is geometry in motion and judders at the state rate. Here the box and the ring are the same points in every state and only four numbers move.],
@@ -785,15 +838,18 @@
       // path. Never `phase:` — Typst writes it to
       // stroke-dashoffset without flipping the sign, and the
       // PDF and the browser then disagree.
-      #let ring(f) = cetz.canvas(length: 1cm, {
+      #let ring = cetz.canvas(length: 1cm, {
+        let (circle, over) = cz
         circle((0, 0), radius: R, stroke: (dash: (
-          array: (0pt, f * (CIRC - LEN) * 1cm, LEN * 1cm,
-                  2 * CIRC * 1cm), phase: 0pt)))
+          array: over(..range(5).map(j => (0pt,
+            j / 4 * (CIRC - LEN) * 1cm, LEN * 1cm,
+            2 * CIRC * 1cm))), phase: 0pt)))
       })
 
-      #mark("ink", ..range(5).map(inked))
+      #tween(..range(5).map(j => frame(j / 4)))
+      #ring
       ```),
-      screen(align(center + horizon, mark("ink", ..range(5).map(inked)))),
+      screen(align(center + horizon, inked)),
       when: [Not for a line that simply grows from its end: give the states their points and let `paths.js` pad the shorter one. Reach for a dash when points cannot say it. Every state must carry the attribute — write the solid box as a zero gap, not as no dash — or the states differ in their attributes and the whole node cross-fades instead.],
     )
   ]
@@ -818,12 +874,11 @@
   let hues = (amber, gold, green, cyan, blue)
   slide(
     title: "Continuous animation",
-    note: [Five marks, five keyframe animations: piecewise easing plays gravity, a scale squash lands them, a delay staggers them. They start after the page transition and pause when the page is left.],
-    anim: range(5).map(i => ("ball" + str(i), ball(i))).to-dict(),
+    note: [Five marks, five keyframe animations: piecewise easing plays gravity, a scale squash lands them, a delay staggers them. Each ball says so itself; the page only starts them after the transition and pauses them when it is left.],
   )[
     #lesson(
       "Continuous animation",
-      [`slide(anim:)` is `key → spec`, and the spec is Web Animations keyframes and options, passed to `el.animate()` as they are. No DSL of our own.],
+      [`waapi.animate` is Web Animations from Typst: keyframes and options as the API takes them, handed to `el.animate()` as they are. No DSL of our own, and no deck required — it moves the same figure in a blog post.],
       src(```typ
       #let ball(i) = (
         keyframes: (
@@ -835,13 +890,18 @@
         ),
         duration: 1500, delay: i * 140,
       )
-      #slide(anim: (ball0: ball(0), ball1: ball(1), …))[
-        #for i in range(5) { place(…, mark("ball" + str(i))[…]) }
-      ]
+      #import "@preview/tween:0.1.0": waapi
+      #for i in range(5) {
+        place(…, waapi.animate(..ball(i))[…])
+      }
       ```),
       screen[
         #for i in range(5) {
-          place(dx: 40pt + i * 100pt, dy: 20pt, mark("ball" + str(i))[#std.circle(radius: 22pt, fill: hues.at(i))])
+          place(
+            dx: 40pt + i * 100pt,
+            dy: 20pt,
+            waapi.animate(..ball(i))[#std.circle(radius: 22pt, fill: hues.at(i))],
+          )
         }
         #place(dx: 20pt, dy: 240pt, std.line(length: 500pt, stroke: 1pt + dim))
       ],
@@ -855,38 +915,44 @@
     (3.1 * calc.sin(2 * a) + 3.3, 1.5 * calc.sin(3 * a) + 1.7)
   })
   slide(
-    title: "follow: a mark along a path",
-    note: [The track and the ball are two independent marks; the ball may be placed anywhere, because `offset-path` puts its centre on the track. `orient: true` turns it with the tangent.],
-    anim: (
-      dot: (follow: "track", duration: 4000),
-      spin: (keyframes: ((transform: "rotate(0)"), (transform: "rotate(1turn)")), duration: 6000),
-    ),
+    title: "follow: an element along a path",
+    note: [The track and the ball are independent of each other; the ball may be placed anywhere, because `offset-path` puts its centre on the track. `orient: true` turns it with the tangent. Neither is a mark: nothing here is about the page.],
   )[
     #lesson(
-      "follow: a mark along a path",
-      [`follow: "track"` runs a mark's centre along the first path of another mark on the same frame, on the compositor. It is the one convenience in the spec.],
+      "follow: an element along a path",
+      [`follow: "track"` runs an element's centre along the first path of whatever carries that label, on the compositor. It is the one convenience in the binding.],
       src(```typ
-      #slide(anim: (
-        dot: (follow: "track", duration: 4000),
-        spin: (keyframes: ((transform: "rotate(0)"),
-                           (transform: "rotate(1turn)")),
-               duration: 6000),
-      ))[
-        #place(dx: 20pt, dy: 30pt, mark("track")[#cetz.canvas({
-          import cetz.draw: line
-          line(..lissajous, close: true)
-        })])
-        #place(dx: 20pt, dy: 30pt, mark("dot")[#std.circle(radius: .3cm)])
-        #place(dx: 430pt, dy: 120pt, mark("spin")[#std.rect(…)])
-      ]
+      #place(dx: 20pt, dy: 30pt)[#box(cetz.canvas({
+        import cetz.draw: line
+        line(..lissajous, close: true)
+      }))<track>]
+      #place(dx: 20pt, dy: 30pt, waapi.animate(
+        follow: "track", duration: 4000,
+      )[#std.circle(radius: .3cm)])
+      #place(dx: 430pt, dy: 120pt, waapi.animate(
+        keyframes: ((transform: "rotate(0)"),
+                    (transform: "rotate(1turn)")),
+        duration: 6000,
+      )[#std.rect(…)])
       ```),
       screen[
-        #place(dx: 20pt, dy: 40pt, mark("track")[#cetz.canvas(length: 1cm, {
+        #place(dx: 20pt, dy: 40pt)[#box(cetz.canvas(length: 1cm, {
           import cetz.draw: line
           line(..lissajous, close: true, stroke: 1.5pt + blue)
-        })])
-        #place(dx: 20pt, dy: 40pt, mark("dot")[#std.circle(radius: .26cm, fill: green)])
-        #place(dx: 430pt, dy: 130pt, mark("spin")[#std.rect(width: 70pt, height: 70pt, radius: 8pt, fill: amber)])
+        }))<track>]
+        #place(
+          dx: 20pt,
+          dy: 40pt,
+          waapi.animate(follow: "track", duration: 4000)[#std.circle(radius: .26cm, fill: green)],
+        )
+        #place(
+          dx: 430pt,
+          dy: 130pt,
+          waapi.animate(
+            keyframes: ((transform: "rotate(0)"), (transform: "rotate(1turn)")),
+            duration: 6000,
+          )[#std.rect(width: 70pt, height: 70pt, radius: 8pt, fill: amber)],
+        )
       ],
       when: [Three sources of keyframes: `keyframes` for the mark itself, `follow` for a path, and — next page — the mark's own states.],
     )
@@ -902,38 +968,134 @@
   // Being closed, its series is periodic: the turn closes and the loop needs no
   // `alternate`. (tools/clef.py derives it from the glyph.)
   let clef = (
-    (-0.0264, -1.1348), (-0.1029, -1.1888), (-0.0056, -1.2455), (0.1104, -1.2291),
-    (0.2035, -1.1588), (0.2447, -1.0493), (0.2419, -0.9314), (0.2209, -0.8151),
-    (0.1961, -0.6995), (0.1721, -0.5837), (0.1491, -0.4677), (0.1259, -0.3517),
-    (0.1027, -0.2358), (0.0794, -0.1198), (0.0561, -0.0039), (0.0328, 0.112),
-    (0.0098, 0.228), (-0.0153, 0.3435), (-0.0397, 0.4592), (-0.0631, 0.5751),
-    (-0.0865, 0.6911), (-0.1019, 0.8082), (-0.108, 0.9263), (-0.0975, 1.044),
-    (-0.0691, 1.1586), (-0.0073, 1.2581), (0.0996, 1.3), (0.2036, 1.2487),
-    (0.2611, 1.1474), (0.2758, 1.0302), (0.274, 0.9121), (0.2556, 0.7954),
-    (0.2208, 0.6826), (0.1585, 0.5824), (0.0882, 0.4873), (0.0178, 0.3923),
-    (-0.0588, 0.3024), (-0.1434, 0.2198), (-0.2251, 0.1342), (-0.295, 0.0391),
-    (-0.3488, -0.0661), (-0.3727, -0.1813), (-0.3672, -0.2992), (-0.329, -0.4104),
-    (-0.2566, -0.5034), (-0.1623, -0.5743), (-0.0522, -0.6161), (0.0652, -0.6268),
-    (0.1794, -0.5987), (0.2873, -0.551), (0.3627, -0.4616), (0.3875, -0.3468),
-    (0.3725, -0.2302), (0.3077, -0.1328), (0.1978, -0.0959), (0.0816, -0.0753),
-    (-0.0244, -0.1234), (-0.0889, -0.2207), (-0.0833, -0.3373), (-0.0174, -0.4339),
-    (-0.0134, -0.475), (-0.1073, -0.4044), (-0.1644, -0.3019), (-0.1766, -0.1852),
-    (-0.138, -0.0742), (-0.0617, 0.0151), (0.0438, 0.0668), (0.1607, 0.0636),
-    (0.2758, 0.0365), (0.3789, -0.0182), (0.4413, -0.1177), (0.4664, -0.2328),
-    (0.4586, -0.3505), (0.4253, -0.4636), (0.357, -0.5592), (0.2568, -0.6202),
-    (0.1439, -0.6553), (0.0266, -0.6649), (-0.0897, -0.6447), (-0.1976, -0.5971),
-    (-0.2918, -0.526), (-0.3688, -0.4366), (-0.4224, -0.3315), (-0.453, -0.2174),
-    (-0.4664, -0.1002), (-0.4498, 0.0166), (-0.4117, 0.1284), (-0.3576, 0.2335),
-    (-0.2898, 0.3302), (-0.2132, 0.4203), (-0.1294, 0.5037), (-0.0443, 0.5859),
-    (0.0409, 0.6678), (0.1227, 0.7529), (0.1803, 0.856), (0.2141, 0.9689),
-    (0.2155, 1.0868), (0.1657, 1.1893), (0.062, 1.1722), (-0.003, 1.074),
-    (-0.0403, 0.9621), (-0.0518, 0.8446), (-0.0447, 0.7266), (-0.0237, 0.6103),
-    (-0.0015, 0.4941), (0.0206, 0.378), (0.0467, 0.2627), (0.0709, 0.1469),
-    (0.0945, 0.031), (0.118, -0.0849), (0.1414, -0.2008), (0.1646, -0.3167),
-    (0.1878, -0.4327), (0.2117, -0.5485), (0.2394, -0.6635), (0.2674, -0.7783),
-    (0.2898, -0.8944), (0.2992, -1.0121), (0.2787, -1.128), (0.2135, -1.2254),
-    (0.1122, -1.2846), (-0.0043, -1.3), (-0.1175, -1.2693), (-0.2013, -1.1876),
-    (-0.2299, -1.0751), (-0.1948, -0.9657), (-0.0837, -0.9435), (-0.0039, -1.0236),
+    (-0.0264, -1.1348),
+    (-0.1029, -1.1888),
+    (-0.0056, -1.2455),
+    (0.1104, -1.2291),
+    (0.2035, -1.1588),
+    (0.2447, -1.0493),
+    (0.2419, -0.9314),
+    (0.2209, -0.8151),
+    (0.1961, -0.6995),
+    (0.1721, -0.5837),
+    (0.1491, -0.4677),
+    (0.1259, -0.3517),
+    (0.1027, -0.2358),
+    (0.0794, -0.1198),
+    (0.0561, -0.0039),
+    (0.0328, 0.112),
+    (0.0098, 0.228),
+    (-0.0153, 0.3435),
+    (-0.0397, 0.4592),
+    (-0.0631, 0.5751),
+    (-0.0865, 0.6911),
+    (-0.1019, 0.8082),
+    (-0.108, 0.9263),
+    (-0.0975, 1.044),
+    (-0.0691, 1.1586),
+    (-0.0073, 1.2581),
+    (0.0996, 1.3),
+    (0.2036, 1.2487),
+    (0.2611, 1.1474),
+    (0.2758, 1.0302),
+    (0.274, 0.9121),
+    (0.2556, 0.7954),
+    (0.2208, 0.6826),
+    (0.1585, 0.5824),
+    (0.0882, 0.4873),
+    (0.0178, 0.3923),
+    (-0.0588, 0.3024),
+    (-0.1434, 0.2198),
+    (-0.2251, 0.1342),
+    (-0.295, 0.0391),
+    (-0.3488, -0.0661),
+    (-0.3727, -0.1813),
+    (-0.3672, -0.2992),
+    (-0.329, -0.4104),
+    (-0.2566, -0.5034),
+    (-0.1623, -0.5743),
+    (-0.0522, -0.6161),
+    (0.0652, -0.6268),
+    (0.1794, -0.5987),
+    (0.2873, -0.551),
+    (0.3627, -0.4616),
+    (0.3875, -0.3468),
+    (0.3725, -0.2302),
+    (0.3077, -0.1328),
+    (0.1978, -0.0959),
+    (0.0816, -0.0753),
+    (-0.0244, -0.1234),
+    (-0.0889, -0.2207),
+    (-0.0833, -0.3373),
+    (-0.0174, -0.4339),
+    (-0.0134, -0.475),
+    (-0.1073, -0.4044),
+    (-0.1644, -0.3019),
+    (-0.1766, -0.1852),
+    (-0.138, -0.0742),
+    (-0.0617, 0.0151),
+    (0.0438, 0.0668),
+    (0.1607, 0.0636),
+    (0.2758, 0.0365),
+    (0.3789, -0.0182),
+    (0.4413, -0.1177),
+    (0.4664, -0.2328),
+    (0.4586, -0.3505),
+    (0.4253, -0.4636),
+    (0.357, -0.5592),
+    (0.2568, -0.6202),
+    (0.1439, -0.6553),
+    (0.0266, -0.6649),
+    (-0.0897, -0.6447),
+    (-0.1976, -0.5971),
+    (-0.2918, -0.526),
+    (-0.3688, -0.4366),
+    (-0.4224, -0.3315),
+    (-0.453, -0.2174),
+    (-0.4664, -0.1002),
+    (-0.4498, 0.0166),
+    (-0.4117, 0.1284),
+    (-0.3576, 0.2335),
+    (-0.2898, 0.3302),
+    (-0.2132, 0.4203),
+    (-0.1294, 0.5037),
+    (-0.0443, 0.5859),
+    (0.0409, 0.6678),
+    (0.1227, 0.7529),
+    (0.1803, 0.856),
+    (0.2141, 0.9689),
+    (0.2155, 1.0868),
+    (0.1657, 1.1893),
+    (0.062, 1.1722),
+    (-0.003, 1.074),
+    (-0.0403, 0.9621),
+    (-0.0518, 0.8446),
+    (-0.0447, 0.7266),
+    (-0.0237, 0.6103),
+    (-0.0015, 0.4941),
+    (0.0206, 0.378),
+    (0.0467, 0.2627),
+    (0.0709, 0.1469),
+    (0.0945, 0.031),
+    (0.118, -0.0849),
+    (0.1414, -0.2008),
+    (0.1646, -0.3167),
+    (0.1878, -0.4327),
+    (0.2117, -0.5485),
+    (0.2394, -0.6635),
+    (0.2674, -0.7783),
+    (0.2898, -0.8944),
+    (0.2992, -1.0121),
+    (0.2787, -1.128),
+    (0.2135, -1.2254),
+    (0.1122, -1.2846),
+    (-0.0043, -1.3),
+    (-0.1175, -1.2693),
+    (-0.2013, -1.1876),
+    (-0.2299, -1.0751),
+    (-0.1948, -0.9657),
+    (-0.0837, -0.9435),
+    (-0.0039, -1.0236),
   )
   let M = 45 // harmonics kept: the fastest turns 28 times a turn, under the S / 2 below
   let C = 6 // epicycle circles drawn
@@ -993,11 +1155,13 @@
     }
     t * U
   })
-  let epicycles(j) = cetz.canvas(length: 4.20cm, {
+  let clef = cetz.canvas(length: 4.20cm, {
     import cetz.draw: circle, line, rect
+    let (states,) = cz
     // the widest the circles ever reach, over every state: pin it, or the
     // origin moves from state to state
     rect((-0.83, -1.43), (0.83, 1.34), stroke: none)
+    states(play: (duration: 6000), ..range(S + 1).map(j => {
     let j = calc.rem(j, S) // the last state is the first: the turn closes
     let ch = chains.at(j)
     for i in range(C) { circle(ch.at(i), radius: coef.at(i).r, stroke: 0.4pt + dim.transparentize(48%)) }
@@ -1032,6 +1196,7 @@
     }
     // The pen, at the end of the chain.
     circle(pen.at(step * j), radius: DOT, fill: green, stroke: none)
+    }))
   })
   slide(
     title: "States played over time",
@@ -1055,11 +1220,10 @@
       piece is drawn is a separate question: each is a polyline of #SUB samples of the
       curve, so the outline is smooth and the corners inside a piece are proper joins.
     ],
-    anim: (clef: (duration: 6000)),
   )[
     #lesson(
       "States played over time",
-      [Name a multi-state `mark` in `anim:` with neither `keyframes` nor `follow`, and the *states become the keyframes*: stepping turns into playing.],
+      [Give an object an `anim:` with neither `keyframes` nor `follow`, and the *states of the drawings inside it become the keyframes*: stepping turns into playing.],
       src(```typ
       #import "@preview/komet:0.2.0" as komet
 
@@ -1076,22 +1240,28 @@
       // epicycles(j) draws the chain at t = 2πj/S over the outline,
       // whose pieces are lit by how far behind the pen they lie
       // and inked by how much of them the pen has crossed
-      #slide(anim: (clef: (duration: 6000)))[
-        #mark("clef", ..range(S + 1).map(epicycles))
-      ]
+      #let clef = cetz.canvas({
+        let (states,) = cz
+        rect((-0.83, -1.43), (0.83, 1.34))   // pin the box
+        states(play: (duration: 6000), ..range(S + 1).map(epicycles))
+      })
+      #clef
       ```),
-      screen(align(center + horizon, mark("clef", ..range(S + 1).map(epicycles)))),
-      when: [A mark named this way counts no steps, and the PDF shows its first state. The states are a sampling rate, and between two of them every number moves at a constant rate: anything turning faster than S/2 is aliased, and geometry re-listed per state changes velocity at every keyframe. Hence #M vectors, and a trail that is fixed pieces with moving light and moving ink.],
+      screen(align(center + horizon, clef)),
+      when: [An object animated this way counts no steps. The states are a sampling rate, and between two of them every number moves at a constant rate: anything turning faster than S/2 is aliased, and geometry re-listed per state changes velocity at every keyframe. Hence #M vectors, and a trail that is fixed pieces with moving light and moving ink.],
     )
   ]
 
   // ── 21. waves ──────────────────────────────────────────────────────
-  let sea(k) = cetz.canvas(length: 1.15cm, {
+  let sea = cetz.canvas(length: 1.15cm, {
     import cetz.draw: circle, content, line, rect
-    let phi = k / 24 * 2 * calc.pi
+    let (states,) = cz
+    // the box and the sun do not move, so they are the canvas's own
     rect((-0.2, -2.2), (14.2, 3.2), stroke: none)
     circle((11.8, 2.2), radius: .5, fill: gold, stroke: none)
-    let surf(a, w, v, y0) = x => y0 + a * calc.sin(w * x + v * phi) + a * .35 * calc.sin(2.3 * w * x - 1.7 * v * phi)
+    states(play: (duration: 4000), ..range(0, 25).map(k => {
+    let phi = k / 24 * 2 * calc.pi
+    let surf(a, w, v, y0) = x => y0 + a * calc.sin(w * x + v * phi) + a * .35 * calc.sin(2.3 * w * x - 2 * v * phi)
     let layer(h, col) = line(
       ..range(0, 57).map(i => (i * .25, h(i * .25))),
       (14, -2),
@@ -1111,29 +1281,32 @@
       set text(size: 22pt)
       box(baseline: -7pt, polygon(fill: gold, (0pt, 0pt), (30pt, 0pt), (25pt, 10pt), (5pt, 10pt)))
     })
+    }))
   })
   slide(
     title: "A seamless loop",
     note: [Three layers of summed sines, each with its own wavelength and speed, and a boat whose height and heading come from the front layer. The first and last state are equal, so the loop has no seam.],
-    anim: (sea: (duration: 4000)),
   )[
     #lesson(
       "A seamless loop",
       [The same mechanism, twenty-five states, and one rule of composition: make the first state and the last state equal and the loop has nowhere to jump.],
       src(```typ
-      #let sea(k) = cetz.canvas({
-        let phi = k / 24 * 2 * calc.pi      // 0 … 2π over 25 states
-        let surf(a, w, v, y0) = x => y0
-          + a * calc.sin(w * x + v * phi)
-          + a * .35 * calc.sin(2.3 * w * x - 1.7 * v * phi)
-        …three layers, then the boat on the front one…
+      #let sea = cetz.canvas({
+        let (states,) = cz
+        rect(…)                             // box and sun stay put
+        circle((11.8, 2.2), radius: .5, fill: gold)
+        states(play: (duration: 4000), ..range(0, 25).map(k => {
+          let phi = k / 24 * 2 * calc.pi    // 0 … 2π over 25 states
+          let surf(a, w, v, y0) = x => y0
+            + a * calc.sin(w * x + v * phi)
+            + a * .35 * calc.sin(2.3 * w * x - 2 * v * phi)
+          …three layers, then the boat on the front one…
+        }))
       })
 
-      #slide(anim: (sea: (duration: 4000)))[
-        #mark("sea", ..range(0, 25).map(sea))
-      ]
+      #sea
       ```),
-      screen(align(center + horizon, mark("sea", ..range(0, 25).map(sea)))),
+      screen(align(center + horizon, sea)),
       when: [`iterations` is infinite by default; animations pause when the frame is left.],
     )
   ]
@@ -1155,7 +1328,7 @@
       src(```typ
       // CeTZ has a `mark` of its own (arrow heads), so
       // `import cetz.draw: *` shadows this one — by name.
-      #import "@preview/cetz:0.4.1"
+      #import "@preview/cetz:0.5.2"
 
       #let fig(r) = cetz.canvas({
         import cetz.draw: circle, rect, content
@@ -1205,9 +1378,9 @@
         node((0, 1), $C$); node((1, 1), $D$)
         arrow((0, 0), (1, 0), $p$); …
       })
-      #slide[#mark("dual", duo(false), duo(true))]
+      #slide[#tween(duo(false), duo(true))]
       ```),
-      screen(align(center + horizon, mark("dual", duo(false), duo(true)))),
+      screen(align(center + horizon, tween(duo(false), duo(true)))),
       when: [Mark what the package takes as *content*; its arrows are drawn, so keep the geometry still.],
     )
   ]
@@ -1352,13 +1525,13 @@
       [Nine calls, and the question each of them answers. When two would do, the one that keeps the layout still is the one that morphs.],
       src(```typ
       mark("key")[…]                 // this thing is that thing
-      mark("key", s0, s1, …)         // one object, N parameters
+      tween(s0, s1, …)               // one drawing, N parameters
       mark(transition: …)            // how this thing enters
       slide(a, b, c)                 // frames, written out
       build(a, b, c)                 // frames that accumulate
       reveal(n, (step, at) => …)     // frames that stay put
       layers(key, meet: …, a, b)     // an assembly that grows
-      slide(anim: (key: …))          // it moves on its own
+      mark(key, anim: …)             // it moves on its own
       deck(transition:, duration:, …)// how pages turn
       ```),
       screen(grid(
@@ -1368,7 +1541,7 @@
         ..pick("Parts arrive but nothing may shift?", [`reveal` — what is to come holds its space], cyan),
         ..pick("A drawing gains something outside itself?", [`layers` — what was there glides as one picture], gold),
         ..pick("A curve must bend, a pose must change?", [`mark` with states — a transition only cross-fades], amber),
-        ..pick("It must move with nobody pressing?", [`slide(anim:)`], rgb("#e599f7")),
+        ..pick("It must move with nobody pressing?", [`mark(anim:)`], rgb("#e599f7")),
       )),
       when: [Out of reach: z-order, silently clipped overflow, a bitmap halfway through a big size change.],
     )

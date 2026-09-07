@@ -17,7 +17,7 @@
 //   magick compare -metric AE /tmp/p-01.png /tmp/p-02.png null:   # 0, and so on
 //
 // tools/cetz.mjs rewrites the next line for each version it checks.
-#import "@preview/cetz:0.4.1"
+#import "@preview/cetz:0.5.2"
 #import "lib.typ": tweened
 
 #let cz = tweened(cetz)

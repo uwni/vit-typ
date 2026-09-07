@@ -29,10 +29,10 @@ same answer the browser gives at page level.
 
 |||
 |---|---|
-|`tween(..states, name:, still:)`|The states, stacked in one box: the first is in the flow, the rest are placed on it, so nothing is ever re-laid-out and the box never moves. `name` lets a host find this drawing; `still` says which state the PDF shows (`-1`, the last, by default).|
+|`tween(..states, name:, still:, play:)`|The states, stacked in one box: the first is in the flow, the rest are placed on it, so nothing is ever re-laid-out and the box never moves. `name` lets a host find this drawing; `still` says which state the PDF shows (`-1`, the last, by default); `play` gives Web Animations options and the states are played over time instead of left to be stepped.|
 |`css`, `js`|The stylesheet and the runtime, as strings. Static — nothing in them depends on your document — so bundle them, inline them, cache them by hash. Both are idempotent: a page that carries them twice is only a few bytes heavier.|
-|`host(body)`|For a host that puts drawings inside `html.frame`s of its own (a slide deck): says once that the document is an HTML one, which `target()` cannot report from inside a frame.|
-|`waapi.animate(body, keyframes:, …)`|The layer underneath: Web Animations from Typst, for moving a whole element rather than the parts inside one drawing.|
+|`host(body)`|For a document that puts drawings inside `html.frame`s of its own: `#show: host` says once that this is an HTML document, which `target()` cannot report from inside a frame, and carries the drawings' own declarations out of those frames. A host with a runtime of its own may write that script itself (`declarations()`).|
+|`waapi.animate(body, keyframes:, …)`|The layer underneath: Web Animations from Typst, for moving a whole element rather than the parts inside one drawing. `follow: "label"` runs it along the first path of whatever carries that label.|
 
 ## Driving it
 
@@ -43,12 +43,17 @@ tween.boxes(root)          // the containers in a subtree, outermost first
 tween.states(box)          // its states, by index
 tween.nodes(states, label) // the nodes of each state, or null if they differ in structure
 tween.frames(column, label)// one node across the states → keyframes, and whether it must cross-fade
+tween.plays(box)           // whether this drawing said it plays rather than steps
+tween.play(box, o, role)   // play its states over time; the animations come back to you
 waapi.animate(el, frames, o, role)   // el.animate, with the options as the spec writes them
 waapi.of(scope, role)                // what is animating under an element, asked of the browser
 ```
 
 A click, a scroll position, an `IntersectionObserver`, a timer, a slide deck's
-arrow keys — the choice is the document's, not the library's.
+arrow keys — the choice is the document's, not the library's. A drawing that
+declared `play:` starts by itself; what a host may still want is the lifecycle —
+pausing what is off screen, and resuming it — which is `getAnimations` and needs
+nothing from here.
 
 ## waapi
 
@@ -79,6 +84,14 @@ grammar once and writes attributes:
 |---|---|
 |`tween` / `tween:name`|`data-tween` — a container, holding the name|
 |`tween@i`|`data-tween-at` — one of its states|
+|`tween-play@k` / `waapi@k`|the k-th declaration in the list the host carried over|
+
+An element written inside an `html.frame` is dropped on the floor, so what a
+drawing says about itself (`play:`, `waapi.animate`'s options) can only ride on
+a label. At the top of an HTML document there is no frame yet and the
+declaration gets an element of its own; inside frames it becomes a label, an
+ordinal, and one list the host writes into the page. The host carries it and
+never reads it.
 
 A state belongs to the nearest container above it, so the same name twice in a
 document is two drawings, and a drawing inside a state is an ordinary node.

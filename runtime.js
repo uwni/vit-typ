@@ -6,7 +6,7 @@
      effect is a CSS-only change.
    · Element animation — the states of mark(key, s0, s1, …) are stepped through
      with the keys and interpolated node by node with Web Animations;
-     slide(anim:) plays a mark (or its states) continuously.
+     mark(anim:) plays an object (or its states) continuously.
    · Chrome — overview, toolbar, laser pointer, speaker view.
    No dependencies; opens straight from file://.                            */
 
@@ -127,7 +127,7 @@
     cur = i;
     slides.forEach(function (s, k) {
       s.classList.toggle("is-active", k === i);
-      if (k === i) prepare(s); else { still(s); halt(s); }
+      if (k !== i) { still(s); halt(s); }
     });
     announce();
   }
@@ -259,7 +259,7 @@
       var own = vitMarks[k];
       by[k].forEach(function (m, i) {
         m.style.viewTransitionName = nameOf(k, i);
-        if (own) m.style.viewTransitionClass = "vit-mo " + own.transition;
+        if (own && own.transition) m.style.viewTransitionClass = "vit-mo " + own.transition;
       });
     });
   }
@@ -351,7 +351,7 @@
       Array.prototype.forEach.call(s.querySelectorAll(".vit-mark"), function (m) {
         if (other[m.style.viewTransitionName]) return;
         var name = m.style.viewTransitionName, cls = m.style.viewTransitionClass, own = vitMarks[m.dataset.vitKey];
-        if (own) m.style.viewTransitionClass = side + " " + own.transition;
+        if (own && own.transition) m.style.viewTransitionClass = side + " " + own.transition;
         else m.style.viewTransitionName = "none";
         undo.push(function () { m.style.viewTransitionName = name; m.style.viewTransitionClass = cls; });
       });
@@ -360,7 +360,7 @@
     tag(to, A, "vit-only-new");
   }
 
-  /* ── element animation (mark(key, s0, s1, …)) ────────────────────────
+  /* ── element animation (tween(s0, s1, …)) ───────────────────────────
      The N states of a mark are N boxes stacked in one container, which tween
      writes as <g data-tween="key"> around <g data-tween-at="i">: the same
      drawing under different parameters, identical structure, only
@@ -376,17 +376,17 @@
 
   function stepsOf(s) {
     if (s.vitSteps) return s.vitSteps;
-    var spec = animSpec(s);
-    /* One container is one mark, so the same key twice on a frame stays two of
-       them; a drawing inside a state is an ordinary node, not a mark. */
+    /* One container is one drawing, so the same key twice on a frame stays two
+       of them; a drawing inside a state is an ordinary node, not a drawing. */
     var marks = tween.boxes(s).map(function (box) {
-      return { key: box.dataset.tween, states: tween.states(box) };
+      return { key: box.dataset.tween || "a drawing", box: box, states: tween.states(box) };
     });
     var steps = 0;
     marks.forEach(function (m) {
       m.nodes = tween.nodes(m.states, m.key);
-      /* a mark named in slide(anim:) lends its states to the continuous animation and is not stepped */
-      m.anim = m.key in spec && fromStates(spec[m.key]);
+      /* a drawing that plays its states over time is not stepped; whether it
+         does is its own business, so we ask rather than look */
+      m.anim = tween.plays(m.box);
       if (!m.anim) steps = Math.max(steps, m.states.length - 1);
     });
     return (s.vitSteps = { marks: marks, n: steps });
@@ -396,7 +396,7 @@
      continuous one plays and pauses with the frame. The browser keeps both —
      they are asked for by role — and what it cannot keep stays here: the
      clean-ups a cross-fade owes, and the callbacks that re-measure a track. */
-  var STEP = "vit:step", ANIM = "vit:anim";
+  var STEP = "vit:step";
 
   /* the engine returns the animations and the undo; the frame keeps the undo,
      so that halt() can put back what a cancelled cross-fade changed */
@@ -453,59 +453,23 @@
     s.vitUndo = [];
   }
 
-  /* ── continuous animation (slide(anim:)) ─────────────────────────────
-     <section data-anim='{"dot":{"follow":"track","duration":3000,…}}'>, every
-     option filled in on the Typst side (anim-defaults). Three sources of
-     keyframes: `keyframes` animates the mark itself (Web Animations keyframes
-     as written); `follow` runs it along the first <path> of another mark on
-     the same frame (CSS offset-path, on the compositor, only offset-distance moves);
-     neither given while the mark carries several states — those states are the
-     keyframes, one animation per node, each keyframe the corresponding node's
-     values in that state.
-     The path has to be converted to deck px, so it is built only once the frame
-     is shown, and rebuilt on resize; playback starts after the page transition
-     (snapshots are still, a playing element would jump at the end) and every
-     frame not on stage is paused. */
+  /* ── continuous animation ────────────────────────────────────────────
+     None of it is the deck's. A drawing that plays its states over time, an
+     element with keyframes of its own, one running along a path: each says so
+     where it is written, `tween` and `waapi` start them, and what is left for
+     the deck is the lifecycle — everything under a frame that is not on stage
+     is paused, and the frame that is on stage plays once its transition is
+     over (a snapshot is still, and a playing element would jump at the end).
+     Its own step animations are not that: they are the deck's, and halt()
+     cancels them. */
 
-  function animSpec(s) {
-    if (!s.vitSpec) { s.vitSpec = {}; try { s.vitSpec = JSON.parse(s.dataset.anim || "{}"); } catch (e) { } }
-    return s.vitSpec;
-  }
-  function fromStates(o) { return !o.keyframes && !o.follow; }
+  function loose(s) { return waapi.of(s).filter(function (a) { return a.id !== STEP; }); }
 
-  function prepare(s) {
-    if (!s.vitPrepared) {
-      s.vitPrepared = true;
-      s.vitFit = [];
-      var spec = animSpec(s);
-      Object.keys(spec).forEach(function (key) {
-        var o = spec[key], el = s.querySelector('.vit-mark[data-vit-key="' + key + '"]');
-        if (!el) { console.warn("[vit] anim: no mark " + key + " on this frame"); return; }
-        var keep = function (a, fit) { a.pause(); if (fit) s.vitFit.push(fit); };
-        if (fromStates(o)) {
-          var m = stepsOf(s).marks.filter(function (m) { return m.key === key; })[0];
-          if (!m || !m.nodes) { console.warn("[vit] anim: " + key + " has no keyframes, no follow and no states to play"); return; }
-          m.nodes[0].forEach(function (node, j) {
-            var f = tween.frames(m.nodes.map(function (list) { return list[j]; }), key);
-            if (f.frames) keep(waapi.animate(node, f.frames, o, ANIM));
-          });
-        } else if (o.follow) {
-          var track = s.querySelector('.vit-mark[data-vit-key="' + o.follow + '"] path');
-          if (!track) { console.warn("[vit] anim: " + key + " should follow " + o.follow + ", but this frame has no such mark or it has no path"); return; }
-          /* the deck is the containing block a follow track is measured in */
-          var run = waapi.follow(el, track, Object.assign({ role: ANIM }, o), deck);
-          keep(run.anim, run.fit);
-        } else keep(waapi.animate(el, o.keyframes, o, ANIM));
-      });
-    }
-    s.vitFit.forEach(function (f) { f(); });
-  }
-
-  function still(s) { waapi.of(s, ANIM).forEach(function (a) { a.pause(); }); }
+  function still(s) { loose(s).forEach(function (a) { a.pause(); }); }
   function play() {
     var s = slides[cur];
-    if (!s.vitPrepared || reduced.matches || over() || atDesk()) return;
-    waapi.of(s, ANIM).forEach(function (a) { a.play(); });
+    if (reduced.matches || over() || atDesk()) return;
+    loose(s).forEach(function (a) { a.play(); });
   }
   /* ── transition ──────────────────────────────────────────────────────
      types are this transition's types (["enter-slide", "leave-fade", "back"],
@@ -654,7 +618,6 @@
         else pick(f, 0);
         return;
       }
-      if (atDesk() && frac(e, view)) present();   // the preview is the page: clicking it starts the presentation
       return;
     }
     if (e.target.closest("a, button, input, select, textarea, pre, table")) return;
@@ -756,8 +719,16 @@
     zoomTo(i, function () { deck.classList.remove("vit-all"); stage(i); }, function () { moveDone(i); });
   }
 
-  /* choosing a page: from the overview it opens, from the desk or the presentation it is where we go */
-  function pick(i, k) { if (over()) openSlide(i, k); else goto({ i: i, at: k || 0 }); }
+  /* Choosing a position: from the overview it opens, from the desk or the
+     presentation it is where we go. The peek a hovered dot left behind is put
+     back first — it already stepped that frame, and a move that finds itself
+     where it wanted to be does nothing at all, preview and address bar
+     included. */
+  function pick(i, k) {
+    if (over()) { openSlide(i, k); return; }
+    unpeek();
+    goto({ i: i, at: k || 0 });
+  }
 
   /* ── the desk ─────────────────────────────────────────────────────────
      Where the deck opens, and what Esc comes back to: the deck itself in
@@ -1177,10 +1148,6 @@
     showBar();
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
-    /* a follow track is in deck px: refit it when the deck's box changes (observing reports the current box at once, hence after paint) */
-    new ResizeObserver(function () {
-      (slides[cur].vitFit || []).forEach(function (f) { f(); });
-    }).observe(deck);
     window.vit = {
       go: go, next: next, prev: prev,
       get index() { return cur; },

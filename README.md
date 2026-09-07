@@ -104,11 +104,16 @@ is one object moving?**
 - **Transition** — the layout changed: a new page, or the next frame of the same
   page. View Transitions; marked elements pair by key.
   `slide(..frames)`, `deck(transition:)`, `mark(key)[…]`.
-- **Element animation** — one object varies with a parameter, the layout is
+- **Element animation** — one drawing varies with a parameter, the layout is
   unchanged. Web Animations on the SVG nodes, stepped with the keys.
-  `mark(key, s0, s1, …)`.
-- **Continuous animation** — an object moving on its own, without keys, for as
-  long as the page rests on that frame. `slide(anim:)`.
+  `tween(s0, s1, …)`, and it is [`tween`](packages/tween)'s, not the deck's: a
+  drawing does not have to be a `mark`, and the same call moves the same figure
+  in a blog post.
+- **Continuous animation** — something moving on its own, without keys, for as
+  long as the page rests on that frame. `tween(play:)` for a drawing playing its
+  states, `waapi.animate` for an element with keyframes of its own or running
+  along a path. Both are [`tween`](packages/tween)'s; the deck only starts them
+  after the transition and pauses what is off stage.
 
 ## API
 
@@ -126,10 +131,9 @@ is one object moving?**
 | `slide(note:)`                  | Speaker notes. HTML only; read by the speaker view (`s`). May be content.                                                                                                                                                                                                                                                                                                                        |
 | `slide(..frames)`               | Several bodies = **frames of the same page**. Navigation walks them one by one; the overview merges them into one thumbnail.                                                                                                                                                                                                                                                                     |
 | `slide(transition:)`            | Overrides `deck(transition:)` for this page: a name or an `(enter:, leave:)` pair — how this page comes in when turning to it, how the page before it goes out. Going back, the page being left decides, so it always replays in reverse. `none` takes the deck's.                                                                                                                               |
-| `slide(anim:)`                  | Continuous animation, `key → spec`, where the spec is Web Animations keyframes + options — see [Writing a deck](#writing-a-deck).                                                                                                                                                                                                                                                                |
 | `mark(key)[…]`                  | Names a piece of content. The same key on two adjacent pages pairs them.                                                                                                                                                                                                                                                                                                                         |
 | `mark(transition:)`             | This object's **own** enter/leave effect (same names as above, a string or an `(enter:, leave:)` pair). Applies only when the mark is one-sided in a transition; a paired mark morphs regardless. Unset, the mark folds into the page. One object, one effect: given on any occurrence of the key it holds for all, and two occurrences may not disagree. Keys are letters, digits, `_` and `-`. |
-| `mark(key, s0, s1, …)`          | **Element animation**: N states of one object, stepped with `→` / `←`. The PDF shows the last state.                                                                                                                                                                                                                                                                                             |
+| `tween(s0, s1, …)`              | **Element animation**: N states of one drawing, stepped with `→` / `←`. `tween`'s own, re-exported so a deck needs one import; needs no `mark`. `still:` says which state the PDF shows (`-1`, the last, by default).                                                                                                                                                                            |
 | `reveal(n, (step, at) => …)`    | Frames from **one** description: the body is rendered once per frame and each part says when it arrives — `at(2, thing)`. Before its frame, content keeps its space (so nothing is ever re-laid-out and nothing jumps) and anything else is `none`, which switches a stroke or a fill off.                                                                                                       |
 | `layers(key, meet: …, a, b, …)` | Layers of one picture, each its own mark (`key-1`, `key-2`, …). The last sizes the stack; a `none` layer is left out, which is how one arrives — and when it does, the layers already there glide as whole pictures instead of being redrawn. `meet` is the corner the arriving layer does not push (`bottom + right` for a picture that grows up and left).                                     |
 | `build(a, b, c)`                | Frames that accumulate: `a`, then `a` and `b`, then all three. For things that flow — a list, a stack of blocks — where later parts are meant to push the layout.                                                                                                                                                                                                                                |
@@ -232,7 +236,7 @@ as markup, upright in the body font. The operators are then the page's and
 cross-fade, which is invisible where they stay put and a double image where they
 move, so a formula whose operators travel wants them marked too.
 
-**States are one drawing under different parameters.** `mark(key, s0, s1, …)`
+**States are one drawing under different parameters.** `tween(s0, s1, …)`
 compares the states node by node and hands every property that differs to
 `el.animate()`: the path's `d`, `transform`, `fill` / `stroke`, `stroke-width`,
 `opacity`, `x` / `y` / `width` / `height`. Duration and easing are the
@@ -249,20 +253,26 @@ start (the tutorial's "Designing the states" page).
 jumps. Draw an invisible `rect(…, stroke: none)` around the widest extent
 first — `tween-cetz` does it for you, for an element's own states.
 
-**Continuous animation** is `slide(anim: (key: spec))`, and the spec is not a
-DSL of its own: it is Web Animations keyframes plus options (`duration` in ms,
-`easing`, `direction`, `iterations` — infinite and linear by default), passed to
-`el.animate()` as is. The keyframes come from one of three places. `keyframes`
-animates the mark itself: the tutorial's bouncing balls are five marks with
-piecewise `easing` for gravity, a `scale` squash on the landing frame and a
-`delay` to stagger them. `follow: "track"` runs the mark's centre along the
-first `<path>` of another mark on the same frame, via CSS `offset-path`, so only
+**Continuous animation is not the deck's.** What moves says so where it is
+written, and none of it is a DSL: the options are Web Animations' (`duration` in
+ms, `easing`, `direction`, `iterations` — infinite and linear by default),
+passed to `el.animate()` as is. `waapi.animate(keyframes: …)` moves one element:
+the tutorial's bouncing balls are five of them with piecewise `easing` for
+gravity, a `scale` squash on the landing frame and a `delay` to stagger them.
+`waapi.animate(follow: "track")` runs an element's centre along the first
+`<path>` of whatever carries that label, via CSS `offset-path`, so only
 `offset-distance` moves, on the compositor; `orient: true` turns it with the
-tangent. Neither, and the `mark` of that key carries several states: the states
-_are_ the keyframes, played continuously, one animation per node. A mark named
-this way counts no steps, and the PDF shows its first state. Animations start
-once the page transition has finished, pause when the frame is left or the
-overview opens, and do not play under `prefers-reduced-motion`.
+tangent. `tween(..states, play: …)` plays a drawing's states over time instead
+of leaving them to be stepped, one animation per node — including a whole CeTZ
+canvas whose parts move ([`tween-cetz`](packages/tween-cetz)'s
+`states(play:)`). A drawing played this way counts no steps.
+
+What the deck owns is the lifecycle, and only that: animations start once the
+page transition has finished, everything under a frame that is not on stage is
+paused, and nothing plays under `prefers-reduced-motion`. An element written
+inside an `html.frame` is dropped, so a declaration made inside a slide rides on
+a label and an ordinal, and the deck writes the list into the page — it carries
+it, it never reads it.
 
 **Dashes interpolate**, and they are worth reaching for when what you want is
 not expressible as points: a pattern (a dashed stroke becoming solid, `(6pt,
@@ -303,7 +313,7 @@ imports no CeTZ of its own: you hand it the one the document draws with, and it
 hands back `cetz.draw` with states allowed on everything that draws.
 
 ```typst
-#import "@preview/cetz:0.4.1"
+#import "@preview/cetz:0.5.2"
 #import "@preview/tween-cetz:0.1.0": tweened
 
 #let cz = tweened(cetz)                              // once, per file
@@ -320,7 +330,7 @@ hands back `cetz.draw` with states allowed on everything that draws.
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tweened(cetz)`    | `cetz.draw`, with states. Every element function takes `over(…)` in place of any argument; everything else — transformations, styles, coordinates, queries — is CeTZ's, untouched. The dictionary also carries `over`, `states` and CeTZ's own `canvas`.                                                               |
 | `over(a, b, …)`    | In place of any argument, anywhere in it: N states of that element, stepped with `→`. Every marker in one call is walked in step, so the states are one drawing under different numbers _by construction_ — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading. |
-| `states(..bodies)` | The same, when more than one element varies together.                                                                                                                                                                                                                                                                  |
+| `states(..bodies, play:)` | The same, when more than one element varies together. `play` hands them to Web Animations and they run over time instead of being stepped.                                                                                                                                                                                                                                                                  |
 
 Such an element is still drawn where it stood, with its ink switched off, so its
 `name`, its anchors, `()` and `intersections` behave as if the package were not

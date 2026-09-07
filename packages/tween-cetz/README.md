@@ -11,7 +11,7 @@ no CeTZ of its own, and it needs no slide deck; a canvas moves in a blog post as
 it does in a talk.
 
 ```typst
-#import "@preview/cetz:0.4.1"
+#import "@preview/cetz:0.5.2"
 #import "@preview/tween-cetz:0.1.0": tweened, host, css, js
 
 #let cz = tweened(cetz)                              // once, per file
@@ -27,12 +27,12 @@ it does in a talk.
 }))
 ```
 
-|||
-|---|---|
-|`tweened(cetz)`|Everything `cetz.draw` has, with `over(…)` allowed in place of any argument; everything else passed through untouched. Plus `over`, `states` and CeTZ's own `canvas`.|
-|`over(a, b, …)`|In place of any argument, anywhere inside it: N states of that element. Every `over` in one call is walked in step, so the states are one drawing under different numbers *by construction* — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading.|
-|`states(..bodies)`|The same, when more than one element varies together.|
-|`host`, `css`, `js`|`tween`'s own, passed through so that one import does.|
+|                     |                                                                                                                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tweened(cetz)`     | Everything `cetz.draw` has, with `over(…)` allowed in place of any argument; everything else passed through untouched. Plus `over`, `states` and CeTZ's own `canvas`.                                                                                                                                    |
+| `over(a, b, …)`     | In place of any argument, anywhere inside it: N states of that element. Every `over` in one call is walked in step, so the states are one drawing under different numbers _by construction_ — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading. |
+| `states(..bodies, play:)` | The same, when more than one element varies together. `play` hands them to Web Animations and they run over time instead of being stepped.                                                                                                                                                                                                                                                    |
+| `host`, `css`, `js` | `tween`'s own, passed through so that one import does.                                                                                                                                                                                                                                                   |
 
 Nothing steps by itself: `tween`'s runtime exposes the states and the keyframes,
 and what advances them is the document's business — a click, a scroll position,
@@ -64,7 +64,7 @@ As little as it can, and all of it in one place.
   `group` measures a body with. `tweened` checks for them when you hand the module
   over and names what is gone — a missing name is a compile error, not something
   placed a hair off.
-- The version is *not* a gate. `tested` says what has actually been run, most
+- The version is _not_ a gate. `tested` says what has actually been run, most
   recent last; anything else is taken at its word.
 
 ## Checking it
@@ -102,7 +102,7 @@ behave as if this package were not here.
 - A gradient inside one is relative to that element's own canvas.
 - Without `over`, the function is CeTZ's own and costs nothing.
 
-Identity *between* canvases is a different thing and not this package's. A
+Identity _between_ canvases is a different thing and not this package's. A
 canvas that is one object across a page turn is a canvas inside a
 [vit](../../README.md) `mark` — `mark("fig", cetz.canvas(…))` — and what is
 inside it goes on moving as it does anywhere else.

@@ -9,7 +9,8 @@
 /// frame to frame) and runs on the View Transitions API. An *element animation*
 /// is one object varying with a parameter (`mark` with several states, stepped
 /// with `→`) and runs on Web Animations. A *continuous animation* is an object
-/// moving on its own, without keys (`slide(anim:)`). The test is one sentence:
+/// moving on its own, without keys. Both of those are `tween`'s and are
+/// imported from it; vit's own subject is the first. The test is one sentence:
 /// did the layout change, or is one object moving? Design trade-offs and
 /// browser pitfalls are in the README.
 
@@ -66,8 +67,9 @@
 /// `view-transition-class` on a mark. The presenter's speed keys still divide
 /// every duration, whoever wrote it.
 /// -> array
-// Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as tween
-#import "packages/tween/lib.typ" as tween
+// Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as _tween
+#import "packages/tween/lib.typ" as _tween
+
 
 #let transitions = ("fade", "slide", "rise", "zoom", "wipe-left", "wipe-right", "wipe-up", "wipe-down", "none")
 
@@ -83,12 +85,6 @@
 /// this state.
 /// -> state
 #let _target = state("vit-target", "paged")
-
-/// The keys named by this page's `slide(anim:)`. A multi-state `mark` that is
-/// played continuously shows its first state in the PDF (the page at rest);
-/// one that is not shows its last (the finished figure).
-/// -> state
-#let _anim = state("vit-anim", ())
 
 /// A transition as the pair it is: how the new side enters, how the old side
 /// leaves. A string is the same effect both ways; a dictionary
@@ -110,7 +106,7 @@
 /// -> dictionary
 #let _knobs = {
   let k = (:)
-  for m in read("deck.css").matches(regex("var\(\s*--vit-([a-z-]+)")) { k.insert(m.captures.first(), true) }
+  for m in read("deck.css").matches(regex("var\(\s*--vit-([a-z0-9-]+)")) { k.insert(m.captures.first(), true) }
   k
 }
 
@@ -293,27 +289,13 @@
 /// -> dictionary
 #let _frame = _pair("fade")
 
-/// What a continuous animation runs with unless its spec says otherwise:
-/// `iterations: none` is without end.
-#let anim-defaults = (duration: 1000, delay: 0, iterations: none, direction: "normal", easing: (0, 0, 1, 1))
-
-/// Give a piece of content a name. The same `key` on two adjacent pages makes
-/// the browser pair them and interpolate — position, size, colour, rotation.
-/// This is a *transition*: the layout changed.
-///
-/// Several bodies make an *element animation*: N states of the same object.
-/// While presenting, `→` moves from one state to the next and `←` back along
-/// the same path; the page turns only once the states are exhausted. Between
-/// states nothing cross-fades — the object's own geometry moves: the browser
-/// (Web Animations) interpolates between the corresponding SVG nodes of two
-/// states, the path's `d`, transform, colours, stroke width, opacity. So the
-/// states must be *the same drawing under different parameters* — same
-/// structure, same number of elements, only the numbers differ; write a
-/// function `f(t)` and feed it a few values of t:
-///
-/// ```typ
-/// #mark("wave", ..range(0, 6).map(t => wave(t)))
-/// ```
+/// Give a piece of content a name: this is one object, and the same `key` on
+/// two adjacent pages is the same object, which the browser pairs and
+/// interpolates — position, size, colour, rotation. This is a *transition*:
+/// the layout changed. That is all a mark is: identity between pages. What
+/// moves *inside* it — N states of one drawing, or the drawing playing them
+/// over time — is `tween`'s, needs no mark, and is written where the drawing
+/// is.
 ///
 /// *In a formula*, hand the term over as an equation —
 /// `$ #mark("sq")($x^2$) + #mark("lin")($b x$) = c $` — not as bare math: a
@@ -330,9 +312,8 @@
 /// states are stacked on the first state's box (`place`, taking no layout
 /// space) and hidden by the runtime as data.
 ///
-/// If the page's `slide(anim:)` names the same `key`, the states become the
-/// keyframes of a continuous animation, played over time instead of stepped;
-/// the PDF then shows the first state (the page at rest).
+/// With `tween(play:)` the same states are played over time instead of
+/// stepped; the drawing says so itself and the deck only carries the word.
 ///
 /// The inner `box` is not decoration, and not a preference: a label attaches to
 /// the element before it, and of everything that can stand in a paragraph only
@@ -373,32 +354,23 @@
   /// `transitions`) and apply to this mark alone, whatever pace the page keeps.
   /// -> none | str | dictionary
   transition: none,
-  /// One body is a plain mark; several bodies are the states of the object.
+  /// What the object is. Several states of one drawing are `tween`'s, not a
+  /// mark's: `mark(key, tween(s0, s1, …))`.
   /// -> content
-  ..states,
+  body,
 ) = {
-  let s = states.pos()
-  assert(s.len() > 0, message: "mark needs at least one body")
-  assert(states.named().len() == 0, message: "mark takes no named argument other than transition")
   assert(
     type(key) == str and key.match(regex("^[A-Za-z0-9_-]+$")) != none,
     message: "a mark key is letters, digits, _ and -: " + repr(key),
   )
   let fx = _pair(transition)
-  // the label is the identity; the effect goes into the marks table deck() writes (see _marks)
+  // the label is the identity; the effect goes into the marks table deck()
+  // writes (see _marks)
   let lbl = label("vit-" + key)
   let meta = if fx == none { none } else {
     [#metadata((key: key, transition: _types(fx), sets: _bundles(fx)))<vit-mark>]
   }
-  if s.len() == 1 { [#meta#box(s.first())#lbl] } else {
-    context [#meta#box(tween.tween(
-        ..s,
-        name: key,
-        // the PDF shows the finished drawing, or the first state for one that
-        // is played continuously — that is the page at rest
-        still: if key in _anim.get() { 0 } else { -1 },
-      ))#lbl]
-  }
+  [#meta#box(body)#lbl]
 }
 
 /// What the marks declared about themselves, by key: `(transition:)` for
@@ -524,12 +496,12 @@
           + ";--vit-easing:cubic-bezier("
           + easing.map(str).join(", ")
           + ")}\n"
-          + tween.css
+          + _tween.css
           + read("deck.css")
           + _sets(fx)
           + marks.css,
       )
-      tween.html-target.update(true)
+      _tween.html-target.update(true)
       html.elem(
         "div",
         attrs: (
@@ -542,9 +514,13 @@
         ),
         body,
       )
-      html.elem("script", "const vitMarks = " + json.encode(marks.table) + ";")
+      // what the drawings declared about themselves: carried, never read
+      html.elem(
+        "script",
+        "const vitMarks = " + json.encode(marks.table) + ";const tweenDecls = " + json.encode(_tween.declarations()) + ";",
+      )
       html.script(read("hoist.js"))
-      html.script(tween.js)
+      html.script(_tween.js)
       html.script(read("runtime.js"))
     } else { body }
   }
@@ -695,27 +671,6 @@
   /// a transition always replays in reverse. `none` takes the deck's.
   /// -> none | str | dictionary
   transition: none,
-  /// Continuous animation, running while the page rests on this frame.
-  /// `key → spec`. The options are `duration` (ms), `delay` (ms),
-  /// `iterations` (`none` = without end), `direction` (`"normal"`,
-  /// `"reverse"`, `"alternate"`, `"alternate-reverse"`) and `easing` (a cubic
-  /// Bézier as in `deck(easing:)`, over each iteration); `anim-defaults`
-  /// fills in the rest:
-  ///
-  /// ```typ
-  /// anim: (spin: (keyframes: ((transform: "rotate(0)"), (transform: "rotate(1turn)")), duration: 4000))
-  /// ```
-  ///
-  /// Three sources of keyframes: `keyframes` animates the mark itself
-  /// (transform, opacity, …); `(follow: "track", duration: 3000)` runs the
-  /// mark's centre along the first path of `mark("track")` on the same frame
-  /// (a ball on a track), `orient: true` turns it with the tangent; with
-  /// neither, and the `mark` of that `key` carrying several states, those
-  /// states are the keyframes — the N poses one piece of code computed, played
-  /// continuously (double pendulum, waves). Starts after the page transition,
-  /// pauses when the frame is left.
-  /// -> dictionary
-  anim: (:),
   /// The frames of this page. None at all is one blank page.
   /// -> content
   ..frames,
@@ -724,11 +679,7 @@
   if bodies.len() == 0 { bodies = ([],) }
   let own = _pair(transition)
   let section = (class: "vit-slide")
-  let anim = anim.pairs().map(((k, v)) => (k, anim-defaults + v)).to-dict()
-  for (k, v) in anim { _bezier(v.easing) }
-  if anim.len() > 0 { section.insert("data-anim", json.encode(anim)) }
   context {
-    _anim.update(anim.keys())
     let fx = if own == none { _fx.get() } else { own }
     // every frame carries the types of the transition into it: the first frame of the
     // page the page's (none: no transition), the others the frame-to-frame one
