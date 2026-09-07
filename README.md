@@ -36,14 +36,14 @@ of one drawing and the browser moving between them, with no notion of slides at
 all — it works in any Typst HTML document, and vit is one of its hosts. What a
 deck adds is the layout: pages, positions, and the transitions between them.
 
-Anything that makes vit work with another library lives beside it as a package
-of its own too, under `packages/`, so that it follows that library's releases
-rather than vit's and can be left out entirely. There is one so far —
-[`vit-cetz`](packages/vit-cetz), for [CeTZ](https://typst.app/universe/package/cetz)
-(see [CeTZ](#writing-a-deck)):
+Anything that makes another library move lives beside them as a package of its
+own too, under `packages/`, so that it follows that library's releases and can
+be left out entirely. There is one so far —
+[`tween-cetz`](packages/tween-cetz), for [CeTZ](https://typst.app/universe/package/cetz),
+built on `tween` and needing no deck (see [CeTZ](#writing-a-deck)):
 
 ```typst
-#import "../packages/vit-cetz/lib.typ": keyed   // once published: "@preview/vit-cetz:0.1.0"
+#import "../packages/tween-cetz/lib.typ": tweened   // once published: "@preview/tween-cetz:0.1.0"
 ```
 
 One compile per format, from the same file:
@@ -247,7 +247,7 @@ start (the tutorial's "Designing the states" page).
 **Pin the bounding box.** A CeTZ canvas is sized by what it draws, so a ball at
 +1.2 on one state and −1.2 on the next moves the box's edges and the origin
 jumps. Draw an invisible `rect(…, stroke: none)` around the widest extent
-first — `vit-cetz` does it for you, for a keyed element's own states.
+first — `tween-cetz` does it for you, for an element's own states.
 
 **Continuous animation** is `slide(anim: (key: spec))`, and the spec is not a
 DSL of its own: it is Web Animations keyframes plus options (`duration` in ms,
@@ -295,61 +295,59 @@ key for the whole canvas interpolates its position and size and cross-fades the
 content, and a transition interpolates boxes, not paths — bending one curve into
 another is the element animation's job.
 
-For the parts of one drawing that have to travel separately there is a companion
-package, **vit-cetz**. It imports no CeTZ of its own: you hand it the one the
-deck draws with, and it hands back `cetz.draw` with one argument more on
-everything that draws.
+That is the page level. *Inside* a canvas nothing is a mark: a canvas is one
+object, and what moves within it is the element animation, node by node. The
+companion package for that is **tween-cetz**, and it belongs to `tween` rather
+than to vit — it needs no deck, so the same drawing moves in a blog post. It
+imports no CeTZ of its own: you hand it the one the document draws with, and it
+hands back `cetz.draw` with states allowed on everything that draws.
 
 ```typst
 #import "@preview/cetz:0.4.1"
-#import "@preview/vit-cetz:0.1.0": keyed
+#import "@preview/tween-cetz:0.1.0": tweened
 
-#let cz = keyed(cetz)                              // once, per file
+#let cz = tweened(cetz)                              // once, per file
 
 #cetz.canvas({
-  let (circle, line) = cz                          // in place of cetz.draw
-  line(..track, close: true, key: "track")
-  circle(track.first(), radius: .16, key: "dot")   // travels on its own
-  circle((2, 1), radius: .3)                       // plain CeTZ, no key
+  let (circle, line, over) = cz                    // in place of cetz.draw
+  line(..track, close: true)
+  circle((over(-2, 0, 2), 1), radius: over(.3, .6, .3))
+  circle((2, 1), radius: .3)                       // plain CeTZ, unchanged
 })
 ```
 
 |||
 |---|---|
-|`keyed(cetz)`|`cetz.draw`, keyed. Every element function takes two arguments more; everything else — transformations, styles, coordinates, queries — is CeTZ's, untouched. The dictionary also carries `over`, `states` and CeTZ's own `canvas`.|
-|`key`|The name this element travels under, or `auto` for its own `name`. It becomes a mark of its own, inside the canvas, in canvas coordinates — the same key on the next page and the browser interpolates one into the other.|
-|`transition`|This element's own enter/leave effect, as in `mark(transition:)`.|
-|`(vt-over: (a, b, …))`|In place of any argument, anywhere in it: N states of that element, stepped with `→`. Every marker in one call is walked in step, so the states are one drawing under different numbers *by construction* — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading. A plain dictionary, not a name to import.|
-|`states(key, ..bodies)`|The same, when more than one element varies together.|
+|`tweened(cetz)`|`cetz.draw`, with states. Every element function takes `over(…)` in place of any argument; everything else — transformations, styles, coordinates, queries — is CeTZ's, untouched. The dictionary also carries `over`, `states` and CeTZ's own `canvas`.|
+|`over(a, b, …)`|In place of any argument, anywhere in it: N states of that element, stepped with `→`. Every marker in one call is walked in step, so the states are one drawing under different numbers *by construction* — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading.|
+|`states(..bodies)`|The same, when more than one element varies together.|
 
-A keyed element is still drawn where it stood, with its ink switched off, so its
+Such an element is still drawn where it stood, with its ink switched off, so its
 `name`, its anchors, `()` and `intersections` behave as if the package were not
-there — and the PDF is pixel-identical to the same canvas written without keys.
-What it costs is a nested canvas per element at compile time and a hoisted region
-at run time (a few dozen on a page is nothing, a few hundred is a decision), and
-z-order: a keyed element is atomic, nothing can be drawn between its parts.
-Without a key, nothing changes at all.
+there — and the PDF is pixel-identical to the same canvas written without any of
+it. What it costs is a nested canvas per state at compile time, every state in
+the file, and z-order: the element is atomic, nothing can be drawn between its
+parts. Without states, nothing changes at all.
 
-Which CeTZ is not written down anywhere: `keyed` takes the module, and what it
+Which CeTZ is not written down anywhere: `tweened` takes the module, and what it
 needs from it is one list — `needs`, seven `cetz.draw` functions and the two
 utilities CeTZ exposes for measuring a body — checked when you hand the module
 over, so a CeTZ that has moved on names what went missing instead of drawing
 something a hair off. Nothing else is hard-wired either: the surface is
 `dictionary(cetz.draw)`, wrapped whole, so a CeTZ that adds a shape keeps it,
 and the drawing context is copied whole rather than field by field. `tested`
-names the versions `packages/vit-cetz/test.typ` has actually been through, and
+names the versions `packages/tween-cetz/test.typ` has actually been through, and
 `node tools/cetz.mjs` puts it through them again — six canvases, each drawn with
-keys and without, page pair by page pair, no fuzz.
+states and without, page pair by page pair, no fuzz.
 
 The surface is a dictionary, opened by destructuring rather than by `import`:
 Typst imports from a module, a module is a file, and a file would have to name
 one CeTZ version at the top — which is exactly what a compatibility layer must
 not do. Naming the names is no loss, since it says what is shadowed: inside that
-block `circle` is CeTZ's, and Typst's is `std.circle`. CeTZ's own `mark` (arrow
-heads) is in there too, which is why vit's `mark` is not — inside a canvas the
-key is the identity. It is still `mark` that carries a *whole* canvas from page
-to page, and a keyed element may not sit inside the states of one: there the
-nodes are compared one by one and everything stays put.
+block `circle` is CeTZ's, and Typst's is `std.circle`. A canvas that is one
+object across a page turn is a canvas inside a `mark` — `mark("fig",
+cetz.canvas(…))` — and what is inside it goes on moving: identity between
+objects is the page's business, motion inside one is the object's.
 
 ## Presenting
 
@@ -438,13 +436,13 @@ tools/ui.mjs        toolbar / laser / desk / overview / touch / transitions / tr
 tools/knobs.typ     a three-page deck whose transitions set duration, easing and effect knobs, compiled by ui.mjs
 tools/gencss.py     writes the transition block of deck.css from a table of effects (`python3 tools/gencss.py`)
 tools/clef.py       derives the tutorial's clef from a font glyph: skeleton, Eulerian trail, offset outline
-tools/cetz.mjs      vit-cetz against several CeTZ versions, page pair by page pair
+tools/cetz.mjs      tween-cetz against several CeTZ versions, page pair by page pair
 packages/tween/lib.typ      N states of one drawing, and the browser between them (a package of its own)
 packages/tween/tween.js     the engine: the label grammar, the states, the keyframes each node needs
 packages/tween/waapi.js     Web Animations from Typst, and an element run along a path
 packages/tween/paths.js     path data: two states whose paths are not the same list of commands, reconciled
-packages/vit-cetz/lib.typ   cetz.draw with a key on every element (a package of its own)
-packages/vit-cetz/test.typ  one canvas drawn twice, with keys and without: the pages must match
+packages/tween-cetz/lib.typ   cetz.draw with the states of a drawing on every element (a package of its own)
+packages/tween-cetz/test.typ  one canvas drawn twice, with states and without: the pages must match
 ```
 
 `tools/` need `playwright` (`paths.mjs` only Node); `verify.mjs` and `cetz.mjs`

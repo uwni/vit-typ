@@ -1,11 +1,10 @@
 [package]
-name = "vit-cetz"
+name = "tween-cetz"
 version = "0.1.0"
 entrypoint = "lib.typ"
 authors = ["Uwni"]
 license = "MIT"
-description = "CeTZ for vit: cetz.draw with an identity on every element, so one canvas can carry several marks and animate inside itself."
+description = "CeTZ for tween: cetz.draw with the states of a drawing on every element, so a part of one canvas moves between them."
 repository = "https://github.com/uwni/vit-typ"
-keywords = ["slides", "presentation", "html", "animation", "cetz"]
-categories = ["presentation"]
+keywords = ["html", "animation", "cetz", "waapi"]
 compiler = "0.15.0"

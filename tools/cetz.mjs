@@ -1,9 +1,9 @@
-/* vit-cetz against several CeTZ versions.
+/* tween-cetz against several CeTZ versions.
 
-   packages/vit-cetz/test.typ is two pages per case: the canvas drawn with plain
-   CeTZ, then the same canvas drawn with keys. The claim is that the pair is
-   pixel-identical, so the test is a compare with no fuzz at all — a keyed
-   element that lands a hair off shows up here as a few hundred pixels.
+   packages/tween-cetz/test.typ is two pages per case: the canvas drawn with plain
+   CeTZ, then the same canvas drawn with states. The claim is that the pair is
+   pixel-identical, so the test is a compare with no fuzz at all — an element
+   that lands a hair off shows up here as a few hundred pixels.
 
      node tools/cetz.mjs              the versions in `tested`, newest patch of each
      node tools/cetz.mjs 0.4.1 0.5.2  the ones named
@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const PKG = join(ROOT, 'packages', 'vit-cetz');
+const PKG = join(ROOT, 'packages', 'tween-cetz');
 const TEST = join(PKG, 'test.typ');
 const src = readFileSync(TEST, 'utf8');
 
@@ -43,7 +43,7 @@ const versions = process.argv.slice(2).length ? process.argv.slice(2) : (() => {
   return tested.map(m => newest(m) || `0.${m}.0`);
 })();
 
-const tmp = mkdtempSync(join(tmpdir(), 'vit-cetz-'));
+const tmp = mkdtempSync(join(tmpdir(), 'tween-cetz-'));
 let bad = 0;
 
 for (const version of versions) {

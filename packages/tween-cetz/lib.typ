@@ -1,27 +1,22 @@
-/// vit-cetz — `cetz.draw`, with an identity on every element.
+/// tween-cetz — `cetz.draw`, with the states of a drawing on every element.
 ///
-/// A companion package: `vit` itself knows nothing about CeTZ, and this knows
-/// nothing about anyone else's library. It imports no CeTZ of its own either —
-/// you hand it yours, and it hands back the same drawing surface with one more
-/// named argument on every element.
-///
-/// A canvas exports native `<path>`s, and a `mark` around the whole of one
-/// interpolates its box and cross-fades its picture: what moves has to be one
-/// picture, so parts that move apart from each other used to need a canvas and
-/// a `mark` each, placed on the page by hand. With `key`, the element carrying
-/// it becomes a mark of its own — inside the canvas, in canvas coordinates:
+/// A canvas is one object, and what moves inside it is Web Animations' work,
+/// not the page's: this hands CeTZ's drawing surface back with `over(…)`
+/// allowed in place of any argument, so a part of a canvas can carry N states
+/// and the browser moves between them. It imports no CeTZ of its own — you hand
+/// it yours — and it needs no slide deck: `tween` is all it is built on, so a
+/// canvas moves in a blog post as it does in a deck.
 ///
 /// ```typ
 /// #import "@preview/cetz:0.4.1"
-/// #import "@preview/vit-cetz:0.1.0": keyed
+/// #import "@preview/tween-cetz:0.1.0": tweened
 ///
-/// #let cz = keyed(cetz)                              // once, per file
+/// #let cz = tweened(cetz)                            // once, per file
 ///
 /// #cetz.canvas(length: 1cm, {
-///   let (circle, line) = cz                          // in place of cetz.draw
-///   line(..track, close: true, key: "track")
-///   circle(track.first(), radius: .16, key: "dot")   // travels on its own
-///   circle((2, 1), radius: .3)                       // plain cetz, no key
+///   let (circle, line, over) = cz                    // in place of cetz.draw
+///   circle((over(-2, 0, 2), 1), radius: .3)          // three states
+///   line((-3, 0), (3, 0))                            // plain cetz, unchanged
 /// })
 /// ```
 ///
@@ -32,17 +27,17 @@
 /// says what is shadowed, and shadowing is the point: inside that block
 /// `circle` is CeTZ's, and Typst's is `std.circle`.
 ///
-/// Nothing else changes. An element without a `key` is CeTZ's own function,
-/// called with CeTZ's own arguments; one with a `key` is still drawn where it
+/// Nothing else changes. An element without `over` is CeTZ's own function,
+/// called with CeTZ's own arguments; one with it is still drawn where it
 /// stood, so its `name`, its anchors, `()` and `intersections` all behave as if
 /// this package were not here. Both targets draw the same picture: the PDF is
-/// pixel-identical to the canvas written without keys.
+/// pixel-identical to the canvas written without them.
 ///
 /// *How.* A label is the only identity the SVG export carries, and a label
-/// lands on a `box`, never on a path — so the keyed element is drawn a second
-/// time in a canvas of its own, one that inherits the outer canvas's whole
-/// context, and that canvas is placed back exactly where the element was. The
-/// copy left behind draws no ink.
+/// lands on a `box`, never on a path — so the element is drawn a second time in
+/// a canvas of its own, one that inherits the outer canvas's whole context, and
+/// that canvas is placed back exactly where the element was. The copy left
+/// behind draws no ink.
 ///
 /// *What it knows about CeTZ.* As little as it can. Nothing is hard-wired: the
 /// surface is `dictionary(cetz.draw)`, so whatever that CeTZ draws with is
@@ -53,15 +48,20 @@
 /// moved on says which name went missing instead of drawing something subtly
 /// wrong. Versions are not gated: `tested` only names what has actually been
 /// put through `test.typ` beside this file.
-// Once vit is published, replace the next line with #import "@preview/vit:0.1.0" as _vit
-#import "../../lib.typ" as _vit
+// Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as tween
+#import "../tween/lib.typ" as tween
+
+/// `tween`'s own, passed through so that one import does: the stylesheet and
+/// the runtime as strings, and `host`, which an HTML document says once around
+/// its body — a canvas is laid out as paper, and `target()` cannot report from
+/// in there which document it is.
+#let (css, js, host) = (tween.css, tween.js, tween.host)
 
 /// N values of one argument: the element is drawn once per value, and the
-/// results are its states, stepped with `→` / `←` like any other element
-/// animation.
+/// results are its states.
 ///
 /// ```typ
-/// circle((over(-2, 0, 2), 1), radius: over(.3, .6, .3), key: "ball")
+/// circle((over(-2, 0, 2), 1), radius: over(.3, .6, .3))
 /// ```
 ///
 /// Every `over` in one call is walked in step (a shorter one holds its last
@@ -79,23 +79,23 @@
   /// The values, one per state.
   /// -> any
   ..vals,
-) = (vt-over: vals.pos())
+) = (tween-over: vals.pos())
 
-#let _over(v) = type(v) == dictionary and "vt-over" in v
+#let _over(v) = type(v) == dictionary and "tween-over" in v
 #let _has(v) = {
   if _over(v) { true } else if type(v) == array { v.any(_has) } else if type(v) == dictionary {
     v.values().any(_has)
   } else { false }
 }
 #let _count(v) = {
-  if _over(v) { v.vt-over.len() } else if type(v) == array {
+  if _over(v) { v.tween-over.len() } else if type(v) == array {
     v.fold(1, (n, x) => calc.max(n, _count(x)))
   } else if type(v) == dictionary {
     v.values().fold(1, (n, x) => calc.max(n, _count(x)))
   } else { 1 }
 }
 #let _pick(v, i) = {
-  if _over(v) { v.vt-over.at(calc.min(i, v.vt-over.len() - 1)) } else if type(v) == array {
+  if _over(v) { v.tween-over.at(calc.min(i, v.tween-over.len() - 1)) } else if type(v) == array {
     v.map(x => _pick(x, i))
   } else if type(v) == dictionary {
     let o = (:)
@@ -106,7 +106,7 @@
 
 /// Everything this calls in the CeTZ it is given, by module — the whole of
 /// what a CeTZ has to still have. All of it is exported (`draw`, and the
-/// utilities CeTZ's own `lib.typ` exposes); `keyed` checks for it and names
+/// utilities CeTZ's own `lib.typ` exposes); `tweened` checks for it and names
 /// what is gone, rather than failing somewhere inside a canvas or, worse,
 /// placing something a hair off.
 /// -> dictionary
@@ -125,28 +125,19 @@
 /// -> array
 #let tested = (4, 5)
 
-/// CeTZ's drawing surface, keyed. Give it the CeTZ module the deck draws
-/// with — the module itself, not `cetz.draw` — and it gives back everything
-/// `cetz.draw` has, with the element functions taking two arguments more:
+/// CeTZ's drawing surface, with states. Give it the CeTZ module your document
+/// draws with — the module itself, not `cetz.draw` — and it gives back
+/// everything `cetz.draw` has, taking `over(a, b, …)` in place of any argument:
+/// that, and only that, is what makes a call N states of one element. Without
+/// it the function is CeTZ's own and costs nothing.
 ///
-/// / key: the name this element travels under (letters, digits, `_` and `-`,
-///   as in `mark`), or `auto` for the element's own `name`. Same key on the
-///   next page and the browser interpolates one into the other. Without a key
-///   the function is CeTZ's own, and costs nothing.
-/// / transition: this element's own enter/leave effect, as in
-///   `mark(transition:)`, for when it is on one page and not the other.
-///
-/// Everything is wrapped, because what draws is not a list to keep in step
-/// with CeTZ: a `key` is what makes a call an element, and a call that takes
-/// one without drawing anything says so.
-///
-/// An argument may be `over(a, b, …)` instead of a value, which makes the call
-/// N states of one element; the result also carries three names of its own:
-/// `over`, `states` — for an element animation several elements wide — and
-/// `canvas` (CeTZ's, re-exported, so that one binding does).
+/// The surface is wrapped whole rather than kept as a list of shapes in step
+/// with CeTZ. It carries three names of its own: `over`, `states` — for states
+/// several elements wide — and `canvas` (CeTZ's, re-exported, so that one
+/// binding does).
 /// -> dictionary
-#let keyed(
-  /// The CeTZ module, imported by the deck: `#import "@preview/cetz:0.4.1"`.
+#let tweened(
+  /// The CeTZ module, as your document imports it: `#import "@preview/cetz:0.4.1"`.
   /// -> module
   cetz,
 ) = {
@@ -154,7 +145,7 @@
   let gone = needs.cetz.filter(k => k not in m)
   assert(
     gone.len() == 0,
-    message: "keyed() takes the cetz module itself — #import \"@preview/cetz:0.4.1\" — and this has no " + gone.join(", no "),
+    message: "tweened() takes the cetz module itself — #import \"@preview/cetz:0.4.1\" — and this has no " + gone.join(", no "),
   )
   for (mod, names) in needs {
     if mod == "cetz" { continue }
@@ -167,7 +158,7 @@
           + repr(cetz.version)
           + " has no "
           + gone.join(" and no ")
-          + ", which is what vit-cetz measures and places a keyed element with; it has been tested against 0."
+          + ", which is what tween-cetz measures and places an element's states with; it has been tested against 0."
           + tested.map(str).join(", 0.")
       ),
     )
@@ -175,12 +166,12 @@
   let d = cetz.draw
   let has = dictionary(d)
 
-  // One element, or one body, made into a mark: measured in the outer canvas,
-  // drawn again in a canvas of its own, and placed back where it was.
-  let marked(key, transition, states) = d.get-ctx(ctx => {
+  // The states of one element: measured in the outer canvas, each drawn again
+  // in a canvas of its own, and the stack placed back where the element was.
+  let stated(states) = d.get-ctx(ctx => {
     assert(
       "length" in ctx and "transform" in ctx,
-      message: "cetz " + repr(cetz.version) + " sets up a canvas context vit-cetz does not recognise",
+      message: "cetz " + repr(cetz.version) + " sets up a canvas context tween-cetz does not recognise",
     )
     // The box: what every state draws, in the space the drawables already live
     // in. Measured, not drawn — a group's border anchors would do, but they are
@@ -190,7 +181,7 @@
       .filter(b => b != none)
     assert(
       bs.len() > 0,
-      message: "a keyed element has to draw something: \"" + key + "\" has no box, so it has nowhere to travel from",
+      message: "an element with states has to draw something, and this one draws nothing at all",
     )
     let lo = range(2).map(i => calc.min(..bs.map(b => calc.min(b.low.at(i), b.high.at(i)))))
     let hi = range(2).map(i => calc.max(..bs.map(b => calc.max(b.low.at(i), b.high.at(i)))))
@@ -231,35 +222,21 @@
         padding: 0,
         frame: none,
         auto-scale: false,
-        _vit.mark(key, transition: transition, ..states.map(inner)),
+        tween.tween(..states.map(inner)),
       )
     })
   })
 
   let wrap(f) = (..args) => {
     let named = args.named()
-    if "key" not in named {
-      // CeTZ's own function, untouched — but states without a name are a typo,
-      // and an over() left in an argument would otherwise be drawn as a value
-      assert(
-        not _has(args.pos()) and not _has(named),
-        message: "over() needs a key: — the states are one object under different numbers, and the object has to be named",
-      )
-      return f(..args)
-    }
-    let key = named.remove("key")
-    let transition = named.remove("transition", default: none)
-    if key == auto {
-      key = named.at("name", default: none)
-      assert(key != none, message: "key: auto takes the element's name:, and this element has none")
-    }
+    if not _has(args.pos()) and not _has(named) { return f(..args) }
     let n = calc.max(_count(args.pos()), _count(named))
     let state(i) = {
       let nm = (:)
       for (k, v) in named { nm.insert(k, _pick(v, i)) }
       f(..args.pos().map(v => _pick(v, i)), ..nm)
     }
-    marked(key, transition, range(n).map(state))
+    stated(range(n).map(state))
   }
 
   let surface = (:)
@@ -268,12 +245,11 @@
   }
   surface + (
     over: over,
-    /// Several bodies, several states of one drawing, stepped with `→` / `←`
-    /// like any other element animation. Write a function of the parameter and
-    /// feed it values, exactly as `mark(key, s0, s1, …)` wants:
+    /// Several bodies, several states of one drawing. Write a function of the
+    /// parameter and feed it values:
     ///
     /// ```typ
-    /// states("pen", ..range(4).map(k => {
+    /// states(..range(4).map(k => {
     ///   line((0, 0), (k, 1.5))
     ///   circle((k, 1.5), radius: .2)
     /// }))
@@ -283,7 +259,7 @@
     /// under different numbers by construction — same structure, same number of
     /// elements, only the numbers differ, which is what the browser needs to
     /// interpolate rather than cross-fade. The PDF shows the last one.
-    states: (key, transition: none, ..bodies) => marked(key, transition, bodies.pos()),
+    states: (..bodies) => stated(bodies.pos()),
     canvas: cetz.canvas,
   )
 }
