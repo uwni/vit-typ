@@ -367,12 +367,12 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.evaluate(W => { window.__W = W; }, W);
   const st = () => p.evaluate(() => {
     const s = document.querySelector('.vt-slide.is-active');
-    const gs = [...s.querySelectorAll('[data-vt-state]')];
+    const gs = [...s.querySelectorAll('[data-tween-at]')];
     const shown = gs.filter(g => getComputedStyle(g).display !== 'none');
     const ball = shown.length ? [...shown[0].querySelectorAll('path')].find(q => q.getAttribute('fill') !== 'none') : null;
     const r = ball && ball.getBoundingClientRect();
     return {
-      shown: shown.map(g => g.dataset.vtAt).join(','),
+      shown: shown.map(g => g.dataset.tweenAt).join(','),
       step: window.vit.step + '/' + window.vit.steps, hash: location.hash,
       running: s.getAnimations({ subtree: true }).filter(a => a.playState === 'running').length,
       ball: r ? [+(r.x + r.width / 2).toFixed(1), +(r.y + r.height / 2).toFixed(1)] : null,
@@ -410,7 +410,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
      previews that step and leaving restores; clicking a dot opens exactly that step */
   await p.evaluate(() => window.vit.go(3)); await p.waitForTimeout(900);
   await p.keyboard.press('o'); await p.waitForTimeout(900);
-  const thumb = () => p.evaluate(() => { const s = document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide.is-thumb'); return [...s.querySelectorAll('[data-vt-state]')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.dataset.vtAt).join(); });
+  const thumb = () => p.evaluate(() => { const s = document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide.is-thumb'); return [...s.querySelectorAll('[data-tween-at]')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.dataset.tweenAt).join(); });
   const dot = (await p.$$(`.vt-group:nth-child(${W}) .vt-dots i`))[2];
   const t0 = await thumb(); await dot.hover(); await p.waitForTimeout(100); const t1 = await thumb();
   await p.mouse.move(10, 10); await p.waitForTimeout(100); const t2 = await thumb();
@@ -586,7 +586,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
     return p.evaluate(async () => {
       const s = document.querySelector('.vt-slide.is-active');
       const anims = s.getAnimations({ subtree: true });
-      const paths = [...s.querySelector('[data-vt-state="clef"][data-vt-at="0"]').querySelectorAll('path')];
+      const paths = [...s.querySelector('[data-tween="clef"] [data-tween-at="0"]').querySelectorAll('path')];
       /* found by what they are, not by where they sit: the pen is the only
          filled path, a piece of the trail is one whose dash pattern animates */
       const pen = paths.find(q => (q.getAttribute('fill') || 'none') !== 'none');

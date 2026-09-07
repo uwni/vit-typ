@@ -1,0 +1,9 @@
+/* The states of one drawing are stacked in one place: only the first shows,
+   the rest are data, and the runtime swaps which one shows on every step
+   (an inline display overrides these two rules). */
+[data-tween-at] {
+  display: none;
+}
+[data-tween-at="0"] {
+  display: inline;
+}

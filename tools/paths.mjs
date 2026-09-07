@@ -5,7 +5,7 @@
    padding at Z / M / the end, and what cannot be aligned (an arc, a subpath
    count). Run: node tools/paths.mjs */
 import { readFileSync } from 'node:fs';
-const P = new Function(readFileSync(new URL('../paths.js', import.meta.url), 'utf8') + '; return vtPaths;')();
+const P = new Function(readFileSync(new URL('../packages/tween/paths.js', import.meta.url), 'utf8') + '; return tweenPaths;')();
 const d = s => 'path("' + s + '")';
 
 const CASES = [

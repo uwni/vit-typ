@@ -66,6 +66,9 @@
 /// `view-transition-class` on a mark. The presenter's speed keys still divide
 /// every duration, whoever wrote it.
 /// -> array
+// Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as tween
+#import "packages/tween/lib.typ" as tween
+
 #let transitions = ("fade", "slide", "rise", "zoom", "wipe-left", "wipe-right", "wipe-up", "wipe-down", "none")
 
 /// The package's version, read from the manifest so there is one place to bump
@@ -388,14 +391,13 @@
     [#metadata((key: key, transition: _types(fx), sets: _bundles(fx)))<vt-mark>]
   }
   if s.len() == 1 { [#meta#box(s.first())#lbl] } else {
-    context if _target.get() == "html" {
-      [#meta#box({
-          [#box(s.first())#label("vt-" + key + "@0")]
-          for (i, x) in s.enumerate().slice(1) {
-            place(top + left, [#box(x)#label("vt-" + key + "@" + str(i))])
-          }
-        })#lbl]
-    } else { [#meta#box(if key in _anim.get() { s.first() } else { s.last() })#lbl] }
+    context [#meta#box(tween.tween(
+        ..s,
+        name: key,
+        // the PDF shows the finished drawing, or the first state for one that
+        // is played continuously — that is the page at rest
+        still: if key in _anim.get() { 0 } else { -1 },
+      ))#lbl]
   }
 }
 
@@ -522,10 +524,12 @@
           + ";--vt-easing:cubic-bezier("
           + easing.map(str).join(", ")
           + ")}\n"
+          + tween.css
           + read("deck.css")
           + _sets(fx)
           + marks.css,
       )
+      tween.html-target.update(true)
       html.elem(
         "div",
         attrs: (
@@ -540,7 +544,7 @@
       )
       html.elem("script", "const vtMarks = " + json.encode(marks.table) + ";")
       html.script(read("hoist.js"))
-      html.script(read("paths.js"))
+      html.script(tween.js)
       html.script(read("runtime.js"))
     } else { body }
   }

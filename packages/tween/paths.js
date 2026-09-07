@@ -1,4 +1,4 @@
-/* ── vit · path data ────────────────────────────────────────────────
+/* ── tween · path data ────────────────────────────────────────────────
    Two states whose paths are not the same list of commands. Two path()
    values interpolate only if they are the same list of commands (CSS
    Shapes); otherwise the shape snaps at the midpoint while the transform
@@ -46,7 +46,7 @@
    Pure functions of strings, no DOM: tools/paths.mjs runs them under Node
    against a table of cases. */
 
-var vtPaths = (function () {
+var tweenPaths = (function () {
   "use strict";
 
   var ARITY = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 };

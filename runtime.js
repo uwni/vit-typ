@@ -27,7 +27,6 @@
 
   /* deck(duration:), deck(easing:) — the Typst side decides every default, this side only reads */
   var defaultMs, EASING;
-  function bezier(e) { return "cubic-bezier(" + e.join(", ") + ")"; }
 
   /* Speed multiplier adjustable while presenting: `-` slower, `=` faster, `0`
      reset. Remembered in localStorage. deck(duration:) and a transition's own
@@ -55,7 +54,6 @@
 
   var reduced, prefersLight, canVT;
   var mirror = window.name === "vt-mirror";   // a preview inside the desk or the speaker view: it presents, and builds no chrome
-  var STATE = "[data-vt-state]";   // one state of an element animation, as hoist.js marks it
 
   function clamp(i) { return i < 0 ? 0 : i > n - 1 ? n - 1 : i; }
   function at(i) { return slides[i].vtAt || 0; }
@@ -363,8 +361,9 @@
   }
 
   /* ── element animation (mark(key, s0, s1, …)) ────────────────────────
-     The N states of a mark are N sibling <g data-vt-state="key" data-vt-at="i"> in the
-     SVG: the same drawing under different parameters, identical structure, only
+     The N states of a mark are N boxes stacked in one container, which tween
+     writes as <g data-tween="key"> around <g data-tween-at="i">: the same
+     drawing under different parameters, identical structure, only
      the numbers differ. Exactly one is shown at any time. One step = show a
      different one, and animate every node of the new state from the value of
      the corresponding node in the old state to its own — transform, the path's
@@ -377,29 +376,15 @@
 
   function stepsOf(s) {
     if (s.vtSteps) return s.vtSteps;
-    var marks = [], m = null, spec = animSpec(s);
-    /* Scan in document order and start a new mark at every state 0, so the same
-       key twice on one frame stays two marks. States nested inside states are
-       not supported — inner ones count as ordinary nodes (hoist leaves them too). */
-    Array.prototype.forEach.call(s.querySelectorAll(STATE), function (g) {
-      if (g.parentNode.closest(STATE)) return;
-      var i = +g.dataset.vtAt;
-      if (i === 0 || !m) marks.push(m = { key: g.dataset.vtState, states: [] });
-      m.states[i] = g;
+    var spec = animSpec(s);
+    /* One container is one mark, so the same key twice on a frame stays two of
+       them; a drawing inside a state is an ordinary node, not a mark. */
+    var marks = tween.boxes(s).map(function (box) {
+      return { key: box.dataset.tween, states: tween.states(box) };
     });
-    var all = function (g) { return Array.prototype.slice.call(g.querySelectorAll("*")); };
     var steps = 0;
     marks.forEach(function (m) {
-      m.states = m.states.filter(Boolean);
-      m.nodes = m.states.map(all);
-      var ok = m.nodes.every(function (list) {
-        return list.length === m.nodes[0].length &&
-          list.every(function (el, q) { return el.tagName === m.nodes[0][q].tagName; });
-      });
-      if (!ok) {
-        console.info("[vit] the states of " + m.key + " differ in structure (node count or types); they cross-fade instead of morphing");
-        m.nodes = null;
-      }
+      m.nodes = tween.nodes(m.states, m.key);
       /* a mark named in slide(anim:) lends its states to the continuous animation and is not stepped */
       m.anim = m.key in spec && fromStates(spec[m.key]);
       if (!m.anim) steps = Math.max(steps, m.states.length - 1);
@@ -407,132 +392,20 @@
     return (s.vtSteps = { marks: marks, n: steps });
   }
 
-  /* The attributes compared node by node. Whether one changed is decided on the
-     attribute string — the states come from the same code, equal string means
-     unchanged. The table maps SVG attribute name → the same property's name in
-     the CSSOM / in keyframes (keyframes only accept the IDL name;
-     "stroke-width" is silently dropped). */
-  var PROPS = {
-    d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
-    "stroke-dasharray": "strokeDasharray", "stroke-dashoffset": "strokeDashoffset",
-    opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
-    x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry"
-  };
+  /* A step's animations are the deck's to cancel when the next one starts; a
+     continuous one plays and pauses with the frame. The browser keeps both —
+     they are asked for by role — and what it cannot keep stays here: the
+     clean-ups a cross-fade owes, and the callbacks that re-measure a track. */
+  var STEP = "vit:step", ANIM = "vit:anim";
 
-  /* What differs across the nodes in list (same position in each state):
-     `props`, the attributes in PROPS that are not all equal, and `other`, true
-     if anything else differs (a glyph's href, say) — something that cannot be
-     interpolated and is cross-faded instead. */
-  function changed(list) {
-    var first = list[0], props = [], other = false, a, k, attr;
-    for (a in PROPS) {
-      var v = first.getAttribute(a);
-      for (k = 1; k < list.length; k++) if (list[k].getAttribute(a) !== v) { props.push(a); break; }
-    }
-    for (k = 1; k < list.length && !other; k++) {
-      var el = list[k];
-      if (el.attributes.length !== first.attributes.length) { other = true; break; }
-      for (var q = 0; q < el.attributes.length; q++) {
-        attr = el.attributes[q];
-        if (PROPS[attr.name] || attr.name === "style") continue;
-        if (first.getAttribute(attr.name) !== attr.value) { other = true; break; }
-      }
-    }
-    return { props: props, other: other };
-  }
-  /* Current values of these attributes on node el, in keyframe form. Values
-     are never parsed by hand: the browser has already turned the presentation
-     attributes into CSS properties, and getComputedStyle gives CSS syntax — d
-     as path(), x with px, defaults filled in, fill inherited. transform is the
-     exception: the computed value is not the attribute (Blink resolves it to
-     none for an element without a box, WebKit does not map the attribute into
-     it at all), so it is read from the SVG DOM, see transformOf. Read fresh
-     every time — a computed value is what the node shows now, so every
-     caller reads at rest: stepTo halts the frame's animations first, and a
-     mark played continuously is never stepped. A property the browser does
-     not have (d in Safari before 27) is left out; that one then switches
-     instead of interpolating. */
-  function values(el, attrs, kf) {
-    var cs = null;
-    attrs.forEach(function (a) {
-      var p = PROPS[a], v;
-      if (a === "transform") v = transformOf(el);
-      else { cs = cs || getComputedStyle(el); v = cs[p]; }
-      if (typeof v === "string" && v !== "") kf[p] = v;
-    });
-    return kf;
-  }
-  /* The element's own transform — the transform attribute as the SVG DOM
-     parsed it, the list multiplied left to right, which is the value a CSS
-     transform on the element replaces. tools/ui.mjs checks it against the
-     browser's own composition (getCTM). */
-  function transformOf(el) {
-    var list = el.transform.baseVal, m = new DOMMatrix();
-    for (var i = 0; i < list.numberOfItems; i++) m.multiplySelf(list.getItem(i).matrix);
-    return m.toString();
-  }
-
-  /* Every animation goes through here: Web Animations, with the options as
-     the Typst side writes them — duration and delay in ms, iterations (null:
-     without end), direction, easing as the four numbers of a cubic Bézier. */
-  function animate(el, frames, o) {
-    return el.animate(frames, {
-      duration: o.duration, delay: o.delay, direction: o.direction,
-      iterations: o.iterations == null ? Infinity : o.iterations,
-      easing: bezier(o.easing)
-    });
-  }
-  /* ── keyframes that the browser would not interpolate, made interpolable ──
-     Every rewrite here keeps the picture of each state and only changes how it
-     is written, so that two states become the same kind of value. Returns
-     false when a path could not be aligned; that node is cross-faded. */
-  function settle(frames) {
-    /* fill / stroke: `none` against a colour is a discrete switch. `transparent`
-       paints the same nothing, and colours interpolate premultiplied, so the
-       paint fades in without passing through black. */
-    ["fill", "stroke"].forEach(function (k) {
-      if (!(k in frames[0])) return;
-      var some = frames.some(function (f) { return f[k] !== "none"; });
-      if (some) frames.forEach(function (f) { if (f[k] === "none") f[k] = "transparent"; });
-    });
-    /* d: two states whose paths are not the same list of commands are reconciled by paths.js */
-    if (!("d" in frames[0])) return true;
-    var ds = vtPaths.align(frames.map(function (f) { return f.d; }));
-    if (!ds) return false;
-    frames.forEach(function (f, k) { f.d = ds[k]; });
-    return true;
-  }
-
-  /* Said once per mark: something in it cross-fades instead of morphing. */
-  function note(m, what) {
-    if (m.noted) return;
-    m.noted = true;
-    console.info("[vit] " + m.key + ": " + what + " cannot be interpolated and cross-fades instead.");
-  }
-
-  /* ── cross-fade: for what has no in-between ───────────────────────────
-     A glyph that changes, a path that cannot be aligned, or states of a
-     different structure altogether have no interpolable value. The old is kept
-     on stage and fades out while the new fades in — the same answer View
-     Transitions give at page level, with the same blending: plus-lighter
-     inside an isolated group, so a pixel both draw alike stays exactly as it
-     is instead of dimming halfway. `olds` are nodes of the old state that stay
-     visible while the rest of it is hidden; without them the whole old state
-     fades. Everything is undone by `undo`. */
-  function crossfade(s, host, oldG, newG, olds, news, timing) {
-    var cleanup = [];
-    var set = function (el, prop, v) { var was = el.style[prop]; el.style[prop] = v; cleanup.push(function () { el.style[prop] = was; }); };
-    set(host, "isolation", "isolate");
-    set(oldG, "display", "inline");
-    set(oldG, "mixBlendMode", "plus-lighter");
-    set(newG, "mixBlendMode", "plus-lighter");
-    var out = olds || [oldG], inn = news || [newG];
-    if (olds) { set(oldG, "visibility", "hidden"); olds.forEach(function (el) { set(el, "visibility", "visible"); }); }
-    out.forEach(function (el) { s.vtRun.push(animate(el, [{ opacity: 1 }, { opacity: 0 }], timing)); });
-    inn.forEach(function (el) { s.vtRun.push(animate(el, [{ opacity: 0 }, { opacity: 1 }], timing)); });
-    var undo = function () { cleanup.forEach(function (f) { f(); }); cleanup = []; };
-    s.vtUndo.push(undo);
-    s.vtRun[s.vtRun.length - 1].finished.then(undo, undo);
+  /* the engine returns the animations and the undo; the frame keeps the undo,
+     so that halt() can put back what a cancelled cross-fade changed */
+  function fade(s, host, oldG, newG, olds, news, timing) {
+    var r = tween.crossfade(host, oldG, newG, olds, news, timing);
+    r.anims.forEach(function (a) { a.id = STEP; });
+    (s.vtUndo = s.vtUndo || []).push(r.undo);
+    r.anims[r.anims.length - 1].finished.then(r.undo, r.undo);
+    return r.anims;
   }
 
   function stepTo(s, k, instant) {
@@ -541,7 +414,7 @@
     if (k === from) return;
     s.vtAt = k;
     halt(s);
-    var ran = s.vtRun.length;
+    var mine = [];
     var live = !instant && !reduced.matches;
     st.marks.forEach(function (m) {
       if (m.anim) return;
@@ -549,29 +422,25 @@
       m.states.forEach(function (g, i) { g.style.display = i === b ? "inline" : "none"; });
       if (a === b || !live) return;
       var timing = { duration: durMs(defaultMs), delay: 0, iterations: 1, direction: "normal", easing: EASING }, host = m.states[b].closest(".vt-mark") || s;
-      if (!m.nodes) { crossfade(s, host, m.states[a], m.states[b], null, null, timing); return; }
+      if (!m.nodes) { mine = mine.concat(fade(s, host, m.states[a], m.states[b], null, null, timing)); return; }
       /* Each node of the new state animates from the value of its counterpart in
          the old state to its own; the end is the node's own attribute, so it
          lands there by itself and nothing has to be committed. What has no
          in-between is collected and cross-faded. */
       var olds = [], news = [];
       m.nodes[b].forEach(function (el, j) {
-        var old = m.nodes[a][j], diff = changed([old, el]), fade = diff.other;
-        if (diff.props.length) {
-          var frames = [values(old, diff.props, {}), values(el, diff.props, {})];
-          if (!settle(frames)) { fade = true; delete frames[0].d; delete frames[1].d; note(m, "a path"); }
-          if (Object.keys(frames[0]).length) s.vtRun.push(animate(el, frames, timing));
-        }
-        if (fade) { olds.push(old); news.push(el); }
+        var old = m.nodes[a][j], f = tween.frames([old, el], m.key);
+        if (f.frames) mine.push(waapi.animate(el, f.frames, timing, STEP));
+        if (f.fade) { olds.push(old); news.push(el); }
       });
-      if (olds.length) crossfade(s, host, m.states[a], m.states[b], olds, news, timing);
+      if (olds.length) mine = mine.concat(fade(s, host, m.states[a], m.states[b], olds, news, timing));
     });
     /* instant moves (landing, previews, thumbnails) are not "a step taken", so
        they don't announce; the caller's stage() does */
     if (!instant && s === slides[cur]) {
       announce();
-      var mine = s.vtRun.slice(ran).map(function (a) { return a.finished.catch(function () { }); });
-      if (mine.length) Promise.all(mine).then(function () { moveDone(cur); });
+      var done = mine.map(function (a) { return a.finished.catch(function () { }); });
+      if (done.length) Promise.all(done).then(function () { moveDone(cur); });
       else moveDone(cur);
     }
   }
@@ -579,9 +448,8 @@
   /* Cut a running step short — the new state already rests on its own
      attributes, so cancelling is jumping to the end. */
   function halt(s) {
-    (s.vtRun || []).forEach(function (a) { a.cancel(); });
+    waapi.of(s, STEP).forEach(function (a) { a.cancel(); });
     (s.vtUndo || []).forEach(function (f) { f(); });
-    s.vtRun = [];
     s.vtUndo = [];
   }
 
@@ -606,60 +474,38 @@
   function fromStates(o) { return !o.keyframes && !o.follow; }
 
   function prepare(s) {
-    if (!s.vtAnims) {
-      s.vtAnims = [];
+    if (!s.vtPrepared) {
+      s.vtPrepared = true;
+      s.vtFit = [];
       var spec = animSpec(s);
       Object.keys(spec).forEach(function (key) {
         var o = spec[key], el = s.querySelector('.vt-mark[data-vt-key="' + key + '"]');
         if (!el) { console.warn("[vit] anim: no mark " + key + " on this frame"); return; }
-        var keep = function (a, fit) { a.pause(); s.vtAnims.push({ a: a, fit: fit }); };
+        var keep = function (a, fit) { a.pause(); if (fit) s.vtFit.push(fit); };
         if (fromStates(o)) {
           var m = stepsOf(s).marks.filter(function (m) { return m.key === key; })[0];
           if (!m || !m.nodes) { console.warn("[vit] anim: " + key + " has no keyframes, no follow and no states to play"); return; }
           m.nodes[0].forEach(function (node, j) {
-            var column = m.nodes.map(function (list) { return list[j]; }), diff = changed(column);
-            if (!diff.props.length) return;
-            var frames = column.map(function (el) { return values(el, diff.props, {}); });
-            if (!settle(frames)) console.warn("[vit] anim: a path of " + key + " differs in structure between states and cannot be aligned; it will switch between keyframes");
-            keep(animate(node, frames, o));
+            var f = tween.frames(m.nodes.map(function (list) { return list[j]; }), key);
+            if (f.frames) keep(waapi.animate(node, f.frames, o, ANIM));
           });
         } else if (o.follow) {
           var track = s.querySelector('.vt-mark[data-vt-key="' + o.follow + '"] path');
           if (!track) { console.warn("[vit] anim: " + key + " should follow " + o.follow + ", but this frame has no such mark or it has no path"); return; }
-          el.style.offsetRotate = o.orient ? "auto" : "0deg";
-          /* Chrome resolves path() coordinates against the element's own box, the
-             spec against the containing block, and offset-position cannot fix it.
-             Move the element to the containing block's origin and the two
-             readings coincide; it starts at 0% anyway, the rest position is moot. */
-          el.style.left = el.style.top = "0";
-          keep(animate(el, [{ offsetDistance: "0%" }, { offsetDistance: "100%" }], o),
-            function () { el.style.offsetPath = pathIn(track); });
-        } else keep(animate(el, o.keyframes, o));
+          /* the deck is the containing block a follow track is measured in */
+          var run = waapi.follow(el, track, Object.assign({ role: ANIM }, o), deck);
+          keep(run.anim, run.fit);
+        } else keep(waapi.animate(el, o.keyframes, o, ANIM));
       });
     }
-    s.vtAnims.forEach(function (x) { if (x.fit) x.fit(); });
+    s.vtFit.forEach(function (f) { f(); });
   }
 
-  /* Sample a path into a polyline in deck coordinates (px). The containing
-     block is .vt-page, which shares the deck's box. */
-  function pathIn(path) {
-    var m = path.getScreenCTM(), r = deck.getBoundingClientRect();
-    if (!m) return "none";
-    var L = path.getTotalLength(), N = 240, d = [];
-    for (var i = 0; i <= N; i++) {
-      /* Typst's d starts with "M 0 0 m …": an empty subpath at the origin, where
-         getPointAtLength(0) would land. Start sampling a hair further in. */
-      var q = path.getPointAtLength(i ? L * i / N : Math.min(L, 0.01)).matrixTransform(m);
-      d.push((i ? "L" : "M") + (q.x - r.left).toFixed(1) + " " + (q.y - r.top).toFixed(1));
-    }
-    return 'path("' + d.join("") + '")';
-  }
-
-  function still(s) { (s.vtAnims || []).forEach(function (x) { x.a.pause(); }); }
+  function still(s) { waapi.of(s, ANIM).forEach(function (a) { a.pause(); }); }
   function play() {
     var s = slides[cur];
-    if (!s.vtAnims || reduced.matches || over() || atDesk()) return;
-    s.vtAnims.forEach(function (x) { x.a.play(); });
+    if (!s.vtPrepared || reduced.matches || over() || atDesk()) return;
+    waapi.of(s, ANIM).forEach(function (a) { a.play(); });
   }
   /* ── transition ──────────────────────────────────────────────────────
      types are this transition's types (["enter-slide", "leave-fade", "back"],
@@ -1333,7 +1179,7 @@
     sweep();
     /* a follow track is in deck px: refit it when the deck's box changes (observing reports the current box at once, hence after paint) */
     new ResizeObserver(function () {
-      (slides[cur].vtAnims || []).forEach(function (x) { if (x.fit) x.fit(); });
+      (slides[cur].vtFit || []).forEach(function (f) { f(); });
     }).observe(deck);
     window.vit = {
       go: go, next: next, prev: prev,

@@ -91,11 +91,20 @@ rendering is Typst's own and independent of installed fonts. The PDF and the
 HTML compiled from one source are compared pixel by pixel by `tools/verify.mjs`;
 what remains is anti-aliasing of two rasterisers.
 
+**Where the motion lives.** Element animation is not the deck's:
+`packages/tween` is N states of one drawing and the browser between them, with
+no notion of pages — it writes its own label grammar (`tween:name` on the
+container, `tween@i` on each state), derives the keyframes, and hands them to
+`waapi`, a binding that keeps no registry of its own because
+`getAnimations({ subtree: true })` is one. The deck is a host: it decides *when*
+to step, because a step is one of its positions, and it marks its animations
+`vit:step` or `vit:anim` so it can find them again.
+
 **Path reconciliation.** Two states are interpolated node by node, and the
 browser interpolates two paths only if they are the same list of commands.
 Typst's exporter writes the same drawing differently depending on where its
 points lie (a leading empty subpath, `h`/`v` for a segment that happens to be
-axis-aligned), so `paths.js` reconciles them:
+axis-aligned), so tween's `paths.js` reconciles them:
 
 - The browser interpolates two paths only if they are the same list of
   commands, and Typst's exporter writes the same drawing differently depending

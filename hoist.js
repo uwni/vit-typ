@@ -20,32 +20,15 @@
 
    var NS = "http://www.w3.org/2000/svg";
    var PREFIX = "vt-";
-   var tagged = false;
 
-   /* The label grammar is read here and nowhere else; the runtime and the CSS
-      see attributes: vt-key → data-vt-key on the host, vt-key@i →
-      data-vt-state / data-vt-at on the state <g>. What a mark declares about
-      itself is not in the label: the Typst side writes it into vtMarks, by key.
-
-      Not lazy like the lifting: the runtime counts every page's steps from
-      these before it shows anything. */
-   function tag() {
-      if (tagged) return;
-      tagged = true;
-      document.querySelectorAll("[data-typst-label]").forEach(function (g) {
-         var l = g.getAttribute("data-typst-label");
-         if (l.slice(0, PREFIX.length) !== PREFIX) return;    // leave the author's own labels alone
-         var at = l.lastIndexOf("@");
-         if (at < 0) return;
-         g.dataset.vtState = l.slice(PREFIX.length, at);
-         g.dataset.vtAt = l.slice(at + 1);
-      });
-   }
+   /* The label grammar for a mark is read here and nowhere else: vt-key on the
+      <g> becomes data-vt-key on the host. What a mark declares about itself is
+      not in the label — the Typst side writes it into vtMarks, by key. The
+      states inside it are tween's, with a grammar of their own. */
 
    /* True only when it did the work, so the caller knows to name the hosts. */
    window.vtLift = function (slide) {
       if (!slide || slide.dataset.vtLifted) return false;
-      tag();
       var page = slide.querySelector(":scope > .vt-page");
       var root = page && page.querySelector("svg");
       if (!root) { slide.dataset.vtLifted = "1"; return false; }
@@ -58,7 +41,7 @@
          the first one, and no other — so that a mark's box does not depend on
          the step the runtime happens to have stepped this frame to. */
       var group = slide.closest(".vt-group");
-      var states = [].slice.call(page.querySelectorAll("[data-vt-state]"));
+      var states = [].slice.call(page.querySelectorAll("[data-tween-at]"));
       var was = [show(slide, "block"), group ? show(group, "block") : null];
       var stateWas = states.map(unstep);
 
@@ -87,11 +70,10 @@
          page.querySelectorAll("[data-typst-label]").forEach(function (g) {
             var l = g.getAttribute("data-typst-label");
             if (l.slice(0, PREFIX.length) !== PREFIX) return;
-            /* The states of an element animation (vt-key@i) and any marks inside them
-               stay put: the runtime pairs the nodes of the states one by one, and one
-               moved away would no longer line up. The outer vt-key is hoisted as usual. */
-            if (l.lastIndexOf("@") >= 0) return;
-            if (g.parentNode.closest("[data-vt-state]")) return;
+            /* A mark inside the states of an element animation stays put: the
+               engine pairs the nodes of the states one by one, and one moved away
+               would no longer line up. */
+            if (g.parentNode.closest("[data-tween-at]")) return;
             var k = l.slice(PREFIX.length);
             (byKey[k] = byKey[k] || []).push(g);
          });

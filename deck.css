@@ -107,15 +107,6 @@ body {
   overflow: visible;
   view-transition-class: vt-mo;
 }
-/* The states of an element animation (mark(key, s0, s1, …)) are stacked in one
-   place: only the first shows, the rest are data, and the runtime swaps which
-   one shows on every step (inline style overrides these two rules). */
-[data-vt-state] {
-  display: none;
-}
-[data-vt-at="0"] {
-  display: inline;
-}
 /* title and speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
 .vt-title,
 .vt-note {
