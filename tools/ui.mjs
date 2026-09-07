@@ -536,40 +536,67 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
     });
   };
   console.log('balls      :', JSON.stringify(await look('#' + BALLS)), '(5 svg host animations, 5 keyframes, delay 0…560)');
-  console.log('clef       :', JSON.stringify(await look('#' + CLEF)), '(one 46-keyframe animation per moving path; 21 paths, of which the pinned rect and the circle on the origin never move, so 19; no steps)');
+  console.log('clef       :', JSON.stringify(await look('#' + CLEF)), '(one 61-keyframe animation per moving path; 71 paths — 60 tail arcs whose paint alone animates, two copies of the outline whose dash pattern animates, 6 circles, the chain, the pen and the pinned rect — of which the rect and the circle on the origin never move, so 69; no steps)');
   console.log('sea        :', JSON.stringify(await look('#' + SEA)), '(one 25-keyframe animation per path; no steps)');
   await p.close();
 }
 
 /* ── keyframes are read from computed style, which only exists while the frame
    is on stage: a page entered from elsewhere must animate exactly like one
-   opened directly (a hidden frame reports transform: none) ─────────── */
+   opened directly (a hidden frame reports transform: none). Both readings seek
+   to the same times, so they are comparable to the pixel. The same probe checks
+   the clef's front — the pen, the end of the ink and the nearest lit arc, all as
+   lengths along the one outline — BETWEEN two states as well as on one, because
+   anything quantised to the arcs lines up on every state and runs past the pen
+   in between. ────────────────────────────────────────────────────── */
 {
+  const probe = async (p, F) => {
+    await p.goto(url + (F == null ? '#' + CLEF : '')); await p.waitForTimeout(800); await present(p);
+    if (F != null) { await p.evaluate(f => window.vit.go(f), F); await p.waitForTimeout(1200); }
+    return p.evaluate(async () => {
+      const s = document.querySelector('.vt-slide.is-active');
+      const anims = s.getAnimations({ subtree: true });
+      const paths = [...s.querySelector('[data-vt-state="clef"][data-vt-at="0"]').querySelectorAll('path')];
+      const dashOf = q => (getComputedStyle(q).strokeDasharray || '').split(',').map(parseFloat);
+      const wOf = q => parseFloat(getComputedStyle(q).strokeWidth) || 0;
+      /* found by what they are, not by where they sit: the three dashed copies of
+         the outline are the pen (the widest, a round cap on a zero-length dash),
+         the ink, and the ink's wrap past the seam; everything else is a tail arc */
+      const dashed = paths.filter(q => dashOf(q).length === 4);
+      const arcs = paths.filter(q => dashOf(q).length !== 4);
+      const out = {};
+      for (const t of [2000, 2050]) {                    // on a state, then half way to the next
+        for (const a of anims) { a.pause(); a.currentTime = t; }
+        await new Promise(r => requestAnimationFrame(r));
+        const dot = dashed.slice().sort((x, y) => wOf(y) - wOf(x))[0];
+        const head = dashed.slice().sort((x, y) => dashOf(y)[2] - dashOf(x)[2])[0];
+        const L = dot.getTotalLength();
+        const at = dot.getPointAtLength(dashOf(dot)[1]).matrixTransform(dot.getScreenCTM());
+        const end = head.getPointAtLength(dashOf(head)[1] + dashOf(head)[2]).matrixTransform(head.getScreenCTM());
+        /* the lit arcs must all stay behind the pen: measure the nearest lit one */
+        let nearest = 1e9;
+        for (const q of arcs) {
+          if (wOf(q) < 1.2) continue;
+          for (const s2 of [0, q.getTotalLength()]) {
+            const z = q.getPointAtLength(s2).matrixTransform(q.getScreenCTM());
+            nearest = Math.min(nearest, Math.hypot(z.x - at.x, z.y - at.y));
+          }
+        }
+        out['t' + t] = { at: { x: +at.x.toFixed(1), y: +at.y.toFixed(1) },
+                         penKeyframes: anims.find(a => a.effect.target === dot).effect.getKeyframes().length,
+                         inkEndsAtPen: +Math.hypot(end.x - at.x, end.y - at.y).toFixed(2),
+                         nearestLitArc: +nearest.toFixed(1), outline: +L.toFixed(0) };
+      }
+      return out;
+    });
+  };
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url); await p.waitForTimeout(800); await present(p);
-  await p.evaluate(F => window.vit.go(F), 37); await p.waitForTimeout(1200);
-  console.log('enter later:', JSON.stringify(await p.evaluate(async () => {
-    const s = document.querySelector('.vt-slide.is-active');
-    const anims = s.getAnimations({ subtree: true });
-    /* the trail's head is the pen: two paths animated independently, so if the
-       keyframes were read while the frame was off stage they would drift apart */
-    const paths = [...s.querySelector('[data-vt-state="clef"][data-vt-at="0"]').querySelectorAll('path')];
-    /* found by what they are, not by where they sit: the pen is the only filled
-       path, the head of the trail the widest stroke */
-    const pen = paths.find(q => (q.getAttribute('fill') || 'none') !== 'none');
-    const head = paths.filter(q => q.getAttribute('stroke-width'))
-                      .sort((x, y) => y.getAttribute('stroke-width') - x.getAttribute('stroke-width'))[0];
-    let worst = 0;
-    for (let i = 0; i < 90; i++) {
-      await new Promise(r => requestAnimationFrame(r));
-      const q = head.getPointAtLength(0.01).matrixTransform(head.getScreenCTM());
-      const c = pen.getBoundingClientRect();
-      worst = Math.max(worst, Math.hypot(q.x - (c.x + c.width / 2), q.y - (c.y + c.height / 2)));
-    }
-    const kf = anims.find(a => a.effect.target === head).effect.getKeyframes();
-    return { headKeyframes: kf.length, animates: Object.keys(kf[0]).filter(k => !['offset', 'computedOffset', 'easing', 'composite'].includes(k)).join(),
-             worstPenGap: +worst.toFixed(2) };
-  })), '(one keyframe per state on transform and d; the trail head never leaves the pen: gap under 1px)');
+  const direct = await probe(p, null);
+  const later = await probe(p, 37);
+  console.log('clef front :', JSON.stringify(direct), '(the ink ends on the pen at both times, under 1px; the nearest lit arc stays a head-length behind, ~60px)');
+  console.log('enter later:', JSON.stringify(later), 'same place:',
+              later.t2000.at.x === direct.t2000.at.x && later.t2000.at.y === direct.t2000.at.y,
+              '(entered from page 37, seeked to the same times: identical to the reading above)');
   await p.close();
 }
 

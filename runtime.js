@@ -376,6 +376,7 @@
      "stroke-width" is silently dropped). */
   var PROPS = {
     d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
+    "stroke-dasharray": "strokeDasharray", "stroke-dashoffset": "strokeDashoffset",
     opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
     x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry"
   };

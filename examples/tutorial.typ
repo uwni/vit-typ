@@ -857,13 +857,15 @@
     (0.1122, -1.2846), (-0.0043, -1.3), (-0.1175, -1.2693), (-0.2013, -1.1876),
     (-0.2299, -1.0751), (-0.1948, -0.9657), (-0.0837, -0.9435), (-0.0039, -1.0236),
   )
-  let M = 75 // harmonics kept
+  let M = 45 // harmonics kept: the fastest turns 28 times a turn, under the S / 2 below
   let C = 6 // epicycle circles drawn
-  let S = 45 // states in one turn
-  let K = 12 // trail chunks
-  let L = 15 // pen samples per chunk; K * L = P, so the trail is the whole turn
-  let P = 180 // pen samples round the turn — the trail's smoothness, independent of S
-  let step = calc.quo(P, S) // a whole number: state j sits on pen sample step * j
+  let S = 60 // states in one turn
+  let P = 180 // pen samples round the outline — how finely it is drawn
+  let step = calc.quo(P, S) // a whole number: state j puts the pen on sample step * j
+  let L = step // pen samples per arc, so every arc ends where some state's pen is
+  let K = calc.quo(P, L) // arcs the outline is cut into
+  let TAIL = 20 // arcs the light reaches back over: the length of the tail
+  let HEADARCS = 3 // the front of the tail, drawn by a dash instead of by arcs
 
   // komet's fft is a WASM plugin: complex in, complex out, run at compile time.
   // Its "backward" normalisation puts no factor on the forward transform, so a
@@ -892,6 +894,22 @@
   }
   let chains = range(S).map(j => chain(2 * calc.pi * j / S))
   let pen = range(P).map(i => chain(2 * calc.pi * i / P).last())
+  // cumulative arc length round the closed outline, in canvas units
+  let arc = {
+    let out = (0.0,)
+    let a = 0.0
+    for i in range(P) {
+      let (x0, y0) = pen.at(i)
+      let (x1, y1) = pen.at(calc.rem(i + 1, P))
+      a += calc.sqrt(calc.pow(x1 - x0, 2) + calc.pow(y1 - y0, 2))
+      out.push(a)
+    }
+    out
+  }
+  let TOTAL = arc.last()
+  let U = 4.20cm // one canvas unit, as a length on the page
+  let HEAD = TOTAL * HEADARCS / K
+  let BIG = 4 * TOTAL
   let epicycles(j) = cetz.canvas(length: 4.20cm, {
     import cetz.draw: circle, line, rect
     // the widest the circles ever reach, over every state: pin it, or the
@@ -901,16 +919,52 @@
     let ch = chains.at(j)
     for i in range(C) { circle(ch.at(i), radius: coef.at(i).r, stroke: 0.4pt + dim.transparentize(48%)) }
     line(..ch, stroke: 0.5pt + hi.transparentize(30%))
-    // the trail: the pen's own past, one stroke per chunk, wrapping the whole
-    // way round — solid just behind the pen, gone by the time it comes back
-    for q in range(K) {
-      let f = 1 - q / (K - 1)
+    // The tail. The pen leaves ink where it passes and the ink fades where it
+    // lies: arc a is the same points in every state, so there is no geometry to
+    // interpolate — the states move the light, not the line. Gone, not removed:
+    // the states of a mark must have the same nodes, so a dead arc stays in the
+    // drawing at zero opacity. The arcs stop HEADARCS short of the pen; the
+    // front is the dash's, below.
+    for a in range(K) {
+      let age = calc.rem(step * j - (a + 1) * L + P * 4, P) / L
+      let f = if age < HEADARCS { 0.0 } else { calc.max(0.0, 1 - (age - HEADARCS) / (TAIL - HEADARCS)) }
       line(
-        ..range(L + 1).map(i => pen.at(calc.rem(step * j - q * L - i + P * 4, P))),
+        ..range(L + 1).map(i => pen.at(calc.rem(a * L + i, P))),
         stroke: (paint: blue.transparentize(100% - 100% * f), thickness: (0.3 + 2.2 * f) * 1pt),
       )
     }
-    circle(pen.at(step * j), radius: 0.035, fill: green, stroke: none)
+    // The front. An arc can only light up whole, so between two states the lit
+    // edge sits still while the pen moves on: it is right on every state and
+    // wrong in between. So the front is not an arc but a dash on one fixed path
+    // — the whole outline — whose ink runs from the pen back HEAD units. Nothing
+    // moves but four numbers, and the edge tracks the pen continuously. The
+    // position goes in the array, not in `phase`: Typst exports `phase` to
+    // stroke-dashoffset without flipping its sign, so the PDF and the browser
+    // would draw it in different places. The second copy carries the part that
+    // runs past the seam, and both stay continuous as the head crosses it.
+    let a = arc.at(step * j)
+    let h = calc.min(a, HEAD)
+    for (start, len) in ((a - h, h), (TOTAL - (HEAD - h), HEAD - h)) {
+      line(
+        ..range(P).map(i => pen.at(i)),
+        close: true,
+        stroke: (paint: blue, thickness: 2.5pt, dash: (array: (0pt, start * U, len * U, BIG * U), phase: 0pt)),
+      )
+    }
+    // The pen. Not a circle placed at a point — a point is a coordinate, and a
+    // coordinate interpolates in a straight line, so between two states it would
+    // cut the corner and leave both the curve and the ink behind. A zero-length
+    // dash with a round cap on the same fixed path is a dot too, and its place
+    // is the same arc length the ink ends at: one number, so the two cannot come
+    // apart.
+    line(
+      ..range(P).map(i => pen.at(i)),
+      close: true,
+      stroke: (
+        paint: green, thickness: 7pt, cap: "round",
+        dash: (array: (0pt, a * U, 0pt, BIG * U), phase: 0pt),
+      ),
+    )
   })
   slide(
     title: "States played over time",
@@ -922,9 +976,16 @@
       end of the chain is the pen.
 
       One turn of the series is one period, so the last state *is* the first and the loop
-      has no seam to hide: `direction` stays `normal`. The trail is the pen's whole past —
-      #K strokes round the turn, solid just behind the pen and gone by the time it comes
-      back — so the shape is always there, brightest where the pen has just been.
+      has no seam to hide: `direction` stays `normal`. The whole outline is there in every
+      The outline is cut into #K arcs that never move, and what the states move is the
+      light on them: an arc lights up as the pen leaves it and fades where it lies, gone
+      #TAIL arcs later. Nothing is displaced from one state to the next, so there is no
+      geometry for the browser to interpolate — the earlier version, whose strokes were
+      listed relative to the pen, moved 180 vertices every state and juddered at exactly
+      the keyframe rate. An arc can only light up whole, though, so the front of the tail
+      is drawn instead as a dash on one fixed copy of the outline: the dash pattern is four
+      numbers, they interpolate, and the lit edge follows the pen between states as well as
+      on them.
     ],
     anim: (clef: (duration: 6000)),
   )[
@@ -944,14 +1005,14 @@
         }
         out.sorted(key: e => -e.r).slice(0, M)
       }
-      // epicycles(j) draws the chain at t = 2πj/S, then the pen's
-      // whole past as twelve strokes fading round the turn
+      // epicycles(j) draws the chain at t = 2πj/S, over arcs of the
+      // outline lit by how far behind the pen each one lies
       #slide(anim: (clef: (duration: 6000)))[
         #mark("clef", ..range(S + 1).map(epicycles))
       ]
       ```),
       screen(align(center + horizon, mark("clef", ..range(S + 1).map(epicycles)))),
-      when: [A mark named this way counts no steps, and the PDF shows its first state.],
+      when: [A mark named this way counts no steps, and the PDF shows its first state. The states are a sampling rate, and between two of them every vertex moves in a straight line at a constant speed: anything turning faster than S/2 is aliased, and geometry re-listed per state changes velocity at every keyframe. Hence #M vectors, and a trail that moves light over fixed arcs.],
     )
   ]
 
