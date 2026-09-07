@@ -246,16 +246,45 @@
      that morphs carries them too — the effects then match no animation rule
      (those want the side, vt-only-new or vt-only-old, which soloize puts in
      front of vt-mo), while the settings still reach its images. */
-  function name() {
-    slides.forEach(function (s) {
-      var by = marksOf(s);
-      Object.keys(by).forEach(function (k) {
-        var own = vtMarks[k];
-        by[k].forEach(function (m, i) {
-          m.style.viewTransitionName = nameOf(k, i);
-          if (own) m.style.viewTransitionClass = "vt-mo " + own.transition;
-        });
+  function name(s) {
+    var by = marksOf(s);
+    Object.keys(by).forEach(function (k) {
+      var own = vtMarks[k];
+      by[k].forEach(function (m, i) {
+        m.style.viewTransitionName = nameOf(k, i);
+        if (own) m.style.viewTransitionClass = "vt-mo " + own.transition;
       });
+    });
+  }
+
+  /* An unlifted frame cannot morph, so both sides of a transition are lifted
+     before it starts; the sweep below only saves the wait. */
+  function lift(s) { if (s && window.vtLift(s)) name(s); }
+
+  function unlifted() {
+    for (var d = 0; d < n; d++) {
+      var a = slides[cur + d], b = slides[cur - d];
+      if (a && !a.dataset.vtLifted) return a;
+      if (b && !b.dataset.vtLifted) return b;
+    }
+    return null;
+  }
+
+  /* One frame per idle slice, nearest the one on stage first — read afresh, so
+     walking or jumping re-aims it with no queue. Not while a transition runs
+     (the work is layout); it starts again when that ends, and on every move.
+     Without an idle callback nothing is swept and frames wait until needed. */
+  var sweeping = false;
+  function sweep() {
+    if (sweeping || mirror || pendingUndo || !window.requestIdleCallback) return;
+    sweeping = true;
+    requestIdleCallback(function () {
+      sweeping = false;
+      if (pendingUndo) return;
+      var s = unlifted();
+      if (!s) return;
+      lift(s);
+      sweep();
     });
   }
 
@@ -643,7 +672,7 @@
       if (pendingUndo === flush) pendingUndo = null;
       while (undo.length) undo.pop()();
     };
-    var clear = function () { var latest = pendingUndo === flush; flush(); if (latest) play(); };
+    var clear = function () { var latest = pendingUndo === flush; flush(); if (latest) play(); sweep(); };
     vt.finished.then(clear, clear);
   }
 
@@ -656,6 +685,8 @@
        deck.css replays them in reverse when the direction is back. */
     var types = slides[Math.max(i, want)].dataset.transition;
     want = i;
+    lift(dest);
+    lift(slides[cur]);
     stepTo(dest, k || 0, true);
     transition(canVT && !reduced.matches && !over() && !atDesk() && types && (types + " " + dir).split(" "), function () { paint(i); }, function (undo) {
       balance(slides[cur], dest, undo);
@@ -1252,7 +1283,6 @@
     if (!n) return;
     settings();
     buildModel();
-    name();
     buildCaptions();
     buildToolbar();
     buildPane();
@@ -1269,11 +1299,14 @@
     deck.setAttribute("data-ready", "");
     root.style.setProperty("--vt-speed", speed);
     var h0 = fromHash();
+    lift(slides[h0.i]);
     stepTo(slides[h0.i], h0.at, true);
     if (!mirror) deck.classList.add("vt-desk");   // the deck opens on the desk; a preview opens on its page
     paint(want = h0.i);
     play();
     showBar();
+    deck.addEventListener("vt:slide", sweep);
+    sweep();
     /* a follow track is in deck px: refit it when the deck's box changes (observing reports the current box at once, hence after paint) */
     new ResizeObserver(function () {
       (slides[cur].vtAnims || []).forEach(function (x) { if (x.fit) x.fit(); });
@@ -1297,5 +1330,10 @@
     };
   }
 
-  init();
+  /* Lifting forces layout, so wait for the browser's own first pass: forcing
+     one while the parser is still filling the document lays the whole deck out
+     twice. `DOMContentLoaded` is before that pass, and `requestAnimationFrame`
+     never runs in a background tab. */
+  if (document.readyState === "complete") init();
+  else addEventListener("load", init, { once: true });
 })();

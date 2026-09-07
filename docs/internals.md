@@ -23,7 +23,10 @@ into the HTML as a table by key (`const vtMarks = {…}`), which the runtime loo
 up.
 
 **Hoist.** `view-transition-name` is silently ignored on SVG children (only
-elements in the CSS box tree are captured), so `hoist.js` runs once at load: it
+elements in the CSS box tree are captured), so `hoist.js` lifts each frame's
+marks — on `load`, after the browser's own first layout, since measuring forces
+one — and one frame at a time, when the runtime asks (both sides of a
+transition before it starts, the rest while the deck is idle). Lifting
 measures each marked `<g>` in the page's viewBox (`getBBox` × CTM, read as a
 ratio of two `getScreenCTM`s so the result is resolution-independent), creates
 an absolutely positioned `<svg>` host with that viewBox and a

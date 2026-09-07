@@ -12,11 +12,18 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
 
 const SIZES = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 },
 { width: 900, height: 600 }, { width: 1440, height: 900 }];
-/* the deck opens on the desk; everything here is about the page being presented */
+/* the deck opens on the desk; everything here is about the page being presented.
+   `window.vit` exists once the deck is ready, which is a wait and not a timeout */
 const present = async p => {
+  await p.waitForFunction(() => document.querySelector('.vt-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
   await p.evaluate(() => { window.vit.mode = 'present'; });
   for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
 };
+/* the marks of a frame are lifted when the frame is first needed and swept up
+   in idle time after that: geometry can only be compared once that is done */
+const alllifted = p => p.waitForFunction(
+  () => document.querySelectorAll('.vt-slide[data-vt-lifted]').length === document.querySelectorAll('.vt-slide').length,
+  null, { timeout: 60000 });
 const errs = [];
 const seen = [];
 
@@ -24,7 +31,7 @@ for (const vp of SIZES) {
   const p = await b.newPage({ viewport: vp });
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => m.type() === 'error' && errs.push(m.text()));
-  await p.goto(url); await p.waitForTimeout(400); await present(p);
+  await p.goto(url); await present(p); await alllifted(p);
   seen.push(await p.evaluate(() =>
     [...document.querySelectorAll('.vt-slide')].map(s =>
       [...s.querySelectorAll('.vt-mark')].map(m =>

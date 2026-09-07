@@ -141,6 +141,7 @@ body {
   position: relative;
   inset: auto;
   aspect-ratio: var(--vt-w) / var(--vt-h);
+  content-visibility: auto;
   border: 1px solid var(--vt-line);
   border-radius: 0.5rem;
   overflow: hidden;
