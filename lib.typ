@@ -82,13 +82,13 @@
 /// (the frame is laid out as paper), so the value has to come in through
 /// this state.
 /// -> state
-#let _target = state("vt-target", "paged")
+#let _target = state("vit-target", "paged")
 
 /// The keys named by this page's `slide(anim:)`. A multi-state `mark` that is
 /// played continuously shows its first state in the PDF (the page at rest);
 /// one that is not shows its last (the finished figure).
 /// -> state
-#let _anim = state("vt-anim", ())
+#let _anim = state("vit-anim", ())
 
 /// A transition as the pair it is: how the new side enters, how the old side
 /// leaves. A string is the same effect both ways; a dictionary
@@ -103,14 +103,14 @@
 )
 
 /// What a transition may set, read out of the stylesheet: the knobs are the
-/// `--vt-` variables deck.css reads, so the vocabulary is defined once, where
+/// `--vit-` variables deck.css reads, so the vocabulary is defined once, where
 /// the effects are. `duration` and `easing` govern every effect; `zoom` is how
 /// many times life size the zoom starts at, `push` how far slide and rise
 /// travel (a negative distance sends them the other way).
 /// -> dictionary
 #let _knobs = {
   let k = (:)
-  for m in read("deck.css").matches(regex("var\(\s*--vt-([a-z-]+)")) { k.insert(m.captures.first(), true) }
+  for m in read("deck.css").matches(regex("var\(\s*--vit-([a-z-]+)")) { k.insert(m.captures.first(), true) }
   k
 }
 
@@ -224,7 +224,7 @@
 /// it is that side's, and lands where deck.css puts that side's effect — the
 /// enter side is the new image forward and the old image back, the leave side
 /// the other two — so a side's own settings beat the transition's, being on
-/// the image itself. An effect reads its knobs with `var(--vt-knob, default)`,
+/// the image itself. An effect reads its knobs with `var(--vit-knob, default)`,
 /// so providing one here is all it takes.
 /// -> str
 #let _rule(
@@ -254,7 +254,7 @@
     )
   }
   (
-    sels.join(",\n") + " {\n" + vars.pairs().map(((k, v)) => "  --vt-" + k + ": " + v + ";\n").join() + "}\n"
+    sels.join(",\n") + " {\n" + vars.pairs().map(((k, v)) => "  --vit-" + k + ": " + v + ";\n").join() + "}\n"
   )
 }
 
@@ -285,7 +285,7 @@
 /// The pair `deck(transition:)` set, for the pages that set none of their own;
 /// `none` is no transition between pages.
 /// -> state
-#let _fx = state("vt-fx", _pair("fade"))
+#let _fx = state("vit-fx", _pair("fade"))
 
 /// Between frames of one page the layout stays put and changes incrementally,
 /// so the page cross-fades — what is the same stays, what was added fades in —
@@ -386,9 +386,9 @@
   )
   let fx = _pair(transition)
   // the label is the identity; the effect goes into the marks table deck() writes (see _marks)
-  let lbl = label("vt-" + key)
+  let lbl = label("vit-" + key)
   let meta = if fx == none { none } else {
-    [#metadata((key: key, transition: _types(fx), sets: _bundles(fx)))<vt-mark>]
+    [#metadata((key: key, transition: _types(fx), sets: _bundles(fx)))<vit-mark>]
   }
   if s.len() == 1 { [#meta#box(s.first())#lbl] } else {
     context [#meta#box(tween.tween(
@@ -419,7 +419,7 @@
 #let _marks() = {
   let t = (:)
   let sets = ()
-  for m in query(<vt-mark>) {
+  for m in query(<vit-mark>) {
     let v = m.value
     assert(
       v.key not in t or t.at(v.key).transition == v.transition,
@@ -483,7 +483,7 @@
   /// -> auto | str
   theme: auto,
   /// Layout background. The PDF uses `page(fill:)`; `html.frame` carries no
-  /// page background, so the same value opens the stylesheet as `--vt-page`
+  /// page background, so the same value opens the stylesheet as `--vit-page`
   /// and is painted under the slides and thumbnails — identical on both
   /// sides, and independent of the chrome theme.
   /// -> color
@@ -511,17 +511,17 @@
       let marks = _marks()
       html.elem(
         "style",
-        attrs: (id: "vt-style"),
-        ":root{--vt-page:"
+        attrs: (id: "vit-style"),
+        ":root{--vit-page:"
           + fill.to-hex()
-          + ";--vt-w:"
+          + ";--vit-w:"
           + str(width.pt())
-          + ";--vt-h:"
+          + ";--vit-h:"
           + str(height.pt())
-          + ";--vt-duration:"
+          + ";--vit-duration:"
           + str(duration)
           + "ms"
-          + ";--vt-easing:cubic-bezier("
+          + ";--vit-easing:cubic-bezier("
           + easing.map(str).join(", ")
           + ")}\n"
           + tween.css
@@ -533,7 +533,7 @@
       html.elem(
         "div",
         attrs: (
-          class: "vt-deck",
+          class: "vit-deck",
           "data-duration": str(duration),
           "data-easing": easing.map(str).join(" "),
           "data-theme": if theme == auto { "auto" } else { theme },
@@ -542,7 +542,7 @@
         ),
         body,
       )
-      html.elem("script", "const vtMarks = " + json.encode(marks.table) + ";")
+      html.elem("script", "const vitMarks = " + json.encode(marks.table) + ";")
       html.script(read("hoist.js"))
       html.script(tween.js)
       html.script(read("runtime.js"))
@@ -680,7 +680,7 @@
   /// Shown only in the thumbnail caption, never in the layout. May be content.
   /// -> content | str | none
   title: none,
-  /// Speaker notes. HTML only, placed in the page's `<aside class="vt-note">`
+  /// Speaker notes. HTML only, placed in the page's `<aside class="vit-note">`
   /// (not in the layout, not in the PDF) and read by the desk the deck opens
   /// on and by the speaker view (`s`). May be content: paragraphs, lists,
   /// emphasis all render.
@@ -723,7 +723,7 @@
   let bodies = frames.pos()
   if bodies.len() == 0 { bodies = ([],) }
   let own = _pair(transition)
-  let section = (class: "vt-slide")
+  let section = (class: "vit-slide")
   let anim = anim.pairs().map(((k, v)) => (k, anim-defaults + v)).to-dict()
   for (k, v) in anim { _bezier(v.easing) }
   if anim.len() > 0 { section.insert("data-anim", json.encode(anim)) }
@@ -738,11 +738,11 @@
     if target() == "html" {
       html.elem(
         "div",
-        attrs: (class: "vt-group"),
+        attrs: (class: "vit-group"),
         {
           // title and notes are hidden inside the group (CSS display:none); the runtime reads
           // textContent / innerHTML, letting the browser flatten content to text
-          if title != none { html.elem("div", attrs: (class: "vt-title"), title) }
+          if title != none { html.elem("div", attrs: (class: "vit-title"), title) }
           // a transition this page set itself brings the rules its settings need
           if own != none and _sets(own) != "" { html.elem("style", _sets(own)) }
           bodies
@@ -752,12 +752,12 @@
               attrs: attrs(i),
               html.elem(
                 "div",
-                attrs: (class: "vt-page"),
+                attrs: (class: "vit-page"),
                 html.frame(block(width: page.width, height: page.height, inset: 60pt, body)),
               ),
             ))
             .join()
-          if note != none { html.elem("aside", attrs: (class: "vt-note"), note) }
+          if note != none { html.elem("aside", attrs: (class: "vit-note"), note) }
         },
       )
     } else {

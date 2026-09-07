@@ -112,33 +112,33 @@ is one object moving?**
 
 ## API
 
-|||
-|---|---|
-|`deck(title:)`|Document title.|
-|`deck(width:, height:)`|Layout size, default 1280pt × 720pt. The PDF page size; each HTML frame reads `page.width` / `page.height`, and the player's aspect ratio follows.|
-|`deck(pdf:)`|Target of the toolbar's download link. `auto` = the `.pdf` beside the HTML with the same name, `none` = no button, a string is used as is.|
-|`deck(duration:)`|Default transition duration in milliseconds, 700. A single transition can set its own (`transition: (effect: "zoom", duration: 400)`); `-` / `=` / `0` scale whatever is written.|
-|`deck(transition:)`|Default **page-to-page** transition: a name, an `(enter:, leave:)` pair, or a dictionary carrying the effect and its settings — see [Transitions](#transitions). Governs unmarked content only; paired marks morph regardless, and frames of one page always crossfade.|
-|`deck(theme:)`|Light/dark theme of the player chrome (toolbar, overview, speaker view): `auto` (follows the system), `"dark"`, `"light"`. The layout's colours are Typst's.|
-|`deck(fill:)`|Layout background, default `#111318`. The PDF uses `page(fill:)`; the HTML paints the same value under the slides and thumbnails, independent of the chrome theme.|
-|`deck(font:)`|Font stack with glyph-by-glyph fallback, default `("DejaVu Sans", "Noto Sans CJK SC")`.|
-|`slide(title:)`|Shown only in the thumbnail caption, never in the layout. May be content.|
-|`slide(note:)`|Speaker notes. HTML only; read by the speaker view (`s`). May be content.|
-|`slide(..frames)`|Several bodies = **frames of the same page**. Navigation walks them one by one; the overview merges them into one thumbnail.|
-|`slide(transition:)`|Overrides `deck(transition:)` for this page: a name or an `(enter:, leave:)` pair — how this page comes in when turning to it, how the page before it goes out. Going back, the page being left decides, so it always replays in reverse. `none` takes the deck's.|
-|`slide(anim:)`|Continuous animation, `key → spec`, where the spec is Web Animations keyframes + options — see [Writing a deck](#writing-a-deck).|
-|`mark(key)[…]`|Names a piece of content. The same key on two adjacent pages pairs them.|
-|`mark(transition:)`|This object's **own** enter/leave effect (same names as above, a string or an `(enter:, leave:)` pair). Applies only when the mark is one-sided in a transition; a paired mark morphs regardless. Unset, the mark folds into the page. One object, one effect: given on any occurrence of the key it holds for all, and two occurrences may not disagree. Keys are letters, digits, `_` and `-`.|
-|`mark(key, s0, s1, …)`|**Element animation**: N states of one object, stepped with `→` / `←`. The PDF shows the last state.|
-|`reveal(n, (step, at) => …)`|Frames from **one** description: the body is rendered once per frame and each part says when it arrives — `at(2, thing)`. Before its frame, content keeps its space (so nothing is ever re-laid-out and nothing jumps) and anything else is `none`, which switches a stroke or a fill off.|
-|`layers(key, meet: …, a, b, …)`|Layers of one picture, each its own mark (`key-1`, `key-2`, …). The last sizes the stack; a `none` layer is left out, which is how one arrives — and when it does, the layers already there glide as whole pictures instead of being redrawn. `meet` is the corner the arriving layer does not push (`bottom + right` for a picture that grows up and left).|
-|`build(a, b, c)`|Frames that accumulate: `a`, then `a` and `b`, then all three. For things that flow — a list, a stack of blocks — where later parts are meant to push the layout.|
+|                                 |                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `deck(title:)`                  | Document title.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `deck(width:, height:)`         | Layout size, default 1280pt × 720pt. The PDF page size; each HTML frame reads `page.width` / `page.height`, and the player's aspect ratio follows.                                                                                                                                                                                                                                               |
+| `deck(pdf:)`                    | Target of the toolbar's download link. `auto` = the `.pdf` beside the HTML with the same name, `none` = no button, a string is used as is.                                                                                                                                                                                                                                                       |
+| `deck(duration:)`               | Default transition duration in milliseconds, 700. A single transition can set its own (`transition: (effect: "zoom", duration: 400)`); `-` / `=` / `0` scale whatever is written.                                                                                                                                                                                                                |
+| `deck(transition:)`             | Default **page-to-page** transition: a name, an `(enter:, leave:)` pair, or a dictionary carrying the effect and its settings — see [Transitions](#transitions). Governs unmarked content only; paired marks morph regardless, and frames of one page always crossfade.                                                                                                                          |
+| `deck(theme:)`                  | Light/dark theme of the player chrome (toolbar, overview, speaker view): `auto` (follows the system), `"dark"`, `"light"`. The layout's colours are Typst's.                                                                                                                                                                                                                                     |
+| `deck(fill:)`                   | Layout background, default `#111318`. The PDF uses `page(fill:)`; the HTML paints the same value under the slides and thumbnails, independent of the chrome theme.                                                                                                                                                                                                                               |
+| `deck(font:)`                   | Font stack with glyph-by-glyph fallback, default `("DejaVu Sans", "Noto Sans CJK SC")`.                                                                                                                                                                                                                                                                                                          |
+| `slide(title:)`                 | Shown only in the thumbnail caption, never in the layout. May be content.                                                                                                                                                                                                                                                                                                                        |
+| `slide(note:)`                  | Speaker notes. HTML only; read by the speaker view (`s`). May be content.                                                                                                                                                                                                                                                                                                                        |
+| `slide(..frames)`               | Several bodies = **frames of the same page**. Navigation walks them one by one; the overview merges them into one thumbnail.                                                                                                                                                                                                                                                                     |
+| `slide(transition:)`            | Overrides `deck(transition:)` for this page: a name or an `(enter:, leave:)` pair — how this page comes in when turning to it, how the page before it goes out. Going back, the page being left decides, so it always replays in reverse. `none` takes the deck's.                                                                                                                               |
+| `slide(anim:)`                  | Continuous animation, `key → spec`, where the spec is Web Animations keyframes + options — see [Writing a deck](#writing-a-deck).                                                                                                                                                                                                                                                                |
+| `mark(key)[…]`                  | Names a piece of content. The same key on two adjacent pages pairs them.                                                                                                                                                                                                                                                                                                                         |
+| `mark(transition:)`             | This object's **own** enter/leave effect (same names as above, a string or an `(enter:, leave:)` pair). Applies only when the mark is one-sided in a transition; a paired mark morphs regardless. Unset, the mark folds into the page. One object, one effect: given on any occurrence of the key it holds for all, and two occurrences may not disagree. Keys are letters, digits, `_` and `-`. |
+| `mark(key, s0, s1, …)`          | **Element animation**: N states of one object, stepped with `→` / `←`. The PDF shows the last state.                                                                                                                                                                                                                                                                                             |
+| `reveal(n, (step, at) => …)`    | Frames from **one** description: the body is rendered once per frame and each part says when it arrives — `at(2, thing)`. Before its frame, content keeps its space (so nothing is ever re-laid-out and nothing jumps) and anything else is `none`, which switches a stroke or a fill off.                                                                                                       |
+| `layers(key, meet: …, a, b, …)` | Layers of one picture, each its own mark (`key-1`, `key-2`, …). The last sizes the stack; a `none` layer is left out, which is how one arrives — and when it does, the layers already there glide as whole pictures instead of being redrawn. `meet` is the corner the arriving layer does not push (`bottom + right` for a picture that grows up and left).                                     |
+| `build(a, b, c)`                | Frames that accumulate: `a`, then `a` and `b`, then all three. For things that flow — a list, a stack of blocks — where later parts are meant to push the layout.                                                                                                                                                                                                                                |
 
 `window.vit` exposes `{ go, next, prev, index, total, step, steps, speed, mode,
 deck }` (`step`, `speed` and `mode` are writable; `mode` is `"desk"`,
 `"present"` or `"overview"`). On every move it dispatches two events on
-`.vt-deck`, one for one: `vt:move-ready` when the new position is in the DOM
-and its animation is about to run, and `vt:move-done` when that move has
+`.vit-deck`, one for one: `vit:move-ready` when the new position is in the DOM
+and its animation is about to run, and `vit:move-done` when that move has
 finished moving — both with `detail: { index, step }`. A move
 with nothing to animate settles at once, one cut short by the next settles where
 it stopped, and opening the overview is a transition but not a move, so it
@@ -165,13 +165,13 @@ fades as it goes.
 
 The same dictionary carries the settings:
 
-|setting||
-|---|---|
-|`duration`|milliseconds|
-|`easing`|four numbers, a cubic bézier|
-|`zoom`|how many times life size a zoom starts at|
-|`push`|how far slide and rise travel; negative goes the other way|
-|`fit`, `anchor`|`fit: "none"` with `anchor: right + bottom` draws the states at their own size, pinned to the corner that does not move. For a mark wrapping an assembly that grows on one side: a group otherwise interpolates as a box and its images stretch into it, which smears.|
+| setting         |                                                                                                                                                                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `duration`      | milliseconds                                                                                                                                                                                                                                                           |
+| `easing`        | four numbers, a cubic bézier                                                                                                                                                                                                                                           |
+| `zoom`          | how many times life size a zoom starts at                                                                                                                                                                                                                              |
+| `push`          | how far slide and rise travel; negative goes the other way                                                                                                                                                                                                             |
+| `fit`, `anchor` | `fit: "none"` with `anchor: right + bottom` draws the states at their own size, pinned to the corner that does not move. For a mark wrapping an assembly that grows on one side: a group otherwise interpolates as a box and its images stretch into it, which smears. |
 
 `(effect: "zoom", duration: 400, zoom: 6)`. Settings beside the effects belong
 to the whole transition; settings inside a side belong to that side and beat
@@ -191,8 +191,8 @@ whose operators travel wants them marked too.
 `window.vit` exposes `{ go, next, prev, index, total, step, steps, speed, mode,
 deck }` (`step`, `speed` and `mode` are writable; `mode` is `"desk"`,
 `"present"` or `"overview"`). On every move it dispatches two events on
-`.vt-deck`, one for one: `vt:move-ready` when the new position is in the DOM
-and its animation is about to run, and `vt:move-done` when that move has
+`.vit-deck`, one for one: `vit:move-ready` when the new position is in the DOM
+and its animation is about to run, and `vit:move-done` when that move has
 finished moving — both with `detail: { index, step }`. A move
 with nothing to animate settles at once, one cut short by the next settles where
 it stopped, and opening the overview is a transition but not a move, so it
@@ -213,7 +213,7 @@ handout.
 **Keep the picture whole.** `reveal(n, (step, at) => …)` renders the body once
 per frame and each part says when it arrives, so the layout is identical on
 every frame and the marks morph instead of the page shifting under them.
-`layers` is for the other half: something that arrives *outside* what is already
+`layers` is for the other half: something that arrives _outside_ what is already
 there and does make the picture bigger goes in a layer of its own, and the
 layers already on the page glide to their new place as whole pictures. A layer
 that reaches into an earlier one (an arrow into a diagram it does not draw)
@@ -259,7 +259,7 @@ piecewise `easing` for gravity, a `scale` squash on the landing frame and a
 first `<path>` of another mark on the same frame, via CSS `offset-path`, so only
 `offset-distance` moves, on the compositor; `orient: true` turns it with the
 tangent. Neither, and the `mark` of that key carries several states: the states
-*are* the keyframes, played continuously, one animation per node. A mark named
+_are_ the keyframes, played continuously, one animation per node. A mark named
 this way counts no steps, and the PDF shows its first state. Animations start
 once the page transition has finished, pause when the frame is left or the
 overview opens, and do not play under `prefers-reduced-motion`.
@@ -295,7 +295,7 @@ key for the whole canvas interpolates its position and size and cross-fades the
 content, and a transition interpolates boxes, not paths — bending one curve into
 another is the element animation's job.
 
-That is the page level. *Inside* a canvas nothing is a mark: a canvas is one
+That is the page level. _Inside_ a canvas nothing is a mark: a canvas is one
 object, and what moves within it is the element animation, node by node. The
 companion package for that is **tween-cetz**, and it belongs to `tween` rather
 than to vit — it needs no deck, so the same drawing moves in a blog post. It
@@ -316,11 +316,11 @@ hands back `cetz.draw` with states allowed on everything that draws.
 })
 ```
 
-|||
-|---|---|
-|`tweened(cetz)`|`cetz.draw`, with states. Every element function takes `over(…)` in place of any argument; everything else — transformations, styles, coordinates, queries — is CeTZ's, untouched. The dictionary also carries `over`, `states` and CeTZ's own `canvas`.|
-|`over(a, b, …)`|In place of any argument, anywhere in it: N states of that element, stepped with `→`. Every marker in one call is walked in step, so the states are one drawing under different numbers *by construction* — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading.|
-|`states(..bodies)`|The same, when more than one element varies together.|
+|                    |                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tweened(cetz)`    | `cetz.draw`, with states. Every element function takes `over(…)` in place of any argument; everything else — transformations, styles, coordinates, queries — is CeTZ's, untouched. The dictionary also carries `over`, `states` and CeTZ's own `canvas`.                                                               |
+| `over(a, b, …)`    | In place of any argument, anywhere in it: N states of that element, stepped with `→`. Every marker in one call is walked in step, so the states are one drawing under different numbers _by construction_ — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading. |
+| `states(..bodies)` | The same, when more than one element varies together.                                                                                                                                                                                                                                                                  |
 
 Such an element is still drawn where it stood, with its ink switched off, so its
 `name`, its anchors, `()` and `intersections` behave as if the package were not
@@ -351,22 +351,22 @@ objects is the page's business, motion inside one is the object's.
 
 ## Presenting
 
-|Key|Action|
-|---|---|
-|`→` `↓` `PageDown` `Space` `Enter` `n` `j`|Next position: next step / next frame / next page|
-|`←` `↑` `PageUp` `Backspace` `p` `k`|Previous position (from a later page, lands on this page's last position)|
-|`Home` / `End`|First / last page|
-|`1`–`9`|Jump to a page|
-|`f`|Full screen|
-|`Esc` / `Enter`|Desk ⇄ presenting: `Esc` puts the deck back on the desk, `Enter` presents the page shown there|
-|`o` / `a`|Overview (`Esc` closes it). Click a thumbnail to open it; hover or click the dots in its corner to preview / open a position|
-|`l`|Laser pointer|
-|`b` / `.`|Black screen; the same key, `Esc`, brings the page back|
-|`-` / `=` / `0`|Slower / faster / reset (a factor on every duration, kept in `localStorage`)|
-|`s`|Speaker view|
-|`?`|The key table|
-|Wheel|Next / previous page — one notch per page with a mouse, one gesture (inertia included) per page on a trackpad; in the overview it scrolls the grid|
-|Click / swipe|Left third goes back, the rest goes forward; swipe left / right on touch. Clicks during a transition count|
+| Key                                        | Action                                                                                                                                             |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `→` `↓` `PageDown` `Space` `Enter` `n` `j` | Next position: next step / next frame / next page                                                                                                  |
+| `←` `↑` `PageUp` `Backspace` `p` `k`       | Previous position (from a later page, lands on this page's last position)                                                                          |
+| `Home` / `End`                             | First / last page                                                                                                                                  |
+| `1`–`9`                                    | Jump to a page                                                                                                                                     |
+| `f`                                        | Full screen                                                                                                                                        |
+| `Esc` / `Enter`                            | Desk ⇄ presenting: `Esc` puts the deck back on the desk, `Enter` presents the page shown there                                                     |
+| `o` / `a`                                  | Overview (`Esc` closes it). Click a thumbnail to open it; hover or click the dots in its corner to preview / open a position                       |
+| `l`                                        | Laser pointer                                                                                                                                      |
+| `b` / `.`                                  | Black screen; the same key, `Esc`, brings the page back                                                                                            |
+| `-` / `=` / `0`                            | Slower / faster / reset (a factor on every duration, kept in `localStorage`)                                                                       |
+| `s`                                        | Speaker view                                                                                                                                       |
+| `?`                                        | The key table                                                                                                                                      |
+| Wheel                                      | Next / previous page — one notch per page with a mouse, one gesture (inertia included) per page on a trackpad; in the overview it scrolls the grid |
+| Click / swipe                              | Left third goes back, the rest goes forward; swipe left / right on touch. Clicks during a transition count                                         |
 
 The deck opens on the **desk**: pages down the left as thumbnails, the selected
 one beside them, its notes underneath. Clicking a thumbnail or a dot in its
@@ -448,18 +448,18 @@ packages/tween-cetz/test.typ  one canvas drawn twice, with states and without: t
 `tools/` need `playwright` (`paths.mjs` only Node); `verify.mjs` and `cetz.mjs`
 need `pdftoppm` (poppler) and `compare` (ImageMagick) instead, and no browser.
 To inspect a transition, take over `document.startViewTransition`,
-`await vt.ready`, then pause and seek every animation from
+`await vit.ready`, then pause and seek every animation from
 `document.getAnimations()` — a screenshot on a timer is hundreds of milliseconds
 late and makes any transition look like a jump.
 
 ## Related work
 
-|Project|Typst → HTML slides|Animation|
-|---|---|---|
-|[Typstage](https://github.com/Loewe1000/typstage)|pages as inline SVG|Web Animations, glyph-by-glyph shape matching|
-|[slipst](https://github.com/Wybxc/slipst)|yes (vertical "slips")|its own CSS/JS sliding|
-|[Bifold](https://forum.typst.app/t/bifold-simple-web-presentation-with-typst/9467)|yes (proof of concept)|no transitions|
-|[Touying](https://typst.app/universe/package/touying/) / [Polylux](https://github.com/polylux-typ/polylux)|no (PDF)|PDF-side reveal steps|
-|[Marp](https://github.com/orgs/marp-team/discussions/168) / [Slidev](https://sli.dev)|—|View Transitions, from Markdown|
+| Project                                                                                                    | Typst → HTML slides    | Animation                                     |
+| ---------------------------------------------------------------------------------------------------------- | ---------------------- | --------------------------------------------- |
+| [Typstage](https://github.com/Loewe1000/typstage)                                                          | pages as inline SVG    | Web Animations, glyph-by-glyph shape matching |
+| [slipst](https://github.com/Wybxc/slipst)                                                                  | yes (vertical "slips") | its own CSS/JS sliding                        |
+| [Bifold](https://forum.typst.app/t/bifold-simple-web-presentation-with-typst/9467)                         | yes (proof of concept) | no transitions                                |
+| [Touying](https://typst.app/universe/package/touying/) / [Polylux](https://github.com/polylux-typ/polylux) | no (PDF)               | PDF-side reveal steps                         |
+| [Marp](https://github.com/orgs/marp-team/discussions/168) / [Slidev](https://sli.dev)                      | —                      | View Transitions, from Markdown               |
 
 MIT.

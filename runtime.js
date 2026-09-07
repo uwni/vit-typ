@@ -20,7 +20,7 @@
 
   /* ── group = one page, frame = one layout state of that page ────────
      Navigation walks frames, the overview shows groups. The title is a hidden
-     .vt-title inside the group; the browser flattens it to plain text. */
+     .vit-title inside the group; the browser flattens it to plain text. */
   var groups = [];      // { el, title, from, to, pos }  `to` exclusive
   var gOf = [];      // frame index → group index
   var gn = 0;
@@ -38,8 +38,8 @@
   function durMs(ms) { return Math.round(ms / speed); }
   function setSpeed(v) {
     speed = Math.min(4, Math.max(0.25, Math.round(v * 100) / 100));
-    try { localStorage.setItem("vt-speed", speed); } catch (e) { }
-    root.style.setProperty("--vt-speed", speed);
+    try { localStorage.setItem("vit-speed", speed); } catch (e) { }
+    root.style.setProperty("--vit-speed", speed);
     flash(speed + "×");
   }
 
@@ -52,13 +52,13 @@
                            the update callback of a skipped transition runs late
                            and would set the target back. */
 
-  var reduced, prefersLight, canVT;
-  var mirror = window.name === "vt-mirror";   // a preview inside the desk or the speaker view: it presents, and builds no chrome
+  var reduced, prefersLight, canvit;
+  var mirror = window.name === "vit-mirror";   // a preview inside the desk or the speaker view: it presents, and builds no chrome
 
   function clamp(i) { return i < 0 ? 0 : i > n - 1 ? n - 1 : i; }
-  function at(i) { return slides[i].vtAt || 0; }
-  function over() { return deck.classList.contains("vt-all"); }
-  function atDesk() { return deck.classList.contains("vt-desk"); }
+  function at(i) { return slides[i].vitAt || 0; }
+  function over() { return deck.classList.contains("vit-all"); }
+  function atDesk() { return deck.classList.contains("vit-desk"); }
 
   /* ── positions = frames × steps, flattened into one sequence ───────────
      To the audience a page only has "press once, advance one notch": a frame
@@ -75,18 +75,18 @@
   function settings() {
     defaultMs = parseInt(deck.dataset.duration, 10);
     EASING = deck.dataset.easing.split(" ").map(Number);   // the four numbers of a cubic Bézier
-    try { speed = parseFloat(localStorage.getItem("vt-speed")) || 1; } catch (e) { }
+    try { speed = parseFloat(localStorage.getItem("vit-speed")) || 1; } catch (e) { }
     reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     prefersLight = window.matchMedia("(prefers-color-scheme: light)");
-    canVT = typeof document.startViewTransition === "function";
+    canvit = typeof document.startViewTransition === "function";
   }
 
   /* pages, frames and steps into the position sequence */
   function buildModel() {
-    Array.prototype.forEach.call(deck.querySelectorAll(".vt-group"), function (el) {
-      var t = el.querySelector(".vt-title");
+    Array.prototype.forEach.call(deck.querySelectorAll(".vit-group"), function (el) {
+      var t = el.querySelector(".vit-title");
       var g = { el: el, title: t ? t.textContent.trim() : "", from: gOf.length, to: gOf.length };
-      Array.prototype.forEach.call(el.querySelectorAll(".vt-slide"), function () { gOf.push(groups.length); g.to++; });
+      Array.prototype.forEach.call(el.querySelectorAll(".vit-slide"), function () { gOf.push(groups.length); g.to++; });
       groups.push(g);
     });
     gn = groups.length;
@@ -116,7 +116,7 @@
 
   /* the page's speaker notes, as the layout carries them */
   function noteOf(i) {
-    var a = groups[gOf[i]].el.querySelector(".vt-note");
+    var a = groups[gOf[i]].el.querySelector(".vit-note");
     return a ? a.innerHTML : "";
   }
 
@@ -137,13 +137,13 @@
   function announce() {
     syncThumbs();
     try { history.replaceState(null, "", "#" + label(cur)); } catch (e) { }
-    deck.dispatchEvent(new CustomEvent("vt:move-ready", { detail: { index: cur, step: at(cur) } }));
+    deck.dispatchEvent(new CustomEvent("vit:move-ready", { detail: { index: cur, step: at(cur) } }));
   }
 
-  /* One for one with `vt:move-ready`, including moves with nothing to animate
+  /* One for one with `vit:move-ready`, including moves with nothing to animate
      and moves cut short by the next. Opening the overview announces neither. */
   function moveDone(i) {
-    deck.dispatchEvent(new CustomEvent("vt:move-done", { detail: { index: i, step: at(i) } }));
+    deck.dispatchEvent(new CustomEvent("vit:move-done", { detail: { index: i, step: at(i) } }));
   }
 
   /* Hover preview: temporarily show frame f at step k in its group's
@@ -195,7 +195,7 @@
   function buildCaptions() {
     groups.forEach(function (g, k) {
       var cap = document.createElement("div");
-      cap.className = "vt-cap";
+      cap.className = "vit-cap";
       cap.innerHTML = "<b></b><span></span>";
       cap.firstChild.textContent = k + 1;
       cap.lastChild.textContent = g.title;
@@ -204,7 +204,7 @@
 
       if (g.pos.length < 2) return;
       var dots = document.createElement("div");
-      dots.className = "vt-dots";
+      dots.className = "vit-dots";
       g.dots = g.pos.map(function (q, d) {
         var el = document.createElement("i");
         el.dataset.frame = q.i;
@@ -237,42 +237,42 @@
 
   function marksOf(slide) {
     var by = {};
-    Array.prototype.forEach.call(slide.querySelectorAll(".vt-mark[data-vt-key]"), function (m) {
-      (by[m.dataset.vtKey] = by[m.dataset.vtKey] || []).push(m);
+    Array.prototype.forEach.call(slide.querySelectorAll(".vit-mark[data-vit-key]"), function (m) {
+      (by[m.dataset.vitKey] = by[m.dataset.vitKey] || []).push(m);
     });
     return by;
   }
 
   /* ── names ──────────────────────────────────────────────────────────
      m-<key>-<n>, n the occurrence of the key on its frame (hoist.js leaves
-     data-vt-key; the key's characters are the Typst side's assertion).
+     data-vit-key; the key's characters are the Typst side's assertion).
      Given once, at load; spread() renames for one transition and restores. */
   function nameOf(key, i) { return "m-" + key + "-" + (i + 1); }
   /* A name each, and whatever its object declared: the pair of effects and the
-     names of its settings, as the Typst side wrote them into vtMarks. A mark
+     names of its settings, as the Typst side wrote them into vitMarks. A mark
      that morphs carries them too — the effects then match no animation rule
-     (those want the side, vt-only-new or vt-only-old, which soloize puts in
-     front of vt-mo), while the settings still reach its images. */
+     (those want the side, vit-only-new or vit-only-old, which soloize puts in
+     front of vit-mo), while the settings still reach its images. */
   function name(s) {
     var by = marksOf(s);
     Object.keys(by).forEach(function (k) {
-      var own = vtMarks[k];
+      var own = vitMarks[k];
       by[k].forEach(function (m, i) {
         m.style.viewTransitionName = nameOf(k, i);
-        if (own) m.style.viewTransitionClass = "vt-mo " + own.transition;
+        if (own) m.style.viewTransitionClass = "vit-mo " + own.transition;
       });
     });
   }
 
   /* An unlifted frame cannot morph, so both sides of a transition are lifted
      before it starts; the sweep below only saves the wait. */
-  function lift(s) { if (s && window.vtLift(s)) name(s); }
+  function lift(s) { if (s && window.vitLift(s)) name(s); }
 
   function unlifted() {
     for (var d = 0; d < n; d++) {
       var a = slides[cur + d], b = slides[cur - d];
-      if (a && !a.dataset.vtLifted) return a;
-      if (b && !b.dataset.vtLifted) return b;
+      if (a && !a.dataset.vitLifted) return a;
+      if (b && !b.dataset.vitLifted) return b;
     }
     return null;
   }
@@ -327,9 +327,9 @@
 
   /* One-sided marks (names unmatched in this transition): one whose object
      declared a mark(transition:) — the Typst side wrote the pair into
-     vtMarks — gets the pair as its class, behind the side it has
-     (vt-only-old enter-wipe-up leave-fade on the frame being left,
-     vt-only-new … on the frame being entered), and the CSS enters or leaves
+     vitMarks — gets the pair as its class, behind the side it has
+     (vit-only-old enter-wipe-up leave-fade on the frame being left,
+     vit-only-new … on the frame being entered), and the CSS enters or leaves
      it that way, by the transition's direction. The side matters: WebKit
      styles both images of every named element whether or not they exist,
      and an animation it gives an image that does not exist is never torn
@@ -343,21 +343,21 @@
   function soloize(from, to, undo) {
     var names = function (s) {
       var o = {};
-      Array.prototype.forEach.call(s.querySelectorAll(".vt-mark"), function (m) { o[m.style.viewTransitionName] = 1; });
+      Array.prototype.forEach.call(s.querySelectorAll(".vit-mark"), function (m) { o[m.style.viewTransitionName] = 1; });
       return o;
     };
     var A = names(from), B = names(to);
     var tag = function (s, other, side) {
-      Array.prototype.forEach.call(s.querySelectorAll(".vt-mark"), function (m) {
+      Array.prototype.forEach.call(s.querySelectorAll(".vit-mark"), function (m) {
         if (other[m.style.viewTransitionName]) return;
-        var name = m.style.viewTransitionName, cls = m.style.viewTransitionClass, own = vtMarks[m.dataset.vtKey];
+        var name = m.style.viewTransitionName, cls = m.style.viewTransitionClass, own = vitMarks[m.dataset.vitKey];
         if (own) m.style.viewTransitionClass = side + " " + own.transition;
         else m.style.viewTransitionName = "none";
         undo.push(function () { m.style.viewTransitionName = name; m.style.viewTransitionClass = cls; });
       });
     };
-    tag(from, B, "vt-only-old");
-    tag(to, A, "vt-only-new");
+    tag(from, B, "vit-only-old");
+    tag(to, A, "vit-only-new");
   }
 
   /* ── element animation (mark(key, s0, s1, …)) ────────────────────────
@@ -375,7 +375,7 @@
      shorter marks stop at their end. */
 
   function stepsOf(s) {
-    if (s.vtSteps) return s.vtSteps;
+    if (s.vitSteps) return s.vitSteps;
     var spec = animSpec(s);
     /* One container is one mark, so the same key twice on a frame stays two of
        them; a drawing inside a state is an ordinary node, not a mark. */
@@ -389,7 +389,7 @@
       m.anim = m.key in spec && fromStates(spec[m.key]);
       if (!m.anim) steps = Math.max(steps, m.states.length - 1);
     });
-    return (s.vtSteps = { marks: marks, n: steps });
+    return (s.vitSteps = { marks: marks, n: steps });
   }
 
   /* A step's animations are the deck's to cancel when the next one starts; a
@@ -403,16 +403,16 @@
   function fade(s, host, oldG, newG, olds, news, timing) {
     var r = tween.crossfade(host, oldG, newG, olds, news, timing);
     r.anims.forEach(function (a) { a.id = STEP; });
-    (s.vtUndo = s.vtUndo || []).push(r.undo);
+    (s.vitUndo = s.vitUndo || []).push(r.undo);
     r.anims[r.anims.length - 1].finished.then(r.undo, r.undo);
     return r.anims;
   }
 
   function stepTo(s, k, instant) {
-    var st = stepsOf(s), from = s.vtAt || 0;
+    var st = stepsOf(s), from = s.vitAt || 0;
     k = Math.max(0, Math.min(st.n, k));
     if (k === from) return;
-    s.vtAt = k;
+    s.vitAt = k;
     halt(s);
     var mine = [];
     var live = !instant && !reduced.matches;
@@ -421,7 +421,7 @@
       var a = Math.min(from, m.states.length - 1), b = Math.min(k, m.states.length - 1);
       m.states.forEach(function (g, i) { g.style.display = i === b ? "inline" : "none"; });
       if (a === b || !live) return;
-      var timing = { duration: durMs(defaultMs), delay: 0, iterations: 1, direction: "normal", easing: EASING }, host = m.states[b].closest(".vt-mark") || s;
+      var timing = { duration: durMs(defaultMs), delay: 0, iterations: 1, direction: "normal", easing: EASING }, host = m.states[b].closest(".vit-mark") || s;
       if (!m.nodes) { mine = mine.concat(fade(s, host, m.states[a], m.states[b], null, null, timing)); return; }
       /* Each node of the new state animates from the value of its counterpart in
          the old state to its own; the end is the node's own attribute, so it
@@ -449,8 +449,8 @@
      attributes, so cancelling is jumping to the end. */
   function halt(s) {
     waapi.of(s, STEP).forEach(function (a) { a.cancel(); });
-    (s.vtUndo || []).forEach(function (f) { f(); });
-    s.vtUndo = [];
+    (s.vitUndo || []).forEach(function (f) { f(); });
+    s.vitUndo = [];
   }
 
   /* ── continuous animation (slide(anim:)) ─────────────────────────────
@@ -468,20 +468,20 @@
      frame not on stage is paused. */
 
   function animSpec(s) {
-    if (!s.vtSpec) { s.vtSpec = {}; try { s.vtSpec = JSON.parse(s.dataset.anim || "{}"); } catch (e) { } }
-    return s.vtSpec;
+    if (!s.vitSpec) { s.vitSpec = {}; try { s.vitSpec = JSON.parse(s.dataset.anim || "{}"); } catch (e) { } }
+    return s.vitSpec;
   }
   function fromStates(o) { return !o.keyframes && !o.follow; }
 
   function prepare(s) {
-    if (!s.vtPrepared) {
-      s.vtPrepared = true;
-      s.vtFit = [];
+    if (!s.vitPrepared) {
+      s.vitPrepared = true;
+      s.vitFit = [];
       var spec = animSpec(s);
       Object.keys(spec).forEach(function (key) {
-        var o = spec[key], el = s.querySelector('.vt-mark[data-vt-key="' + key + '"]');
+        var o = spec[key], el = s.querySelector('.vit-mark[data-vit-key="' + key + '"]');
         if (!el) { console.warn("[vit] anim: no mark " + key + " on this frame"); return; }
-        var keep = function (a, fit) { a.pause(); if (fit) s.vtFit.push(fit); };
+        var keep = function (a, fit) { a.pause(); if (fit) s.vitFit.push(fit); };
         if (fromStates(o)) {
           var m = stepsOf(s).marks.filter(function (m) { return m.key === key; })[0];
           if (!m || !m.nodes) { console.warn("[vit] anim: " + key + " has no keyframes, no follow and no states to play"); return; }
@@ -490,7 +490,7 @@
             if (f.frames) keep(waapi.animate(node, f.frames, o, ANIM));
           });
         } else if (o.follow) {
-          var track = s.querySelector('.vt-mark[data-vt-key="' + o.follow + '"] path');
+          var track = s.querySelector('.vit-mark[data-vit-key="' + o.follow + '"] path');
           if (!track) { console.warn("[vit] anim: " + key + " should follow " + o.follow + ", but this frame has no such mark or it has no path"); return; }
           /* the deck is the containing block a follow track is measured in */
           var run = waapi.follow(el, track, Object.assign({ role: ANIM }, o), deck);
@@ -498,13 +498,13 @@
         } else keep(waapi.animate(el, o.keyframes, o, ANIM));
       });
     }
-    s.vtFit.forEach(function (f) { f(); });
+    s.vitFit.forEach(function (f) { f(); });
   }
 
   function still(s) { waapi.of(s, ANIM).forEach(function (a) { a.pause(); }); }
   function play() {
     var s = slides[cur];
-    if (!s.vtPrepared || reduced.matches || over() || atDesk()) return;
+    if (!s.vitPrepared || reduced.matches || over() || atDesk()) return;
     waapi.of(s, ANIM).forEach(function (a) { a.play(); });
   }
   /* ── transition ──────────────────────────────────────────────────────
@@ -528,13 +528,13 @@
     if (!types) { update(); play(); if (done) done(); return; }
     var undo = [];
     if (setup) setup(undo);
-    var vt = document.startViewTransition({ update: update, types: types });
+    var vit = document.startViewTransition({ update: update, types: types });
     var flush = pendingUndo = function () {
       if (pendingUndo === flush) pendingUndo = null;
       while (undo.length) undo.pop()();
     };
     var clear = function () { var latest = pendingUndo === flush; flush(); if (latest) play(); sweep(); if (done) done(); };
-    vt.finished.then(clear, clear);
+    vit.finished.then(clear, clear);
   }
 
   function go(i, k) {
@@ -549,7 +549,7 @@
     lift(dest);               // before the transition: its setup reads both sides' marks
     stepTo(dest, k || 0, true);
     transition(
-      canVT &&
+      canvit &&
       !reduced.matches &&
       !over() &&
       !atDesk() &&
@@ -645,11 +645,11 @@
 
   function onClick(e) {
     if (over() || atDesk()) {
-      var d = e.target.closest(".vt-dots i");
+      var d = e.target.closest(".vit-dots i");
       if (d) { pick(+d.dataset.frame, +d.dataset.at); return; }
-      var g = e.target.closest(".vt-group");
+      var g = e.target.closest(".vit-group");
       if (g) {
-        var f = slides.indexOf(g.querySelector(".vt-slide"));
+        var f = slides.indexOf(g.querySelector(".vit-slide"));
         if (peeked && gOf[peeked.i] === gOf[f]) pick(peeked.i, peeked.at);   // a dot being previewed opens its own position
         else pick(f, 0);
         return;
@@ -726,23 +726,23 @@
   }
 
   /* Overview ⇄ presenting: a whole-page zoom, no element-level morph.
-     The thumbnail and the shown page are the same .vt-slide; give it a
+     The thumbnail and the shown page are the same .vit-slide; give it a
      temporary view-transition-name and the browser interpolates its box between
      the two states — the page zooms into place. The CSS meanwhile overrides
-     every .vt-mark name with !important so the marks fold back into root:
+     every .vit-mark name with !important so the marks fold back into root:
      otherwise leftovers from the previous page would pair up and fly, which is
      the "page turn" animation, not "open". */
   function zoomTo(i, update, done) {
     var dest = groups[gOf[i]].el;
-    transition(canVT && !reduced.matches && ["overview"], update, function (undo) {
-      dest.style.viewTransitionName = "vt-overview";
+    transition(canvit && !reduced.matches && ["overview"], update, function (undo) {
+      dest.style.viewTransitionName = "vit-overview";
       undo.push(function () { dest.style.viewTransitionName = ""; });
     }, done);
   }
 
   function toggleOverview() {
     if (over()) openSlide(cur);
-    else zoomTo(cur, function () { deck.classList.remove("vt-desk"); deck.classList.add("vt-all"); still(slides[cur]); syncTools(); });
+    else zoomTo(cur, function () { deck.classList.remove("vit-desk"); deck.classList.add("vit-all"); still(slides[cur]); syncTools(); });
   }
 
   /* Open a page from the overview; without a step, at whatever step the
@@ -753,7 +753,7 @@
     if (peeked && peeked.i !== i) unpeek();   // a preview of another page is put back; this page's is what opens
     peeked = null;
     if (k != null) stepTo(slides[i], k, true);
-    zoomTo(i, function () { deck.classList.remove("vt-all"); stage(i); }, function () { moveDone(i); });
+    zoomTo(i, function () { deck.classList.remove("vit-all"); stage(i); }, function () { moveDone(i); });
   }
 
   /* choosing a page: from the overview it opens, from the desk or the presentation it is where we go */
@@ -772,12 +772,12 @@
   function buildPane() {
     if (mirror) return;
     pane = document.createElement("div");
-    pane.className = "vt-pane";
-    pane.innerHTML = "<div class='vt-view'><iframe class='vt-mirror' name='vt-mirror' title='Preview'></iframe></div><div class='vt-notes'></div>";
+    pane.className = "vit-pane";
+    pane.innerHTML = "<div class='vit-view'><iframe class='vit-mirror' name='vit-mirror' title='Preview'></iframe></div><div class='vit-notes'></div>";
     view = pane.querySelector("iframe");
-    notes = pane.querySelector(".vt-notes");
+    notes = pane.querySelector(".vit-notes");
     document.body.appendChild(pane);
-    deck.addEventListener("vt:move-ready", syncPane);
+    deck.addEventListener("vit:move-ready", syncPane);
   }
 
   function syncPane() {
@@ -788,8 +788,8 @@
 
   function toggleDesk() {
     if (atDesk()) { present(); return; }
-    deck.classList.remove("vt-all");
-    deck.classList.add("vt-desk");
+    deck.classList.remove("vit-all");
+    deck.classList.add("vit-desk");
     still(slides[cur]);
     syncThumbs();
     syncPane();
@@ -800,7 +800,7 @@
   /* the selected page, full size: from the overview with its zoom, from the desk at once */
   function present() {
     if (over()) { openSlide(cur); return; }
-    deck.classList.remove("vt-desk");
+    deck.classList.remove("vit-desk");
     play();
     syncTools();
     showBar();
@@ -810,14 +810,14 @@
   var black = false;
   function toggleBlack() {
     black = !black;
-    document.body.classList.toggle("vt-black", black);
+    document.body.classList.toggle("vit-black", black);
   }
 
   /* the key table, on ? */
   var help = null;
   function buildHelp() {
     help = document.createElement("div");
-    help.className = "vt-help";
+    help.className = "vit-help";
     help.hidden = true;
     var table = document.createElement("table");
     KEYS.forEach(function (row) {
@@ -829,7 +829,7 @@
     });
     help.appendChild(table);
     var about = document.createElement("div");
-    about.className = "vt-about";
+    about.className = "vit-about";
     about.textContent = "vit" + (deck.dataset.version ? " " + deck.dataset.version : "");
     help.appendChild(about);
     help.addEventListener("click", toggleHelp);
@@ -838,7 +838,7 @@
   function toggleHelp() { help.hidden = !help.hidden; }
 
   /* ── toolbar ─────────────────────────────────────────────────────────
-     Built by the runtime, so every deck has one. Lives outside .vt-deck with
+     Built by the runtime, so every deck has one. Lives outside .vit-deck with
      its own view-transition-name, so a page transition never drags it along.
      A toolbar can be built in any document: one in the main window
      (auto-hiding), one in the speaker view (always shown, bottom right).
@@ -885,8 +885,8 @@
       return el;
     }
     var b = { el: doc.createElement("div"), count: doc.createElement("div") };
-    b.el.className = "vt-bar";
-    b.count.className = "vt-count";
+    b.el.className = "vit-bar";
+    b.count.className = "vit-count";
     b.el.appendChild(b.count);
 
     b.desk = button("Desk (Esc)", svg(ICON.desk), toggleDesk);
@@ -899,7 +899,7 @@
 
     if (pdfHref) {
       var a = doc.createElement("a");
-      a.className = "vt-dl";
+      a.className = "vit-dl";
       a.href = pdfHref;
       a.download = "";
       a.target = "_blank";
@@ -917,13 +917,13 @@
   }
 
   /* The two previews in the speaker view are copies of this very HTML
-     (iframe name="vt-mirror"): they only display, no toolbar. */
+     (iframe name="vit-mirror"): they only display, no toolbar. */
   var bars = [];
   var bar = null;
   function buildToolbar() {
     pdfHref = pdfLink();
     document.addEventListener("fullscreenchange", syncTools);
-    deck.addEventListener("vt:move-ready", syncTools);
+    deck.addEventListener("vit:move-ready", syncTools);
     if (mirror) return;
     var mainBar = buildBar(document);
     bars.push(mainBar);
@@ -963,14 +963,14 @@
   var laser = null;
   function buildLaser() {
     laser = document.createElement("div");
-    laser.className = "vt-laser";
+    laser.className = "vit-laser";
     document.body.appendChild(laser);
   }
 
   function route(e) {
     var mouse = e.pointerType === "mouse" || e.pointerType === "";
     touching = !mouse;
-    document.body.classList.toggle("vt-nomouse", touching);
+    document.body.classList.toggle("vit-nomouse", touching);
     if (!lasing || mouse || over() || atDesk()) { laser.classList.remove("is-on"); return; }
     dot(e.clientX, e.clientY);
   }
@@ -982,7 +982,7 @@
 
   function toggleLaser() {
     lasing = !lasing;
-    document.body.classList.toggle("vt-lasing", lasing);
+    document.body.classList.toggle("vit-lasing", lasing);
     if (!lasing) laser.classList.remove("is-on");
     syncTools();
     showBar();
@@ -992,7 +992,7 @@
     var text = label(cur) + " / " + gn + (speed === 1 ? "" : " · " + speed + "×");   // a multiplier survives reloads: keep it in sight
     var fs = !!document.fullscreenElement;
     bars.forEach(function (b) {
-      b.el.ownerDocument.body.classList.toggle("vt-lasing", lasing);   // the speaker window's cursor follows too
+      b.el.ownerDocument.body.classList.toggle("vit-lasing", lasing);   // the speaker window's cursor follows too
       b.count.textContent = text;
       b.desk.innerHTML = svg(atDesk() ? ICON.play : ICON.desk);
       b.desk.title = atDesk() ? "Present (Enter)" : "Desk (Esc)";
@@ -1035,29 +1035,29 @@
      element animations play there as well. The window is about:blank and
      same-origin with the main window, so its DOM is built directly; the copies
      inside the iframes are never touched (under file:// every file is its own
-     origin), only their src changes. Sync comes from the vt:move-ready events that
+     origin), only their src changes. Sync comes from the vit:move-ready events that
      announce() fires, no polling. The notes are the page's
-     <aside class="vt-note"> inside .vt-group, moved over as is. */
+     <aside class="vit-note"> inside .vit-group, moved over as is. */
 
   function openSpeaker() {
     if (speaker && !speaker.closed) { speaker.focus(); return; }
-    speaker = window.open("", "vt-speaker", "popup,width=1040,height=640");
+    speaker = window.open("", "vit-speaker", "popup,width=1040,height=640");
     if (!speaker) { console.warn("[vit] the speaker view was blocked by the browser; allow pop-ups for this page."); return; }
 
-    /* the same stylesheet as this document's, as it is (its speaker rules are under .vt-speaker, the layout's size, background and easing open it), the same theme */
+    /* the same stylesheet as this document's, as it is (its speaker rules are under .vit-speaker, the layout's size, background and easing open it), the same theme */
     var d = speaker.document;
-    d.head.innerHTML = "<style>" + document.getElementById("vt-style").textContent + "</style>";
-    d.documentElement.className = "vt-speaker";
+    d.head.innerHTML = "<style>" + document.getElementById("vit-style").textContent + "</style>";
+    d.documentElement.className = "vit-speaker";
     d.documentElement.dataset.theme = root.dataset.theme;
     d.title = "Speaker view · " + document.title;
     d.body.innerHTML =
       "<div class='prog'><i></i></div>" +
       "<header><b></b><span></span><time title='Click to reset'>00:00</time></header>" +
-      "<main><iframe class='vt-mirror' name='vt-mirror'></iframe><div class='vt-notes'></div></main>" +
-      "<aside><small>Next</small><iframe class='vt-mirror' name='vt-mirror'></iframe></aside>";
+      "<main><iframe class='vit-mirror' name='vit-mirror'></iframe><div class='vit-notes'></div></main>" +
+      "<aside><small>Next</small><iframe class='vit-mirror' name='vit-mirror'></iframe></aside>";
     spk = {
       page: d.querySelector("header b"), title: d.querySelector("header span"),
-      clock: d.querySelector("time"), note: d.querySelector(".vt-notes"),
+      clock: d.querySelector("time"), note: d.querySelector(".vit-notes"),
       now: d.querySelector("main iframe"), next: d.querySelector("aside iframe"),
       nextCap: d.querySelector("aside small"), prog: d.querySelector(".prog i")
     };
@@ -1139,7 +1139,7 @@
   }
 
   function initSpeaker() {
-    deck.addEventListener("vt:move-ready", syncSpeaker);
+    deck.addEventListener("vit:move-ready", syncSpeaker);
     /* close it when the main window goes, so no window is left out of sync */
     window.addEventListener("pagehide", function () { if (speaker && !speaker.closed) speaker.close(); });
   }
@@ -1147,8 +1147,8 @@
   /* ── init ─────────────────────────────────────────────────────────── */
 
   function init() {
-    deck = document.querySelector(".vt-deck");
-    slides = deck ? Array.prototype.slice.call(deck.querySelectorAll(".vt-slide")) : [];
+    deck = document.querySelector(".vit-deck");
+    slides = deck ? Array.prototype.slice.call(deck.querySelectorAll(".vit-slide")) : [];
     n = slides.length;
     if (!n) return;
     settings();
@@ -1167,19 +1167,19 @@
   /* the frame the address bar names goes on stage; from here on the deck is live */
   function land() {
     deck.setAttribute("data-ready", "");
-    root.style.setProperty("--vt-speed", speed);
+    root.style.setProperty("--vit-speed", speed);
     var h0 = fromHash();
     stepTo(slides[h0.i], h0.at, true);
-    if (!mirror) deck.classList.add("vt-desk");   // the deck opens on the desk; a preview opens on its page
+    if (!mirror) deck.classList.add("vit-desk");   // the deck opens on the desk; a preview opens on its page
     stage(want = h0.i);
     moveDone(h0.i);
     play();
     showBar();
-    deck.addEventListener("vt:move-ready", sweep);
+    deck.addEventListener("vit:move-ready", sweep);
     sweep();
     /* a follow track is in deck px: refit it when the deck's box changes (observing reports the current box at once, hence after paint) */
     new ResizeObserver(function () {
-      (slides[cur].vtFit || []).forEach(function (f) { f(); });
+      (slides[cur].vitFit || []).forEach(function (f) { f(); });
     }).observe(deck);
     window.vit = {
       go: go, next: next, prev: prev,

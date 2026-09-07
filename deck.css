@@ -9,41 +9,41 @@
    window copies the same tokens. */
 html {
   color-scheme: dark;
-  --vt-bg: #08090c;
-  --vt-panel: #111318;
-  --vt-glass: rgba(24, 27, 35, 0.82);
-  --vt-line: #2b313d;
-  --vt-fg: #eef1f7;
-  --vt-fg2: #aab3c5;
-  --vt-muted: #8992a5;
-  --vt-accent: #7aa2ff;
-  --vt-on-accent: #0d1017;
+  --vit-bg: #08090c;
+  --vit-panel: #111318;
+  --vit-glass: rgba(24, 27, 35, 0.82);
+  --vit-line: #2b313d;
+  --vit-fg: #eef1f7;
+  --vit-fg2: #aab3c5;
+  --vit-muted: #8992a5;
+  --vit-accent: #7aa2ff;
+  --vit-on-accent: #0d1017;
 }
 html[data-theme="light"] {
   color-scheme: light;
-  --vt-bg: #eef0f4;
-  --vt-panel: #ffffff;
-  --vt-glass: rgba(255, 255, 255, 0.85);
-  --vt-line: #d3d8e1;
-  --vt-fg: #14171e;
-  --vt-fg2: #3f4756;
-  --vt-muted: #6b7384;
-  --vt-accent: #2f62d8;
-  --vt-on-accent: #ffffff;
+  --vit-bg: #eef0f4;
+  --vit-panel: #ffffff;
+  --vit-glass: rgba(255, 255, 255, 0.85);
+  --vit-line: #d3d8e1;
+  --vit-fg: #14171e;
+  --vit-fg2: #3f4756;
+  --vit-muted: #6b7384;
+  --vit-accent: #2f62d8;
+  --vit-on-accent: #ffffff;
 }
 /* The layout's constants come first in this stylesheet, written by the Typst
-   side as a :root block from deck(): --vt-page, its background (content, not
-   chrome, so it does not follow the theme), --vt-w and --vt-h, its size in pt,
-   --vt-duration and --vt-easing, its pace. A transition can set its own
-   duration, easing and effect knobs; the runtime writes only --vt-speed, the
+   side as a :root block from deck(): --vit-page, its background (content, not
+   chrome, so it does not follow the theme), --vit-w and --vit-h, its size in pt,
+   --vit-duration and --vit-easing, its pace. A transition can set its own
+   duration, easing and effect knobs; the runtime writes only --vit-speed, the
    presenter's multiplier, which every duration here is divided by — so a
    duration written anywhere still answers to the speed keys. The stage is the
    layout's box on screen, as wide as the window allows, as tall as the window
    allows, whichever binds. */
 html {
-  --vt-speed: 1;
-  --vt-stage: min(100vw, calc(100svh * var(--vt-w) / var(--vt-h)));
-  background: var(--vt-bg);
+  --vit-speed: 1;
+  --vit-stage: min(100vw, calc(100svh * var(--vit-w) / var(--vit-h)));
+  background: var(--vit-bg);
 }
 body {
   margin: 0;
@@ -51,46 +51,46 @@ body {
   display: grid;
   place-items: center;
 }
-.vt-deck {
+.vit-deck {
   position: relative;
-  aspect-ratio: var(--vt-w) / var(--vt-h);
-  width: var(--vt-stage);
-  background: var(--vt-page);
+  aspect-ratio: var(--vit-w) / var(--vit-h);
+  width: var(--vit-stage);
+  background: var(--vit-page);
   overflow: hidden;
 }
 /* Before the scripts have run (hoist.js lifts the marks, the runtime marks the deck ready) nothing is shown: what the layout looks like at that moment — marks in place, every state of an element animation stacked — is not a frame anyone should see. Only the first frame is laid out, the rest costs nothing until hoist.js shows it to measure. */
-.vt-deck:not([data-ready]) {
+.vit-deck:not([data-ready]) {
   visibility: hidden;
 }
-.vt-deck:not([data-ready]) .vt-group ~ .vt-group {
+.vit-deck:not([data-ready]) .vit-group ~ .vit-group {
   display: none;
 }
-.vt-deck:not([data-ready]) .vt-slide ~ .vt-slide {
+.vit-deck:not([data-ready]) .vit-slide ~ .vit-slide {
   display: none;
 }
-.vt-deck[data-ready] .vt-slide {
+.vit-deck[data-ready] .vit-slide {
   display: none;
 }
-.vt-deck[data-ready] .vt-slide.is-active {
+.vit-deck[data-ready] .vit-slide.is-active {
   display: block;
 }
 /* A group always fills the deck and always stays in the layout: everything in
    it but the current frame is display:none, so while presenting it is an empty
    box with no visual effect — but it **has a box**, so the overview's whole-page
    zoom can be named on the group, independent of which frame is opened. */
-.vt-group {
+.vit-group {
   position: absolute;
   inset: 0;
 }
-.vt-slide {
+.vit-slide {
   position: absolute;
   inset: 0;
 }
-.vt-page {
+.vit-page {
   position: absolute;
   inset: 0;
 }
-.vt-page > svg:not(.vt-mark) {
+.vit-page > svg:not(.vit-mark) {
   position: absolute;
   inset: 0;
   width: 100% !important;
@@ -101,15 +101,15 @@ body {
    and hidden clips half a stroke width on every side (the ends of a Lissajous
    curve get cut flat). View Transitions snapshots carry ink overflow anyway,
    so nothing flickers. */
-.vt-mark {
+.vit-mark {
   position: absolute;
   display: block;
   overflow: visible;
-  view-transition-class: vt-mo;
+  view-transition-class: vit-mo;
 }
 /* title and speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
-.vt-title,
-.vt-note {
+.vit-title,
+.vit-note {
   display: none;
 }
 
@@ -117,41 +117,41 @@ body {
    Both show every page at once, one frame per group, and differ only in how
    the thumbnails are arranged: the overview fills the window with a grid,
    the desk stands them in a column beside the page. */
-.vt-deck:is(.vt-all, .vt-desk) > .vt-group {
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group {
   display: block;
   position: relative;
   inset: auto;
   cursor: pointer;
 }
 /* one page = one thumbnail: a group exposes one frame, the others stay out */
-.vt-deck:is(.vt-all, .vt-desk) .vt-slide {
+.vit-deck:is(.vit-all, .vit-desk) .vit-slide {
   display: none !important;
 }
-.vt-deck:is(.vt-all, .vt-desk) .vt-slide.is-thumb {
+.vit-deck:is(.vit-all, .vit-desk) .vit-slide.is-thumb {
   display: block !important;
   position: relative;
   inset: auto;
-  aspect-ratio: var(--vt-w) / var(--vt-h);
+  aspect-ratio: var(--vit-w) / var(--vit-h);
   content-visibility: auto;
-  border: 1px solid var(--vt-line);
+  border: 1px solid var(--vit-line);
   border-radius: 0.5rem;
   overflow: hidden;
-  background: var(--vt-page);
+  background: var(--vit-page);
 }
-.vt-deck:is(.vt-all, .vt-desk) > .vt-group:hover .vt-slide.is-thumb {
-  border-color: var(--vt-accent);
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group:hover .vit-slide.is-thumb {
+  border-color: var(--vit-accent);
 }
-.vt-deck:is(.vt-all, .vt-desk) > .vt-group.is-here .vt-slide.is-thumb {
-  border-color: var(--vt-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-accent) 28%, transparent);
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group.is-here .vit-slide.is-thumb {
+  border-color: var(--vit-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-accent) 28%, transparent);
 }
 
 /* caption above, thumbnail below, so the group's bottom edge is the thumbnail's and the dots go into the bottom-right corner */
-.vt-cap,
-.vt-dots {
+.vit-cap,
+.vit-dots {
   display: none;
 }
-:is(.vt-all, .vt-desk) .vt-cap {
+:is(.vit-all, .vit-desk) .vit-cap {
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
@@ -161,22 +161,22 @@ body {
     system-ui,
     sans-serif;
 }
-:is(.vt-all, .vt-desk) .vt-cap b {
+:is(.vit-all, .vit-desk) .vit-cap b {
   flex: none;
   font-weight: 600;
-  color: var(--vt-muted);
+  color: var(--vit-muted);
   font-variant-numeric: tabular-nums;
 }
-:is(.vt-all, .vt-desk) .is-here .vt-cap b {
-  color: var(--vt-accent);
+:is(.vit-all, .vit-desk) .is-here .vit-cap b {
+  color: var(--vit-accent);
 }
-:is(.vt-all, .vt-desk) .vt-cap span {
-  color: var(--vt-fg2);
+:is(.vit-all, .vit-desk) .vit-cap span {
+  color: var(--vit-fg2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-:is(.vt-all, .vt-desk) .vt-dots {
+:is(.vit-all, .vit-desk) .vit-dots {
   display: flex;
   gap: 6px;
   position: absolute;
@@ -184,44 +184,44 @@ body {
   bottom: 8px;
   padding: 4px 6px;
   border-radius: 99px;
-  background: var(--vt-glass);
+  background: var(--vit-glass);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
 /* three states, one shape: what is still ahead is an outline, what has been
    passed is filled in the muted colour, the position we are on is filled in the
    accent */
-:is(.vt-all, .vt-desk) .vt-dots i {
+:is(.vit-all, .vit-desk) .vit-dots i {
   box-sizing: border-box;
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1px solid var(--vt-accent);
+  border: 1px solid var(--vit-accent);
   cursor: pointer;
 }
-:is(.vt-all, .vt-desk) .vt-dots i.is-on {
-  background: var(--vt-muted);
-  border-color: var(--vt-muted);
+:is(.vit-all, .vit-desk) .vit-dots i.is-on {
+  background: var(--vit-muted);
+  border-color: var(--vit-muted);
 }
-:is(.vt-all, .vt-desk) .vt-dots i.is-now {
-  background: var(--vt-accent);
-  border-color: var(--vt-accent);
+:is(.vit-all, .vit-desk) .vit-dots i.is-now {
+  background: var(--vit-accent);
+  border-color: var(--vit-accent);
 }
 /* pointing at one says so whatever state it is in, so this comes last */
-:is(.vt-all, .vt-desk) .vt-dots i:hover,
-:is(.vt-all, .vt-desk) .vt-dots i.is-peek {
-  border-color: var(--vt-fg);
+:is(.vit-all, .vit-desk) .vit-dots i:hover,
+:is(.vit-all, .vit-desk) .vit-dots i.is-peek {
+  border-color: var(--vit-fg);
 }
-:is(.vt-all, .vt-desk) .vt-dots i.is-peek {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vt-fg) 35%, transparent);
+:is(.vit-all, .vit-desk) .vit-dots i.is-peek {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-fg) 35%, transparent);
 }
 
 /* overview: toggled with o / a */
-body:has(.vt-all) {
+body:has(.vit-all) {
   display: block;
   place-items: start;
 }
-.vt-deck.vt-all {
+.vit-deck.vit-all {
   position: static;
   width: 100%;
   max-width: none;
@@ -231,7 +231,7 @@ body:has(.vt-all) {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
   gap: 1rem;
   padding: 1rem;
-  background: var(--vt-bg);
+  background: var(--vit-bg);
   overflow: visible;
 }
 
@@ -241,7 +241,7 @@ body:has(.vt-all) {
    is the deck itself in thumbnails, so a click there is the same click as
    in the overview; the preview is a copy of this document positioned by
    #hash — the same mirror the speaker view uses. */
-body:has(.vt-desk) {
+body:has(.vit-desk) {
   display: grid;
   grid-template-columns: clamp(7rem, 17vw, 14rem) minmax(0, 1fr);
   place-items: stretch;
@@ -250,7 +250,7 @@ body:has(.vt-desk) {
   box-sizing: border-box;
   height: 100svh;
 }
-.vt-deck.vt-desk {
+.vit-deck.vit-desk {
   position: static;
   width: auto;
   height: auto;
@@ -265,13 +265,13 @@ body:has(.vt-desk) {
   overflow-x: hidden;
   scrollbar-width: thin;
 }
-.vt-deck.vt-desk > .vt-group {
+.vit-deck.vit-desk > .vit-group {
   flex: none;
 }
-.vt-pane {
+.vit-pane {
   display: none;
 }
-body:has(.vt-desk) .vt-pane {
+body:has(.vit-desk) .vit-pane {
   display: grid;
   grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
   gap: 14px;
@@ -279,39 +279,39 @@ body:has(.vt-desk) .vt-pane {
 }
 /* the preview keeps the layout's shape and takes whatever of the cell that
    leaves — the same formula as the stage, in the cell's own units */
-.vt-view {
+.vit-view {
   container-type: size;
   display: grid;
   place-items: center;
   min-height: 0;
 }
-.vt-view .vt-mirror {
-  width: min(100cqw, calc(100cqh * var(--vt-w) / var(--vt-h)));
+.vit-view .vit-mirror {
+  width: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
 }
 /* the toolbar floats over the notes' bottom-right corner: leave it room */
-body:has(.vt-desk) .vt-notes {
+body:has(.vit-desk) .vit-notes {
   padding-bottom: 44px;
 }
 /* narrow: the rail keeps the numbers only, and the preview takes the width it
    is given — the notes get the rest of the height, which is what is short here */
 @media (max-width: 720px) {
-  body:has(.vt-desk) {
+  body:has(.vit-desk) {
     grid-template-columns: 5.5rem minmax(0, 1fr);
     gap: 8px;
     padding: 8px;
   }
-  body:has(.vt-desk) .vt-cap span {
+  body:has(.vit-desk) .vit-cap span {
     display: none;
   }
-  body:has(.vt-desk) .vt-pane {
+  body:has(.vit-desk) .vit-pane {
     grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
   }
-  .vt-view {
+  .vit-view {
     container-type: normal;
     display: block;
   }
-  .vt-view .vt-mirror {
+  .vit-view .vit-mirror {
     width: 100%;
   }
 }
@@ -319,53 +319,53 @@ body:has(.vt-desk) .vt-notes {
 /* ── preview and notes ────────────────────────────────────────────────
    Two components, used by the desk and by the speaker view: a copy of this
    document showing one position, and one page's notes. */
-.vt-mirror {
+.vit-mirror {
   display: block;
   box-sizing: border-box;
-  border: 1px solid var(--vt-line);
+  border: 1px solid var(--vit-line);
   width: 100%;
-  aspect-ratio: var(--vt-w) / var(--vt-h);
+  aspect-ratio: var(--vit-w) / var(--vit-h);
   border-radius: 6px;
-  background: var(--vt-page);
+  background: var(--vit-page);
   pointer-events: none;
 }
-.vt-notes {
+.vit-notes {
   overflow: auto;
   padding: 10px 14px;
   border-radius: 6px;
-  background: var(--vt-panel);
-  border: 1px solid var(--vt-line);
-  color: var(--vt-fg);
+  background: var(--vit-panel);
+  border: 1px solid var(--vit-line);
+  color: var(--vit-fg);
   font:
     16px/1.6 ui-sans-serif,
     system-ui,
     sans-serif;
 }
-.vt-notes:empty::before {
+.vit-notes:empty::before {
   content: "No notes for this page";
-  color: var(--vt-muted);
+  color: var(--vit-muted);
 }
-.vt-notes > :first-child {
+.vit-notes > :first-child {
   margin-top: 0;
 }
-.vt-notes > :last-child {
+.vit-notes > :last-child {
   margin-bottom: 0;
 }
-.vt-notes ul,
-.vt-notes ol {
+.vit-notes ul,
+.vit-notes ol {
   padding-left: 1.3em;
 }
 ::view-transition-group(*) {
-  animation-duration: calc(var(--vt-duration) / var(--vt-speed));
-  animation-timing-function: var(--vt-easing);
+  animation-duration: calc(var(--vit-duration) / var(--vit-speed));
+  animation-timing-function: var(--vit-easing);
 }
 /* ── a transition is a pair of effects ────────────────────────────────
    deck/slide/mark(transition: (enter:, leave:)): how the new side comes in,
    how the old side goes out; a string is the same effect both ways. The
    Typst side writes the pair as the transition's types on every frame
    (data-transition="enter-slide leave-fade") and as a one-sided mark's
-   view-transition-class (the runtime adds the side the mark has, vt-only-new
-   or vt-only-old); the runtime adds fwd or back. Going back replays the pair in reverse: the new side comes in the
+   view-transition-class (the runtime adds the side the mark has, vit-only-new
+   or vit-only-old); the runtime adds fwd or back. Going back replays the pair in reverse: the new side comes in the
    way the old would have gone out, run backwards, and the old side goes out
    the way the new would have come in. So each effect has one rule per role
    — the enter effect's names the new side forward and the old side back,
@@ -373,12 +373,12 @@ body:has(.vt-desk) .vt-notes {
    value is the same in both directions: where the entering side starts is
    where the leaving side ends.
 
-   Every side runs one animation, vt-enter from where the variables put it
-   to rest, vt-leave from rest to where they put it: --vt-opacity,
-   --vt-transform, --vt-clip (with --vt-clip-rest, the clip at rest — unset,
+   Every side runs one animation, vit-enter from where the variables put it
+   to rest, vit-leave from rest to where they put it: --vit-opacity,
+   --vit-transform, --vit-clip (with --vit-clip-rest, the clip at rest — unset,
    nothing is clipped; a clip at rest would cut the ink overflow the
-   snapshots carry, so only the wipes set it), --vt-s-away (the
-   magnification away from rest, for the zoom's focus), --vt-timing. A side
+   snapshots carry, so only the wipes set it), --vit-s-away (the
+   magnification away from rest, for the zoom's focus), --vit-timing. A side
    with nothing set holds. A rule that names root sets the variables on
    the root's own image, never on html: the marks' images would inherit
    them. Only an image that exists gets an animation — a one-sided mark's
@@ -387,21 +387,23 @@ body:has(.vt-desk) .vt-notes {
    an animation given to one that does not exist is never torn down and
    comes back finished the next time the name is used. */
 ::view-transition-new(root),
-::view-transition-new(.vt-only-new) {
-  animation: vt-enter calc(var(--vt-duration) / var(--vt-speed)) var(--vt-timing, var(--vt-easing)) both;
+::view-transition-new(.vit-only-new) {
+  animation: vit-enter calc(var(--vit-duration) / var(--vit-speed))
+    var(--vit-timing, var(--vit-easing)) both;
 }
 ::view-transition-old(root),
-::view-transition-old(.vt-only-old) {
-  animation: vt-leave calc(var(--vt-duration) / var(--vt-speed)) var(--vt-timing, var(--vt-easing)) both;
+::view-transition-old(.vit-only-old) {
+  animation: vit-leave calc(var(--vit-duration) / var(--vit-speed))
+    var(--vit-timing, var(--vit-easing)) both;
 }
 /* A paired mark morphs: the browser moves its group and cross-fades its two
    images itself — the old fading out under the new fading in, blended with
    plus-lighter, so what stays put never dims (the blending rides on the
    browser's own animation, which an animation of ours would replace). Only
    the pace is ours. */
-::view-transition-old(.vt-mo),
-::view-transition-new(.vt-mo) {
-  animation-timing-function: var(--vt-easing);
+::view-transition-old(.vit-mo),
+::view-transition-new(.vit-mo) {
+  animation-timing-function: var(--vit-easing);
 }
 /* A group interpolates as a box, and each of its two images is drawn into that
    box — stretched to fill it, which is right for a mark that keeps its shape
@@ -410,16 +412,16 @@ body:has(.vt-desk) .vt-notes {
    instead, anchored where the transition asks, so what was already there stays
    where it was and only the new part appears. The anchor is the corner that
    does not move. */
-::view-transition-old(.vt-mo),
-::view-transition-new(.vt-mo),
-::view-transition-old(.vt-only-old),
-::view-transition-new(.vt-only-new) {
-  object-fit: var(--vt-fit, fill);
-  object-position: var(--vt-anchor, 50% 50%);
+::view-transition-old(.vit-mo),
+::view-transition-new(.vit-mo),
+::view-transition-old(.vit-only-old),
+::view-transition-new(.vit-only-new) {
+  object-fit: var(--vit-fit, fill);
+  object-position: var(--vit-anchor, 50% 50%);
 }
 /* opening or closing the overview: the deck fades into the grid while the page zooms */
 html:active-view-transition-type(overview)::view-transition-new(root) {
-  --vt-opacity: 0;
+  --vit-opacity: 0;
 }
 /* fade. For root the old page is held beneath the new one fading in: both
    snapshots are opaque and page-sized, so this is a cross-fade with no dip,
@@ -427,30 +429,48 @@ html:active-view-transition-type(overview)::view-transition-new(root) {
    visible — the last one, when the animations end a frame before the
    pseudo-elements go — shows the new page, never the old. Paired with
    another entrance the old page fades out for real. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-fade)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-fade)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-fade
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-fade
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-fade),
 html:active-view-transition-type(back)::view-transition-old(.enter-fade),
-html:active-view-transition-type(fwd):active-view-transition-type(leave-fade)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-fade)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-fade
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-fade
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-fade),
 html:active-view-transition-type(back)::view-transition-new(.leave-fade) {
-  --vt-opacity: 0;
+  --vit-opacity: 0;
 }
-html:active-view-transition-type(enter-fade):active-view-transition-type(leave-fade)::view-transition-old(root) {
-  --vt-opacity: 1;
+html:active-view-transition-type(enter-fade):active-view-transition-type(
+    leave-fade
+  )::view-transition-old(root) {
+  --vit-opacity: 1;
 }
 /* none: at once. The side jumps to its end state on the first frame. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-none)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-none)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-none
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-none
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-none),
 html:active-view-transition-type(back)::view-transition-old(.enter-none),
-html:active-view-transition-type(fwd):active-view-transition-type(leave-none)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-none)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-none
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-none
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-none),
 html:active-view-transition-type(back)::view-transition-new(.leave-none) {
-  --vt-opacity: 0;
-  --vt-timing: step-start;
+  --vit-opacity: 0;
+  --vit-timing: step-start;
 }
 /* slide / rise: push, by the width / height of the box. Forward the new one
    comes in from the right / bottom and the old one leaves to the left / top;
@@ -469,32 +489,48 @@ html:active-view-transition-type(back)::view-transition-new(.leave-none) {
    that condenses as the side lands; a transition can set zoom to start
    nearer or further. The blur is the Gaussian with the
    disc's RMS radius, σ = c/4, and an image's filter is applied in its own
-   pixels, before its transform, hence σ/s. --vt-s is the magnification
+   pixels, before its transform, hence σ/s. --vit-s is the magnification
    itself, registered so that it interpolates alongside the transform and
    the blur is recomputed from it every frame. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-slide)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-slide)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-slide
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-slide
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
 html:active-view-transition-type(back)::view-transition-old(.enter-slide) {
-  --vt-transform: translateX(var(--vt-push, 100%));
+  --vit-transform: translateX(var(--vit-push, 100%));
 }
-html:active-view-transition-type(fwd):active-view-transition-type(leave-slide)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-slide)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-slide
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-slide
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
 html:active-view-transition-type(back)::view-transition-new(.leave-slide) {
-  --vt-transform: translateX(calc(-1 * var(--vt-push, 100%)));
+  --vit-transform: translateX(calc(-1 * var(--vit-push, 100%)));
 }
-html:active-view-transition-type(fwd):active-view-transition-type(enter-rise)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-rise)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-rise
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-rise
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
 html:active-view-transition-type(back)::view-transition-old(.enter-rise) {
-  --vt-transform: translateY(var(--vt-push, 100%));
+  --vit-transform: translateY(var(--vit-push, 100%));
 }
-html:active-view-transition-type(fwd):active-view-transition-type(leave-rise)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-rise)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-rise
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-rise
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
 html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
-  --vt-transform: translateY(calc(-1 * var(--vt-push, 100%)));
+  --vit-transform: translateY(calc(-1 * var(--vit-push, 100%)));
 }
 /* A page pushed by its own width is off the screen when it gets there, and
    that is the whole of the effect. A mark is pushed by *its* width, so it
@@ -509,125 +545,167 @@ html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
 html:active-view-transition-type(back)::view-transition-new(.leave-slide),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
 html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
-  --vt-opacity: 0;
+  --vit-opacity: 0;
 }
-html:active-view-transition-type(fwd):active-view-transition-type(enter-zoom)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-zoom)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-zoom
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-zoom
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-zoom),
 html:active-view-transition-type(back)::view-transition-old(.enter-zoom),
-html:active-view-transition-type(fwd):active-view-transition-type(leave-zoom)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-zoom)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-zoom
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-zoom
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-zoom),
 html:active-view-transition-type(back)::view-transition-new(.leave-zoom) {
-  --vt-aperture: calc(var(--vt-stage) / 4);
-  --vt-opacity: 0;
-  --vt-transform: scale(var(--vt-zoom, 3));
-  --vt-s-away: var(--vt-zoom, 3);
-  filter: blur(calc(var(--vt-aperture) / 4 * (var(--vt-s) - 1) / var(--vt-s)));
+  --vit-aperture: calc(var(--vit-stage) / 4);
+  --vit-opacity: 0;
+  --vit-transform: scale(var(--vit-zoom, 3));
+  --vit-s-away: var(--vit-zoom, 3);
+  filter: blur(
+    calc(var(--vit-aperture) / 4 * (var(--vit-s) - 1) / var(--vit-s))
+  );
 }
 /* wipe-*: reveal, named by the direction the front travels (wipe-up sweeps
    up from the bottom edge): the new one appears from that edge while the old
    one is covered from the same edge, so at every instant the two tile the
    box; back runs the front the other way. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-left)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-left)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-wipe-left
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-wipe-left
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-left),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-left) {
-  --vt-clip: inset(0 0 0 100%);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(0 0 0 100%);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-left)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-left)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-wipe-left
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-wipe-left
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-left),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-left) {
-  --vt-clip: inset(0 100% 0 0);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(0 100% 0 0);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-right)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-right)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-wipe-right
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-wipe-right
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-right),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-right) {
-  --vt-clip: inset(0 100% 0 0);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(0 100% 0 0);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-right)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-right)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-wipe-right
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-wipe-right
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-right),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-right) {
-  --vt-clip: inset(0 0 0 100%);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(0 0 0 100%);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-up)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-up)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-wipe-up
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-wipe-up
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-up),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-up) {
-  --vt-clip: inset(100% 0 0 0);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(100% 0 0 0);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-up)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-up)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-wipe-up
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-wipe-up
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-up),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-up) {
-  --vt-clip: inset(0 0 100% 0);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(0 0 100% 0);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-down)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-down)::view-transition-old(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    enter-wipe-down
+  )::view-transition-new(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    enter-wipe-down
+  )::view-transition-old(root),
 html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-down),
 html:active-view-transition-type(back)::view-transition-old(.enter-wipe-down) {
-  --vt-clip: inset(0 0 100% 0);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(0 0 100% 0);
+  --vit-clip-rest: inset(0);
 }
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-down)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-down)::view-transition-new(root),
+html:active-view-transition-type(fwd):active-view-transition-type(
+    leave-wipe-down
+  )::view-transition-old(root),
+html:active-view-transition-type(back):active-view-transition-type(
+    leave-wipe-down
+  )::view-transition-new(root),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-down),
 html:active-view-transition-type(back)::view-transition-new(.leave-wipe-down) {
-  --vt-clip: inset(100% 0 0 0);
-  --vt-clip-rest: inset(0);
+  --vit-clip: inset(100% 0 0 0);
+  --vit-clip-rest: inset(0);
 }
 /* Opening/closing the overview is a whole-page zoom: the page interpolates as
    one group, and element-level morphs would tear it apart, so the marks' names
    are overridden first (an author !important beats the inline names hoist.js
    wrote on the elements) and they fold back into root to zoom together. */
-html:active-view-transition-type(overview) .vt-mark {
+html:active-view-transition-type(overview) .vit-mark {
   view-transition-name: none !important;
 }
-@property --vt-s {
+@property --vit-s {
   syntax: "<number>";
   inherits: false;
   initial-value: 1;
 }
-@keyframes vt-enter {
+@keyframes vit-enter {
   from {
-    opacity: var(--vt-opacity, 1);
-    transform: var(--vt-transform, none);
-    clip-path: var(--vt-clip, none);
-    --vt-s: var(--vt-s-away, 1);
+    opacity: var(--vit-opacity, 1);
+    transform: var(--vit-transform, none);
+    clip-path: var(--vit-clip, none);
+    --vit-s: var(--vit-s-away, 1);
   }
   to {
     opacity: 1;
     transform: none;
-    clip-path: var(--vt-clip-rest, none);
-    --vt-s: 1;
+    clip-path: var(--vit-clip-rest, none);
+    --vit-s: 1;
   }
 }
-@keyframes vt-leave {
+@keyframes vit-leave {
   from {
     opacity: 1;
     transform: none;
-    clip-path: var(--vt-clip-rest, none);
-    --vt-s: 1;
+    clip-path: var(--vit-clip-rest, none);
+    --vit-s: 1;
   }
   to {
-    opacity: var(--vt-opacity, 1);
-    transform: var(--vt-transform, none);
-    clip-path: var(--vt-clip, none);
-    --vt-s: var(--vt-s-away, 1);
+    opacity: var(--vit-opacity, 1);
+    transform: var(--vit-transform, none);
+    clip-path: var(--vit-clip, none);
+    --vit-s: var(--vit-s-away, 1);
   }
 }
 
 /* ── toolbar / laser pointer ──────────────────────────────────────────── */
-.vt-bar {
+.vit-bar {
   position: fixed;
   right: 16px;
   bottom: 16px;
@@ -636,15 +714,15 @@ html:active-view-transition-type(overview) .vt-mark {
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
-  background: var(--vt-glass);
-  border: 1px solid var(--vt-line);
+  background: var(--vit-glass);
+  border: 1px solid var(--vit-line);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   font:
     500 12px/1 ui-sans-serif,
     system-ui,
     sans-serif;
-  color: var(--vt-muted);
+  color: var(--vit-muted);
   opacity: 0;
   transform: translateY(6px);
   pointer-events: none;
@@ -652,41 +730,41 @@ html:active-view-transition-type(overview) .vt-mark {
     opacity 0.18s ease,
     transform 0.18s ease;
 }
-.vt-bar.is-shown {
+.vit-bar.is-shown {
   opacity: 1;
   transform: none;
   pointer-events: auto;
-  view-transition-name: vt-bar;
+  view-transition-name: vit-bar;
 }
-.vt-bar button,
-.vt-bar a {
+.vit-bar button,
+.vit-bar a {
   all: unset;
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
   border-radius: 7px;
-  color: var(--vt-fg2);
+  color: var(--vit-fg2);
   cursor: pointer;
   transition:
     background 0.12s,
     color 0.12s;
 }
-.vt-bar button:hover,
-.vt-bar a:hover {
-  background: var(--vt-line);
-  color: var(--vt-fg);
+.vit-bar button:hover,
+.vit-bar a:hover {
+  background: var(--vit-line);
+  color: var(--vit-fg);
 }
-.vt-bar button[aria-pressed="true"] {
-  background: var(--vt-accent);
-  color: var(--vt-on-accent);
+.vit-bar button[aria-pressed="true"] {
+  background: var(--vit-accent);
+  color: var(--vit-on-accent);
 }
-.vt-bar button:focus-visible,
-.vt-bar a:focus-visible {
-  outline: 2px solid var(--vt-accent);
+.vit-bar button:focus-visible,
+.vit-bar a:focus-visible {
+  outline: 2px solid var(--vit-accent);
   outline-offset: 2px;
 }
-.vt-bar svg {
+.vit-bar svg {
   width: 17px;
   height: 17px;
   pointer-events: none;
@@ -696,7 +774,7 @@ html:active-view-transition-type(overview) .vt-mark {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.vt-bar .vt-count {
+.vit-bar .vit-count {
   display: grid;
   place-items: center;
   min-width: 44px;
@@ -713,13 +791,13 @@ html:active-view-transition-type(overview) .vt-mark {
 /* One image used twice: the cursor for the mouse, the DOM dot for touch and
    for pointing from the speaker view — they must look like the same dot. */
 html {
-  --vt-laser: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='16%25' stop-color='%23ffffff'/%3E%3Cstop offset='34%25' stop-color='%23ff4d4d'/%3E%3Cstop offset='56%25' stop-color='%23ff3c3c' stop-opacity='0.45'/%3E%3Cstop offset='100%25' stop-color='%23ff3c3c' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E");
+  --vit-laser: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='16%25' stop-color='%23ffffff'/%3E%3Cstop offset='34%25' stop-color='%23ff4d4d'/%3E%3Cstop offset='56%25' stop-color='%23ff3c3c' stop-opacity='0.45'/%3E%3Cstop offset='100%25' stop-color='%23ff3c3c' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E");
 }
 /* non-mouse input has no cursor to restyle and uses the DOM dot below; hide the system cursor so there are not two */
-body.vt-lasing.vt-nomouse .vt-deck {
+body.vit-lasing.vit-nomouse .vit-deck {
   cursor: none;
 }
-.vt-laser {
+.vit-laser {
   position: fixed;
   left: 0;
   top: 0;
@@ -730,16 +808,16 @@ body.vt-lasing.vt-nomouse .vt-deck {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.12s ease;
-  background: var(--vt-laser) center/32px 32px no-repeat;
-  view-transition-name: vt-laser;
+  background: var(--vit-laser) center/32px 32px no-repeat;
+  view-transition-name: vit-laser;
 }
-.vt-laser.is-on {
+.vit-laser.is-on {
   opacity: 1;
 }
 
-body.vt-lasing .vt-deck {
+body.vit-lasing .vit-deck {
   cursor:
-    var(--vt-laser) 16 16,
+    var(--vit-laser) 16 16,
     none;
 }
 
@@ -769,40 +847,40 @@ body.vt-lasing .vt-deck {
    so a hidden toolbar with a group of its own would be an invisible sheet of
    frosted glass over the page. Shown, the group keeps the glass, and the
    toolbar looks the same during a transition as before and after it. */
-::view-transition-group(vt-bar),
-::view-transition-group(vt-laser),
-::view-transition-old(vt-bar),
-::view-transition-old(vt-laser),
-::view-transition-new(vt-bar),
-::view-transition-new(vt-laser) {
+::view-transition-group(vit-bar),
+::view-transition-group(vit-laser),
+::view-transition-old(vit-bar),
+::view-transition-old(vit-laser),
+::view-transition-new(vit-bar),
+::view-transition-new(vit-laser) {
   animation: none;
 }
-::view-transition-old(vt-bar),
-::view-transition-old(vt-laser) {
+::view-transition-old(vit-bar),
+::view-transition-old(vit-laser) {
   opacity: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .vt-bar {
+  .vit-bar {
     transition: none;
   }
 }
 
 /* no pointing where the page is a thumbnail: only the cursor is tucked away; the lasing flag stays and comes back on leaving */
-body.vt-lasing .vt-deck:is(.vt-all, .vt-desk) {
+body.vit-lasing .vit-deck:is(.vit-all, .vit-desk) {
   cursor: default;
 }
 
 /* ── black screen (b / .) ─────────────────────────────────────────────── */
-body.vt-black {
+body.vit-black {
   background: #000;
 }
-body.vt-black > * {
+body.vit-black > * {
   visibility: hidden;
 }
 
 /* ── key help (?) ─────────────────────────────────────────────────────── */
-.vt-help {
+.vit-help {
   position: fixed;
   inset: 0;
   z-index: 40;
@@ -815,31 +893,31 @@ body.vt-black > * {
     14px/1.5 ui-sans-serif,
     system-ui,
     sans-serif;
-  color: var(--vt-fg2);
+  color: var(--vit-fg2);
   cursor: pointer;
 }
-.vt-help[hidden] {
+.vit-help[hidden] {
   display: none;
 }
-.vt-help table {
+.vit-help table {
   padding: 14px 22px;
   border-spacing: 0 3px;
   border-radius: 10px;
-  background: var(--vt-panel);
-  border: 1px solid var(--vt-line);
+  background: var(--vit-panel);
+  border: 1px solid var(--vit-line);
 }
-.vt-help td {
+.vit-help td {
   padding: 1px 6px;
 }
-.vt-about {
+.vit-about {
   opacity: 0.55;
   font-size: 12px;
   letter-spacing: 0.04em;
 }
-.vt-help kbd {
+.vit-help kbd {
   font: inherit;
-  color: var(--vt-fg);
-  background: var(--vt-line);
+  color: var(--vit-fg);
+  background: var(--vit-line);
   border-radius: 4px;
   padding: 1px 7px;
   white-space: nowrap;
@@ -847,16 +925,16 @@ body.vt-black > * {
 
 /* ── speaker view ─────────────────────────────────────────────────────
    A separate window, about:blank: the runtime copies this whole stylesheet
-   into it and puts .vt-speaker on its <html>, so the tokens, the toolbar and
+   into it and puts .vit-speaker on its <html>, so the tokens, the toolbar and
    these rules come from one file, the layout's constants with them. */
-.vt-speaker {
-  color: var(--vt-fg2);
+.vit-speaker {
+  color: var(--vit-fg2);
   font:
     15px/1.55 ui-sans-serif,
     system-ui,
     sans-serif;
 }
-.vt-speaker body {
+.vit-speaker body {
   margin: 0;
   height: 100vh;
   min-height: 0;
@@ -867,68 +945,68 @@ body.vt-black > * {
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   grid-template-rows: auto auto minmax(0, 1fr);
 }
-.vt-speaker .prog {
+.vit-speaker .prog {
   grid-column: 1 / -1;
   height: 3px;
   margin: -12px -12px 0;
-  background: var(--vt-line);
+  background: var(--vit-line);
 }
-.vt-speaker .prog i {
+.vit-speaker .prog i {
   display: block;
   height: 100%;
   width: 0;
-  background: var(--vt-accent);
-  transition: width 0.3s var(--vt-easing);
+  background: var(--vit-accent);
+  transition: width 0.3s var(--vit-easing);
 }
-.vt-speaker header {
+.vit-speaker header {
   grid-column: 1 / -1;
   display: flex;
   align-items: baseline;
   gap: 10px;
-  color: var(--vt-muted);
+  color: var(--vit-muted);
 }
-.vt-speaker header b {
-  color: var(--vt-fg);
+.vit-speaker header b {
+  color: var(--vit-fg);
   font-variant-numeric: tabular-nums;
 }
-.vt-speaker header span {
+.vit-speaker header span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vt-speaker header time {
+.vit-speaker header time {
   margin-left: auto;
   font:
     600 26px/1 ui-monospace,
     SFMono-Regular,
     Menlo,
     monospace;
-  color: var(--vt-fg);
+  color: var(--vit-fg);
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-.vt-speaker main,
-.vt-speaker aside {
+.vit-speaker main,
+.vit-speaker aside {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
 }
-.vt-speaker small {
-  color: var(--vt-muted);
+.vit-speaker small {
+  color: var(--vit-muted);
 }
-.vt-speaker [hidden] {
+.vit-speaker [hidden] {
   display: none;
 }
-.vt-speaker main {
+.vit-speaker main {
   cursor: default;
 }
-.vt-speaker body.vt-lasing main {
+.vit-speaker body.vit-lasing main {
   cursor:
-    var(--vt-laser) 16 16,
+    var(--vit-laser) 16 16,
     none;
 }
-.vt-speaker .vt-notes {
+.vit-speaker .vit-notes {
   flex: 1;
   min-height: 0;
 }

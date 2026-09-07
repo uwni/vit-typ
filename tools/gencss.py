@@ -24,8 +24,8 @@ out.append("""/* ── a transition is a pair of effects ───────�
    how the old side goes out; a string is the same effect both ways. The
    Typst side writes the pair as the transition's types on every frame
    (data-transition="enter-slide leave-fade") and as a one-sided mark's
-   view-transition-class (the runtime adds the side the mark has, vt-only-new
-   or vt-only-old); the runtime adds fwd or back. Going back replays the pair in reverse: the new side comes in the
+   view-transition-class (the runtime adds the side the mark has, vit-only-new
+   or vit-only-old); the runtime adds fwd or back. Going back replays the pair in reverse: the new side comes in the
    way the old would have gone out, run backwards, and the old side goes out
    the way the new would have come in. So each effect has one rule per role
    — the enter effect's names the new side forward and the old side back,
@@ -33,12 +33,12 @@ out.append("""/* ── a transition is a pair of effects ───────�
    value is the same in both directions: where the entering side starts is
    where the leaving side ends.
 
-   Every side runs one animation, vt-enter from where the variables put it
-   to rest, vt-leave from rest to where they put it: --vt-opacity,
-   --vt-transform, --vt-clip (with --vt-clip-rest, the clip at rest — unset,
+   Every side runs one animation, vit-enter from where the variables put it
+   to rest, vit-leave from rest to where they put it: --vit-opacity,
+   --vit-transform, --vit-clip (with --vit-clip-rest, the clip at rest — unset,
    nothing is clipped; a clip at rest would cut the ink overflow the
-   snapshots carry, so only the wipes set it), --vt-s-away (the
-   magnification away from rest, for the zoom's focus), --vt-timing. A side
+   snapshots carry, so only the wipes set it), --vit-s-away (the
+   magnification away from rest, for the zoom's focus), --vit-timing. A side
    with nothing set holds. A rule that names root sets the variables on
    the root's own image, never on html: the marks' images would inherit
    them. Only an image that exists gets an animation — a one-sided mark's
@@ -47,21 +47,21 @@ out.append("""/* ── a transition is a pair of effects ───────�
    an animation given to one that does not exist is never torn down and
    comes back finished the next time the name is used. */
 ::view-transition-new(root),
-::view-transition-new(.vt-only-new) {
-  animation: vt-enter calc(var(--vt-duration) / var(--vt-speed)) var(--vt-timing, var(--vt-easing)) both;
+::view-transition-new(.vit-only-new) {
+  animation: vit-enter calc(var(--vit-duration) / var(--vit-speed)) var(--vit-timing, var(--vit-easing)) both;
 }
 ::view-transition-old(root),
-::view-transition-old(.vt-only-old) {
-  animation: vt-leave calc(var(--vt-duration) / var(--vt-speed)) var(--vt-timing, var(--vt-easing)) both;
+::view-transition-old(.vit-only-old) {
+  animation: vit-leave calc(var(--vit-duration) / var(--vit-speed)) var(--vit-timing, var(--vit-easing)) both;
 }
 /* A paired mark morphs: the browser moves its group and cross-fades its two
    images itself — the old fading out under the new fading in, blended with
    plus-lighter, so what stays put never dims (the blending rides on the
    browser's own animation, which an animation of ours would replace). Only
    the pace is ours. */
-::view-transition-old(.vt-mo),
-::view-transition-new(.vt-mo) {
-  animation-timing-function: var(--vt-easing);
+::view-transition-old(.vit-mo),
+::view-transition-new(.vit-mo) {
+  animation-timing-function: var(--vit-easing);
 }
 /* A group interpolates as a box, and each of its two images is drawn into that
    box — stretched to fill it, which is right for a mark that keeps its shape
@@ -70,16 +70,16 @@ out.append("""/* ── a transition is a pair of effects ───────�
    instead, anchored where the transition asks, so what was already there stays
    where it was and only the new part appears. The anchor is the corner that
    does not move. */
-::view-transition-old(.vt-mo),
-::view-transition-new(.vt-mo),
-::view-transition-old(.vt-only-old),
-::view-transition-new(.vt-only-new) {
-  object-fit: var(--vt-fit, fill);
-  object-position: var(--vt-anchor, 50% 50%);
+::view-transition-old(.vit-mo),
+::view-transition-new(.vit-mo),
+::view-transition-old(.vit-only-old),
+::view-transition-new(.vit-only-new) {
+  object-fit: var(--vit-fit, fill);
+  object-position: var(--vit-anchor, 50% 50%);
 }
 /* opening or closing the overview: the deck fades into the grid while the page zooms */
 html:active-view-transition-type(overview)::view-transition-new(root) {
-  --vt-opacity: 0;
+  --vit-opacity: 0;
 }
 /* fade. For root the old page is held beneath the new one fading in: both
    snapshots are opaque and page-sized, so this is a cross-fade with no dip,
@@ -88,10 +88,10 @@ html:active-view-transition-type(overview)::view-transition-new(root) {
    pseudo-elements go — shows the new page, never the old. Paired with
    another entrance the old page fades out for real. */
 """)
-out.append(rule(enter_side("fade") + leave_side("fade"), ["--vt-opacity: 0"]))
-out.append(rule([T("enter-fade", "leave-fade") + "::view-transition-old(root)"], ["--vt-opacity: 1"]))
+out.append(rule(enter_side("fade") + leave_side("fade"), ["--vit-opacity: 0"]))
+out.append(rule([T("enter-fade", "leave-fade") + "::view-transition-old(root)"], ["--vit-opacity: 1"]))
 out.append("/* none: at once. The side jumps to its end state on the first frame. */\n")
-out.append(rule(enter_side("none") + leave_side("none"), ["--vt-opacity: 0", "--vt-timing: step-start"]))
+out.append(rule(enter_side("none") + leave_side("none"), ["--vit-opacity: 0", "--vit-timing: step-start"]))
 out.append("""/* slide / rise: push, by the width / height of the box. Forward the new one
    comes in from the right / bottom and the old one leaves to the left / top;
    back, the other way round; a transition can set how far with push (a
@@ -109,25 +109,25 @@ out.append("""/* slide / rise: push, by the width / height of the box. Forward t
    that condenses as the side lands; a transition can set zoom to start
    nearer or further. The blur is the Gaussian with the
    disc's RMS radius, σ = c/4, and an image's filter is applied in its own
-   pixels, before its transform, hence σ/s. --vt-s is the magnification
+   pixels, before its transform, hence σ/s. --vit-s is the magnification
    itself, registered so that it interpolates alongside the transform and
    the blur is recomputed from it every frame. */
 """)
-out.append(rule(enter_side("slide"), ["--vt-transform: translateX(var(--vt-push, 100%))"]))
-out.append(rule(leave_side("slide"), ["--vt-transform: translateX(calc(-1 * var(--vt-push, 100%)))"]))
-out.append(rule(enter_side("rise"), ["--vt-transform: translateY(var(--vt-push, 100%))"]))
-out.append(rule(leave_side("rise"), ["--vt-transform: translateY(calc(-1 * var(--vt-push, 100%)))"]))
+out.append(rule(enter_side("slide"), ["--vit-transform: translateX(var(--vit-push, 100%))"]))
+out.append(rule(leave_side("slide"), ["--vit-transform: translateX(calc(-1 * var(--vit-push, 100%)))"]))
+out.append(rule(enter_side("rise"), ["--vit-transform: translateY(var(--vit-push, 100%))"]))
+out.append(rule(leave_side("rise"), ["--vit-transform: translateY(calc(-1 * var(--vit-push, 100%)))"]))
 out.append("""/* A page pushed by its own width is off the screen when it gets there, and
    that is the whole of the effect. A mark is pushed by *its* width, so it
    arrives beside where it started, still on the page and still opaque — and
    the image would then simply cease to exist. So on a mark, and only there,
    the push fades. */
 """)
-out.append(rule(sum((f(x) for f in (enter_mark, leave_mark) for x in ("slide", "rise")), []), ["--vt-opacity: 0"]))
+out.append(rule(sum((f(x) for f in (enter_mark, leave_mark) for x in ("slide", "rise")), []), ["--vit-opacity: 0"]))
 out.append(rule(enter_side("zoom") + leave_side("zoom"), [
-    "--vt-aperture: calc(var(--vt-stage) / 4)", "--vt-opacity: 0",
-    "--vt-transform: scale(var(--vt-zoom, 3))", "--vt-s-away: var(--vt-zoom, 3)",
-    "filter: blur(calc(var(--vt-aperture) / 4 * (var(--vt-s) - 1) / var(--vt-s)))"]))
+    "--vit-aperture: calc(var(--vit-stage) / 4)", "--vit-opacity: 0",
+    "--vit-transform: scale(var(--vit-zoom, 3))", "--vit-s-away: var(--vit-zoom, 3)",
+    "filter: blur(calc(var(--vit-aperture) / 4 * (var(--vit-s) - 1) / var(--vit-s)))"]))
 out.append("""/* wipe-*: reveal, named by the direction the front travels (wipe-up sweeps
    up from the bottom edge): the new one appears from that edge while the old
    one is covered from the same edge, so at every instant the two tile the
@@ -136,46 +136,46 @@ out.append("""/* wipe-*: reveal, named by the direction the front travels (wipe-
 wipes = {"wipe-left": ("inset(0 0 0 100%)", "inset(0 100% 0 0)"), "wipe-right": ("inset(0 100% 0 0)", "inset(0 0 0 100%)"),
          "wipe-up": ("inset(100% 0 0 0)", "inset(0 0 100% 0)"), "wipe-down": ("inset(0 0 100% 0)", "inset(100% 0 0 0)")}
 for w, (e, l) in wipes.items():
-    out.append(rule(enter_side(w), ["--vt-clip: " + e, "--vt-clip-rest: inset(0)"]))
-    out.append(rule(leave_side(w), ["--vt-clip: " + l, "--vt-clip-rest: inset(0)"]))
+    out.append(rule(enter_side(w), ["--vit-clip: " + e, "--vit-clip-rest: inset(0)"]))
+    out.append(rule(leave_side(w), ["--vit-clip: " + l, "--vit-clip-rest: inset(0)"]))
 out.append("""/* Opening/closing the overview is a whole-page zoom: the page interpolates as
    one group, and element-level morphs would tear it apart, so the marks' names
    are overridden first (an author !important beats the inline names hoist.js
    wrote on the elements) and they fold back into root to zoom together. */
-html:active-view-transition-type(overview) .vt-mark {
+html:active-view-transition-type(overview) .vit-mark {
   view-transition-name: none !important;
 }
-@property --vt-s {
+@property --vit-s {
   syntax: "<number>";
   inherits: false;
   initial-value: 1;
 }
-@keyframes vt-enter {
+@keyframes vit-enter {
   from {
-    opacity: var(--vt-opacity, 1);
-    transform: var(--vt-transform, none);
-    clip-path: var(--vt-clip, none);
-    --vt-s: var(--vt-s-away, 1);
+    opacity: var(--vit-opacity, 1);
+    transform: var(--vit-transform, none);
+    clip-path: var(--vit-clip, none);
+    --vit-s: var(--vit-s-away, 1);
   }
   to {
     opacity: 1;
     transform: none;
-    clip-path: var(--vt-clip-rest, none);
-    --vt-s: 1;
+    clip-path: var(--vit-clip-rest, none);
+    --vit-s: 1;
   }
 }
-@keyframes vt-leave {
+@keyframes vit-leave {
   from {
     opacity: 1;
     transform: none;
-    clip-path: var(--vt-clip-rest, none);
-    --vt-s: 1;
+    clip-path: var(--vit-clip-rest, none);
+    --vit-s: 1;
   }
   to {
-    opacity: var(--vt-opacity, 1);
-    transform: var(--vt-transform, none);
-    clip-path: var(--vt-clip, none);
-    --vt-s: var(--vt-s-away, 1);
+    opacity: var(--vit-opacity, 1);
+    transform: var(--vit-transform, none);
+    clip-path: var(--vit-clip, none);
+    --vit-s: var(--vit-s-away, 1);
   }
 }
 """)

@@ -24,9 +24,9 @@ const W = 14, F = 32, T = 10, L = 13, Z = 12, DASH = 17, BALLS = 18, FOLLOW = 19
    mostly text, and text is glyph outlines, so this document is several times the
    size of the demo that used to live here: waiting on data-ready rather than on
    a fixed delay is what keeps the time-sensitive cases below honest. */
-const ready = p => p.waitForFunction(() => document.querySelector('.vt-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
+const ready = p => p.waitForFunction(() => document.querySelector('.vit-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
 const present = async p => {
-  await p.waitForFunction(() => document.querySelector('.vt-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
+  await p.waitForFunction(() => document.querySelector('.vit-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
   await p.evaluate(() => { window.vit.mode = 'present'; });
   for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
   await p.waitForTimeout(150);
@@ -41,14 +41,14 @@ const watch = p => {
   const p = await b.newPage(VP); watch(p);
   await p.goto(url); await p.waitForTimeout(400); await present(p);
   console.log('toolbar:', JSON.stringify(await p.evaluate(() => {
-    const a = document.querySelector('.vt-bar .vt-dl');
+    const a = document.querySelector('.vit-bar .vit-dl');
     return {
-      buttons: [...document.querySelectorAll('.vt-bar > *')].map(e => e.tagName.toLowerCase()).join(' '),
+      buttons: [...document.querySelectorAll('.vit-bar > *')].map(e => e.tagName.toLowerCase()).join(' '),
       pdf: a && a.getAttribute('href'),
       download: a && a.hasAttribute('download'),
       newTab: a && a.target,
-      outsideDeck: !document.querySelector('.vt-deck').contains(document.querySelector('.vt-bar')),
-      ownGroup: getComputedStyle(document.querySelector('.vt-bar')).viewTransitionName,
+      outsideDeck: !document.querySelector('.vit-deck').contains(document.querySelector('.vit-bar')),
+      ownGroup: getComputedStyle(document.querySelector('.vit-bar')).viewTransitionName,
     };
   })));
   await p.close();
@@ -59,10 +59,10 @@ const watch = p => {
   const p = await b.newPage(VP); watch(p);
   await p.goto(url); await p.waitForTimeout(400); await present(p);
   const snap = () => p.evaluate(() => ({
-    lasing: document.body.classList.contains('vt-lasing'),
-    pressed: document.querySelector('.vt-bar button[aria-pressed]:nth-of-type(2)').getAttribute('aria-pressed'),
-    overview: document.querySelector('.vt-deck').classList.contains('vt-all'),
-    cursor: getComputedStyle(document.querySelector('.vt-deck')).cursor.slice(0, 18),
+    lasing: document.body.classList.contains('vit-lasing'),
+    pressed: document.querySelector('.vit-bar button[aria-pressed]:nth-of-type(2)').getAttribute('aria-pressed'),
+    overview: document.querySelector('.vit-deck').classList.contains('vit-all'),
+    cursor: getComputedStyle(document.querySelector('.vit-deck')).cursor.slice(0, 18),
   }));
   await p.keyboard.press('l'); console.log('laser on     :', JSON.stringify(await snap()));
   await p.keyboard.press('o'); await p.waitForTimeout(900);
@@ -79,33 +79,33 @@ const watch = p => {
   console.log('overview open:', JSON.stringify(await p.evaluate(async () => {
     const orig = document.startViewTransition.bind(document);
     document.startViewTransition = () => { };
-    document.querySelector('.vt-deck').classList.add('vt-all');
+    document.querySelector('.vit-deck').classList.add('vit-all');
     await new Promise(r => setTimeout(r, 50));
-    let vt; document.startViewTransition = a => (vt = orig(a));
-    document.querySelectorAll('.vt-group')[1].click();
-    await vt.ready;
+    let vit; document.startViewTransition = a => (vit = orig(a));
+    document.querySelectorAll('.vit-group')[1].click();
+    await vit.ready;
     return {
-      type: [...vt.types].join(' '),
-      markNames: [...new Set([...document.querySelectorAll('.vt-mark')].map(m => getComputedStyle(m).viewTransitionName))],
-      pageGroup: getComputedStyle(document.querySelectorAll('.vt-group')[1]).viewTransitionName,
+      type: [...vit.types].join(' '),
+      markNames: [...new Set([...document.querySelectorAll('.vit-mark')].map(m => getComputedStyle(m).viewTransitionName))],
+      pageGroup: getComputedStyle(document.querySelectorAll('.vit-group')[1]).viewTransitionName,
     };
   })));
   // go() short-circuits on i === cur; clicking the *current* page must still leave the overview
   await p.keyboard.press('o'); await p.waitForTimeout(900);
-  await p.evaluate(() => document.querySelectorAll('.vt-group')[1].click());
+  await p.evaluate(() => document.querySelectorAll('.vit-group')[1].click());
   await p.waitForTimeout(900);
   console.log('click current:', JSON.stringify(await p.evaluate(() => ({
-    overview: document.querySelector('.vt-deck').classList.contains('vt-all'),
+    overview: document.querySelector('.vit-deck').classList.contains('vit-all'),
     page: window.vit.index + 1,
     leftover: document.activeViewTransition ? [...document.activeViewTransition.types].join(' ') : null,
   }))));
   console.log('plain flip   :', JSON.stringify(await p.evaluate(async () => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit.go(0); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit.go(0); await vit.ready;
     return {
-      type: [...vt.types].join(' '),
-      markNames: [...new Set([...document.querySelectorAll('.vt-mark')].map(m => getComputedStyle(m).viewTransitionName))]
+      type: [...vit.types].join(' '),
+      markNames: [...new Set([...document.querySelectorAll('.vit-mark')].map(m => getComputedStyle(m).viewTransitionName))]
     };
   })));
   await p.close();
@@ -117,9 +117,9 @@ const watch = p => {
   const p = await ctx.newPage(); watch(p);
   await p.goto(url); await p.waitForTimeout(400); await present(p);
   const snap = () => p.evaluate(() => ({
-    cursor: getComputedStyle(document.querySelector('.vt-deck')).cursor.slice(0, 18),
-    nomouse: document.body.classList.contains('vt-nomouse'),
-    lit: document.querySelector('.vt-laser').classList.contains('is-on'),
+    cursor: getComputedStyle(document.querySelector('.vit-deck')).cursor.slice(0, 18),
+    nomouse: document.body.classList.contains('vit-nomouse'),
+    lit: document.querySelector('.vit-laser').classList.contains('is-on'),
     page: window.vit.index,
   }));
   await p.keyboard.press('l');
@@ -129,7 +129,7 @@ const watch = p => {
   await p.evaluate(d => document.dispatchEvent(new PointerEvent('pointerdown', d)), d);
   console.log('touch hold :', JSON.stringify({
     ...await snap(),
-    position: await p.evaluate(() => document.querySelector('.vt-laser').style.transform)
+    position: await p.evaluate(() => document.querySelector('.vit-laser').style.transform)
   }));
   await p.evaluate(d => document.dispatchEvent(new PointerEvent('pointerup', d)), d);
   console.log('touch up   :', JSON.stringify(await snap()));
@@ -147,30 +147,30 @@ const watch = p => {
    runtime's: it only divides by the speed multiplier. */
 {
   const src = join(HERE, 'knobs.typ');
-  const out = join(tmpdir(), 'vt-knobs.html');
+  const out = join(tmpdir(), 'vit-knobs.html');
   execFileSync('typst', ['compile', '--root', join(HERE, '..'), '--features', 'html', src, out], { stdio: ['ignore', 'ignore', 'ignore'] });
   const p = await b.newPage(VP); watch(p);
   await p.goto('file://' + out); await p.waitForTimeout(400); await present(p);
-  const types = await p.evaluate(() => [...document.querySelectorAll('.vt-slide')].map(s => s.dataset.transition));
+  const types = await p.evaluate(() => [...document.querySelectorAll('.vit-slide')].map(s => s.dataset.transition));
   const fx = go => p.evaluate(async go => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit[go](); await vt.ready;
-    const at = ps => { const c = getComputedStyle(document.documentElement, ps); return [c.animationDuration, c.getPropertyValue('--vt-zoom').trim(), c.getPropertyValue('--vt-push').trim()].filter(Boolean).join(' '); };
-    const m = document.querySelector('.vt-mark[data-vt-key="m"]');
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit[go](); await vit.ready;
+    const at = ps => { const c = getComputedStyle(document.documentElement, ps); return [c.animationDuration, c.getPropertyValue('--vit-zoom').trim(), c.getPropertyValue('--vit-push').trim()].filter(Boolean).join(' '); };
+    const m = document.querySelector('.vit-mark[data-vit-key="m"]');
     const r = {
-      types: [...vt.types].join(' '), easing: getComputedStyle(document.documentElement, '::view-transition-new(root)').animationTimingFunction,
+      types: [...vit.types].join(' '), easing: getComputedStyle(document.documentElement, '::view-transition-new(root)').animationTimingFunction,
       new: at('::view-transition-new(root)'), old: at('::view-transition-old(root)'),
       mark: m && m.style.viewTransitionName ? at('::view-transition-new(' + m.style.viewTransitionName + ')') : '', markClass: m ? m.style.viewTransitionClass : '',
       markFit: m && m.style.viewTransitionName ? (c => c.objectFit + ' ' + c.objectPosition)(getComputedStyle(document.documentElement, '::view-transition-new(' + m.style.viewTransitionName + ')')) : ''
     };
-    await vt.finished; return r;
+    await vit.finished; return r;
   }, go);
   const page2 = await fx('next');
   const page3 = await fx('next');
   await p.evaluate(() => { window.vit.speed = 2; });
   const half = await fx('prev');
-  await p.evaluate(() => { window.vit.speed = 1; localStorage.removeItem('vt-speed'); });
+  await p.evaluate(() => { window.vit.speed = 1; localStorage.removeItem('vit-speed'); });
   const back = await fx('prev');
   console.log('knobs      :', JSON.stringify({ types, page2, page3, atDoubleSpeed: half, backToPage2: back }),
     '(page 2 gives each side its own: entering 200ms with push -100%, leaving 900ms with zoom 6, both on its shared easing; page 3 the deck\'s 1200ms; the mark its own 900ms; at 2× every duration is halved; going back the two sides swap images, so the new one now runs the leave side\'s 900ms; the mark also asks not to be stretched: object-fit none, anchored bottom right)');
@@ -185,28 +185,28 @@ const watch = p => {
   const p = await b.newPage({ viewport: { width: 1440, height: 900 } }); watch(p);
   await p.goto(url + `#${Z}`); await ready(p); await p.waitForTimeout(800);
   const desk = () => p.evaluate(Z => {
-    const rail = document.querySelector('.vt-deck'), pane = document.querySelector('.vt-pane');
+    const rail = document.querySelector('.vit-deck'), pane = document.querySelector('.vit-pane');
     const seen = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
     return {
       mode: window.vit.mode, page: window.vit.index,
-      thumbs: document.querySelectorAll('.vt-slide.is-thumb').length,
-      here: [...document.querySelectorAll('.vt-group')].findIndex(g => g.classList.contains('is-here')),
-      preview: (document.querySelector('.vt-pane iframe').getAttribute('src') || '').replace(/^.*#/, '#'),
-      notes: document.querySelector('.vt-notes').textContent.slice(0, 18),
+      thumbs: document.querySelectorAll('.vit-slide.is-thumb').length,
+      here: [...document.querySelectorAll('.vit-group')].findIndex(g => g.classList.contains('is-here')),
+      preview: (document.querySelector('.vit-pane iframe').getAttribute('src') || '').replace(/^.*#/, '#'),
+      notes: document.querySelector('.vit-notes').textContent.slice(0, 18),
       pane: getComputedStyle(pane).display === 'none' ? 'hidden' : 'shown',
       railScrolled: rail.scrollTop > 0,
-      inView: seen(document.querySelectorAll('.vt-group')[window.vit.index === 0 ? 0 : Z - 1]),
-      bar: document.querySelector('.vt-bar').classList.contains('is-shown'),
+      inView: seen(document.querySelectorAll('.vit-group')[window.vit.index === 0 ? 0 : Z - 1]),
+      bar: document.querySelector('.vit-bar').classList.contains('is-shown'),
       running: document.getAnimations().filter(a => a.playState === 'running').length,
     };
   }, Z);
   const open = await desk();
   await p.waitForTimeout(2600);   // the toolbar's auto-hide is 2.4 s: at the desk it must not fire
-  const stillShown = await p.evaluate(() => document.querySelector('.vt-bar').classList.contains('is-shown'));
-  await p.evaluate(() => { const g = document.querySelectorAll('.vt-group')[2]; g.querySelector('.vt-slide.is-thumb').click(); });
+  const stillShown = await p.evaluate(() => document.querySelector('.vit-bar').classList.contains('is-shown'));
+  await p.evaluate(() => { const g = document.querySelectorAll('.vit-group')[2]; g.querySelector('.vit-slide.is-thumb').click(); });
   await p.waitForTimeout(700);
   const picked = await desk();
-  await p.evaluate(() => document.querySelectorAll('.vt-group')[6].querySelectorAll('.vt-dots i')[2].click());
+  await p.evaluate(() => document.querySelectorAll('.vit-group')[6].querySelectorAll('.vit-dots i')[2].click());
   await p.waitForTimeout(700);
   const dot = await desk();
   await p.keyboard.press('Enter'); await p.waitForTimeout(700);
@@ -225,30 +225,30 @@ const watch = p => {
   await p.evaluate(() => window.vit.go(7)); await p.waitForTimeout(800);
   await p.keyboard.press('o'); await p.waitForTimeout(900);
   console.log('thumbnails :', JSON.stringify(await p.evaluate(() => ({
-    thumbs: document.querySelectorAll('.vt-slide.is-thumb').length,
-    frames: document.querySelectorAll('.vt-slide').length,
-    captions: [...document.querySelectorAll('.vt-cap')].map(c => c.textContent),
-    dots: [...document.querySelectorAll('.vt-group')].map(g =>
-      [...g.querySelectorAll('.vt-dots i')].map(d => d.classList.contains('is-on') ? '●' : '○').join('')),
-    shownFrame: [...document.querySelectorAll('.vt-group')].map(g =>
-      [...g.querySelectorAll('.vt-slide')].findIndex(s => s.classList.contains('is-thumb'))),
+    thumbs: document.querySelectorAll('.vit-slide.is-thumb').length,
+    frames: document.querySelectorAll('.vit-slide').length,
+    captions: [...document.querySelectorAll('.vit-cap')].map(c => c.textContent),
+    dots: [...document.querySelectorAll('.vit-group')].map(g =>
+      [...g.querySelectorAll('.vit-dots i')].map(d => d.classList.contains('is-on') ? '●' : '○').join('')),
+    shownFrame: [...document.querySelectorAll('.vit-group')].map(g =>
+      [...g.querySelectorAll('.vit-slide')].findIndex(s => s.classList.contains('is-thumb'))),
   }))));
-  await p.evaluate(() => document.querySelectorAll('.vt-group')[1].querySelectorAll('.vt-dots i')[1].click());
+  await p.evaluate(() => document.querySelectorAll('.vit-group')[1].querySelectorAll('.vit-dots i')[1].click());
   await p.waitForTimeout(900);
   console.log('click dot  :', JSON.stringify(await p.evaluate(() => ({
-    frame: window.vit.index, counter: document.querySelector('.vt-count').textContent,
-    hash: location.hash, overview: document.querySelector('.vt-deck').classList.contains('vt-all'),
+    frame: window.vit.index, counter: document.querySelector('.vit-count').textContent,
+    hash: location.hash, overview: document.querySelector('.vit-deck').classList.contains('vit-all'),
   }))));
   // while presenting, these parts must be entirely absent from the layout
   console.log('presenting :', JSON.stringify(await p.evaluate(() => ({
-    caption: getComputedStyle(document.querySelector('.vt-cap')).display,
-    dots: getComputedStyle(document.querySelector('.vt-dots')).display,
+    caption: getComputedStyle(document.querySelector('.vit-cap')).display,
+    dots: getComputedStyle(document.querySelector('.vit-dots')).display,
   }))));
   await p.close();
 }
 
 /* the motion of a pseudo-element: its animation and the variables deck.css set on it (opacity / transform / clip / timing) */
-const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, ps); return [cs.animationName, ...['--vt-opacity', '--vt-transform', '--vt-s-away', '--vt-clip', '--vt-timing'].map(v => cs.getPropertyValue(v).trim()).filter(Boolean)].join(' '); }`;
+const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, ps); return [cs.animationName, ...['--vit-opacity', '--vit-transform', '--vit-s-away', '--vit-clip', '--vit-timing'].map(v => cs.getPropertyValue(v).trim()).filter(Boolean)].join(' '); }`;
 
 /* ── page transition / speed factor / UI theme ─────────────────────── */
 {
@@ -256,34 +256,34 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.goto(url + '#10.3'); await p.waitForTimeout(400); await present(p);
   const fx = go => p.evaluate(async ([go, MOTION]) => {
     const motion = eval(MOTION);
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit[go](); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit[go](); await vit.ready;
     const r = {
-      vt: [...vt.types].join(' '),
+      vit: [...vit.types].join(' '),
       root: { new: motion('::view-transition-new(root)'), old: motion('::view-transition-old(root)') },
       title: document.getAnimations().filter(a => /m-title-1/.test(a.effect.pseudoElement) && !/group|pair/.test(a.effect.pseudoElement)).map(a => a.effect.pseudoElement.replace('::view-transition-', '').replace('(m-title-1)', '') + ':' + a.animationName).join(),
-      titleClass: [...document.querySelectorAll('.vt-mark[data-vt-key="title"]')].map(m => m.style.viewTransitionClass).filter(c => /vt-only-(new|old)/.test(c)).join()
+      titleClass: [...document.querySelectorAll('.vit-mark[data-vit-key="title"]')].map(m => m.style.viewTransitionClass).filter(c => /vit-only-(new|old)/.test(c)).join()
     };
-    await vt.finished; return r;
+    await vit.finished; return r;
   }, [go, MOTION]);
-  console.log('transition :', JSON.stringify({ '10.3→11 (slide)': await fx('next'), '11→10.3 (back)': await fx('prev'), '10.3→10.2 (default)': await fx('prev') }), '(slide: new from translateX(100%), old to translateX(-100%), back the other way round; default: new from opacity 0, old held at 1; the heading is on both pages, so it is a pair and cross-fades with the browser\'s own animations, never a vt-only class)');
+  console.log('transition :', JSON.stringify({ '10.3→11 (slide)': await fx('next'), '11→10.3 (back)': await fx('prev'), '10.3→10.2 (default)': await fx('prev') }), '(slide: new from translateX(100%), old to translateX(-100%), back the other way round; default: new from opacity 0, old held at 1; the heading is on both pages, so it is a pair and cross-fades with the browser\'s own animations, never a vit-only class)');
   /* the types on a frame are the transition into it: give page 7's first frame `slide`;
      entering the page slides, frame-to-frame inside the page still fades (the later frame's types) */
-  await p.evaluate(() => { document.querySelectorAll('.vt-group')[6].querySelector('.vt-slide').dataset.transition = 'enter-slide leave-slide'; window.vit.go(14); });
+  await p.evaluate(() => { document.querySelectorAll('.vit-group')[6].querySelector('.vit-slide').dataset.transition = 'enter-slide leave-slide'; window.vit.go(14); });
   await p.waitForTimeout(1000);
-  console.log('page/frame :', JSON.stringify({ '6.3→7.1': (await fx('next')).vt, '7.1→7.2': (await fx('next')).vt, '7.2→7.1': (await fx('prev')).vt, '7.1→6.3': (await fx('prev')).vt }), '(expected slide fwd / fade fwd / fade back / slide back)');
+  console.log('page/frame :', JSON.stringify({ '6.3→7.1': (await fx('next')).vit, '7.1→7.2': (await fx('next')).vit, '7.2→7.1': (await fx('prev')).vit, '7.1→6.3': (await fx('prev')).vit }), '(expected slide fwd / fade fwd / fade back / slide back)');
   const sp = () => p.evaluate(() => {
-    return { speed: document.documentElement.style.getPropertyValue('--vt-speed'), counter: document.querySelector('.vt-count').textContent, stored: localStorage.getItem('vt-speed') };
+    return { speed: document.documentElement.style.getPropertyValue('--vit-speed'), counter: document.querySelector('.vit-count').textContent, stored: localStorage.getItem('vit-speed') };
   });
   await p.keyboard.press('='); const a = await sp();
   await p.keyboard.press('-'); await p.keyboard.press('-'); const c = await sp();
   await p.keyboard.press('0'); const z = await sp();
-  await p.evaluate(() => localStorage.removeItem('vt-speed'));
+  await p.evaluate(() => localStorage.removeItem('vit-speed'));
   console.log('speed      :', JSON.stringify({ 'press =': a, 'then -,-': c, 'press 0': z }), '(the multiplier; deck.css divides every duration by it: 1.25 / 0.8 / 1)');
   const th = () => p.evaluate(() => ({
     html: document.documentElement.dataset.theme,
-    bar: getComputedStyle(document.querySelector('.vt-bar')).backgroundColor, deck: getComputedStyle(document.querySelector('.vt-deck')).backgroundColor
+    bar: getComputedStyle(document.querySelector('.vit-bar')).backgroundColor, deck: getComputedStyle(document.querySelector('.vit-deck')).backgroundColor
   }));
   await p.emulateMedia({ colorScheme: 'light' }); await p.waitForTimeout(50); const light = await th();
   await p.emulateMedia({ colorScheme: 'dark' }); await p.waitForTimeout(50); const dark = await th();
@@ -299,12 +299,12 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.goto(url + '#4.2'); await p.waitForTimeout(400); await present(p);
   const fx = go => p.evaluate(async ([go, MOTION]) => {
     const motion = eval(MOTION);
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit[go](); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit[go](); await vit.ready;
     const out = {};
     document.getAnimations().forEach(a => { const ps = a.effect.pseudoElement; if (ps && /m-chip-1|\(root\)/.test(ps) && !/group|pair/.test(ps)) out[ps.replace('::view-transition-', '')] = motion(ps); });
-    await vt.finished; return out;
+    await vit.finished; return out;
   }, [go, MOTION]);
   console.log('mirror     :', JSON.stringify({ forward: await fx('next'), back: await fx('prev') }), '(both directions: root old held at 1 under new from 0, the chip pair old to 0 / new from 0 — symmetric by construction)');
   await p.close();
@@ -317,13 +317,13 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const p = await b.newPage(VP); watch(p);
   await p.goto(url + '#1'); await p.waitForTimeout(400); await present(p);
   const fx = go => p.evaluate(async go => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit[go](); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit[go](); await vit.ready;
     const out = { subGroup: document.getAnimations().some(a => /m-sub/.test(a.effect.pseudoElement || '')) };
-    const named = () => [...document.querySelectorAll('.vt-mark[data-vt-key="sub"]')].map(m => m.style.viewTransitionName).join();
+    const named = () => [...document.querySelectorAll('.vit-mark[data-vit-key="sub"]')].map(m => m.style.viewTransitionName).join();
     out.foldedName = named();
-    await vt.finished;
+    await vit.finished;
     out.nameAfter = named();
     return out;
   }, go);
@@ -337,14 +337,14 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const p = await b.newPage(VP); watch(p);
   await p.goto(url + `#${FOLLOW - 1}`); await p.waitForTimeout(400); await present(p);
   const onTrack = () => p.evaluate(() => {
-    const s = document.querySelector('.vt-slide.is-active');
-    const path = s.querySelector('.vt-mark[data-vt-key="track"] path'), dot = s.querySelector('.vt-mark[data-vt-key="dot"]');
+    const s = document.querySelector('.vit-slide.is-active');
+    const path = s.querySelector('.vit-mark[data-vit-key="track"] path'), dot = s.querySelector('.vit-mark[data-vit-key="dot"]');
     const c = dot.getBoundingClientRect(), pt = new DOMPoint(c.x + c.width / 2, c.y + c.height / 2).matrixTransform(path.getScreenCTM().inverse());
     const L = path.getTotalLength(); let best = 1e9;
     for (let i = 0; i <= 600; i++) { const q = path.getPointAtLength(L * i / 600); best = Math.min(best, Math.hypot(q.x - pt.x, q.y - pt.y)); }
     return +best.toFixed(2);
   });
-  const states = () => p.evaluate(F => document.querySelectorAll('.vt-group')[F].querySelector('.vt-slide').getAnimations({ subtree: true }).map(a => a.effect.target.dataset.vtKey + ':' + a.playState).join(' '), FOLLOW - 1);
+  const states = () => p.evaluate(F => document.querySelectorAll('.vit-group')[F].querySelector('.vit-slide').getAnimations({ subtree: true }).map(a => a.effect.target.dataset.vitKey + ':' + a.playState).join(' '), FOLLOW - 1);
   await p.keyboard.press('ArrowRight'); await p.waitForTimeout(150);
   const during = await states();
   await p.waitForTimeout(900);
@@ -366,7 +366,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.goto(url + `#${W}`); await p.waitForTimeout(400); await present(p);
   await p.evaluate(W => { window.__W = W; }, W);
   const st = () => p.evaluate(() => {
-    const s = document.querySelector('.vt-slide.is-active');
+    const s = document.querySelector('.vit-slide.is-active');
     const gs = [...s.querySelectorAll('[data-tween-at]')];
     const shown = gs.filter(g => getComputedStyle(g).display !== 'none');
     const ball = shown.length ? [...shown[0].querySelectorAll('path')].find(q => q.getAttribute('fill') !== 'none') : null;
@@ -376,9 +376,9 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
       step: window.vit.step + '/' + window.vit.steps, hash: location.hash,
       running: s.getAnimations({ subtree: true }).filter(a => a.playState === 'running').length,
       ball: r ? [+(r.x + r.width / 2).toFixed(1), +(r.y + r.height / 2).toFixed(1)] : null,
-      hoisted: s.querySelectorAll('.vt-mark').length,
-      counter: document.querySelector('.vt-count').textContent,
-      dots: [...document.querySelectorAll('.vt-group')[window.__W - 1].querySelectorAll('.vt-dots i')].map(d => d.classList.contains('is-now') ? '◉' : d.classList.contains('is-on') ? '●' : '○').join('')
+      hoisted: s.querySelectorAll('.vit-mark').length,
+      counter: document.querySelector('.vit-count').textContent,
+      dots: [...document.querySelectorAll('.vit-group')[window.__W - 1].querySelectorAll('.vit-dots i')].map(d => d.classList.contains('is-now') ? '◉' : d.classList.contains('is-on') ? '●' : '○').join('')
     };
   });
   const s0 = await st();
@@ -410,18 +410,18 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
      previews that step and leaving restores; clicking a dot opens exactly that step */
   await p.evaluate(() => window.vit.go(3)); await p.waitForTimeout(900);
   await p.keyboard.press('o'); await p.waitForTimeout(900);
-  const thumb = () => p.evaluate(() => { const s = document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide.is-thumb'); return [...s.querySelectorAll('[data-tween-at]')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.dataset.tweenAt).join(); });
-  const dot = (await p.$$(`.vt-group:nth-child(${W}) .vt-dots i`))[2];
+  const thumb = () => p.evaluate(() => { const s = document.querySelectorAll('.vit-group')[window.__W - 1].querySelector('.vit-slide.is-thumb'); return [...s.querySelectorAll('[data-tween-at]')].filter(x => getComputedStyle(x).display !== 'none').map(x => x.dataset.tweenAt).join(); });
+  const dot = (await p.$$(`.vit-group:nth-child(${W}) .vit-dots i`))[2];
   const t0 = await thumb(); await dot.hover(); await p.waitForTimeout(100); const t1 = await thumb();
   await p.mouse.move(10, 10); await p.waitForTimeout(100); const t2 = await thumb();
   await dot.hover(); await p.waitForTimeout(50); await dot.click(); await p.waitForTimeout(1000);
-  console.log('steps in overview:', JSON.stringify({ otherPageThumb: t0, hoverThirdDot: t1, leave: t2, open: await p.evaluate(() => location.hash + ' ' + (document.querySelector('.vt-deck').classList.contains('vt-all') ? 'overview' : 'show')) }), `(expected 5 2 5 #${W}.3 show)`);
+  console.log('steps in overview:', JSON.stringify({ otherPageThumb: t0, hoverThirdDot: t1, leave: t2, open: await p.evaluate(() => location.hash + ' ' + (document.querySelector('.vit-deck').classList.contains('vit-all') ? 'overview' : 'show')) }), `(expected 5 2 5 #${W}.3 show)`);
   /* a preview of one page put back when another page's group is clicked */
   await p.keyboard.press('o'); await p.waitForTimeout(900);
-  await (await p.$$(`.vt-group:nth-child(${W}) .vt-dots i`))[1].hover(); await p.waitForTimeout(100);
+  await (await p.$$(`.vit-group:nth-child(${W}) .vit-dots i`))[1].hover(); await p.waitForTimeout(100);
   const peeking = await thumb();
-  await p.click('.vt-group:nth-child(3)'); await p.waitForTimeout(1000);
-  console.log('peek, open other:', JSON.stringify({ peeking, opened: await p.evaluate(() => location.hash), peekedPageStep: await p.evaluate(() => document.querySelectorAll('.vt-group')[window.__W - 1].querySelector('.vt-slide').vtAt) }), '(expected 1, #3, 5 — the preview is put back, and a page left behind rests on its last step)');
+  await p.click('.vit-group:nth-child(3)'); await p.waitForTimeout(1000);
+  console.log('peek, open other:', JSON.stringify({ peeking, opened: await p.evaluate(() => location.hash), peekedPageStep: await p.evaluate(() => document.querySelectorAll('.vit-group')[window.__W - 1].querySelector('.vit-slide').vitAt) }), '(expected 1, #3, 5 — the preview is put back, and a page left behind rests on its last step)');
   await p.close();
 }
 
@@ -432,22 +432,22 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.goto(url + `#${T}.1`); await p.waitForTimeout(400); await present(p);
   const fx = (go, re) => p.evaluate(async ([go, re, MOTION]) => {
     const motion = eval(MOTION);
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit[go](); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit[go](); await vit.ready;
     const out = {}, rx = new RegExp(re);
     document.getAnimations().forEach(a => { const ps = a.effect.pseudoElement; if (ps && rx.test(ps) && !/group|pair/.test(ps)) out[ps.replace('::view-transition-', '')] = motion(ps); });
-    out.classes = [...document.querySelectorAll('.vt-mark')].filter(m => /vt-only-(new|old)/.test(m.style.viewTransitionClass)).map(m => m.style.viewTransitionClass).join(';');
-    await vt.finished; return out;
+    out.classes = [...document.querySelectorAll('.vit-mark')].filter(m => /vit-only-(new|old)/.test(m.style.viewTransitionClass)).map(m => m.style.viewTransitionClass).join(';');
+    await vit.finished; return out;
   }, [go, re, MOTION]);
   const a = await fx('next', 'm-thm|m-def');
   const b2 = await fx('next', 'm-proof');
   const c = await fx('prev', 'm-proof');
-  await p.evaluate(() => { document.querySelectorAll('.vt-slide')[22].dataset.transition = 'enter-wipe-up leave-wipe-up'; });   // page 10 frame 1: whole-page reveal
+  await p.evaluate(() => { document.querySelectorAll('.vit-slide')[22].dataset.transition = 'enter-wipe-up leave-wipe-up'; });   // page 10 frame 1: whole-page reveal
   await p.evaluate(() => window.vit.go(21)); await p.waitForTimeout(900);
   const d = await fx('next', '\\(root\\)');
   console.log('enter/leave:', JSON.stringify({ [`${T}.1→${T}.2 theorem enters`]: a, [`${T}.2→${T}.3 proof enters`]: b2, [`${T}.3→${T}.2 proof leaves`]: c, 'whole-page wipe-up': d }),
-    '(new is revealed from its clip, old collapses to its clip; the paired def carries no vt-only class; proof leaves by zoom = opacity 0, scale(3))');
+    '(new is revealed from its clip, old collapses to its clip; the paired def carries no vit-only class; proof leaves by zoom = opacity 0, scale(3))');
   await p.close();
 }
 
@@ -464,15 +464,15 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const p = await b.newPage(VP); watch(p);
   await p.goto(url + '#4.1'); await p.waitForTimeout(600); await present(p);
   const box = () => p.evaluate(() => {
-    const r = document.querySelector('.vt-slide.is-active .vt-mark[data-vt-key="chip"]').getBoundingClientRect();
+    const r = document.querySelector('.vit-slide.is-active .vit-mark[data-vit-key="chip"]').getBoundingClientRect();
     return [r.x, r.y, r.width].map(Math.round);
   });
   const rest = await box();
   const travel = await p.evaluate(async () => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit.next(); await vt.ready;
-    const ps = '::view-transition-group(' + document.querySelector('.vt-slide.is-active .vt-mark[data-vt-key="chip"]').style.viewTransitionName + ')';
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit.next(); await vit.ready;
+    const ps = '::view-transition-group(' + document.querySelector('.vit-slide.is-active .vit-mark[data-vit-key="chip"]').style.viewTransitionName + ')';
     const at = () => {
       const g = getComputedStyle(document.documentElement, ps), m = new DOMMatrix(g.transform);
       return [m.e, m.f, parseFloat(g.width)].map(Math.round);
@@ -485,24 +485,24 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
       out['t' + t] = at();
     }
     anims.forEach(a => a.play());
-    await vt.finished; return out;
+    await vit.finished; return out;
   });
   const arrived = await box();
   await p.goto(url + `#${Z - 1}`); await p.waitForTimeout(600); await present(p);
   const zoom = await p.evaluate(async () => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit.next(); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit.next(); await vit.ready;
     const nw = getComputedStyle(document.documentElement, '::view-transition-new(root)');
     /* the lens is a quarter of the 1280 stage, c = A (s − 1), and the image's own blur is σ = c/4 over s */
     const focus = () => {
-      const s = parseFloat(nw.getPropertyValue('--vt-s')), m = nw.filter.match(/blur\(([\d.]+)px\)/);
+      const s = parseFloat(nw.getPropertyValue('--vit-s')), m = nw.filter.match(/blur\(([\d.]+)px\)/);
       const blur = m ? +parseFloat(m[1]).toFixed(2) : null;
       return { s: +s.toFixed(3), blur, physical: blur != null && Math.abs(blur - 320 / 4 * (s - 1) / s) < 0.1 };
     };
     const r = {
-      types: [...vt.types].join(' '), anim: nw.animationName, duration: nw.animationDuration,
-      from: nw.getPropertyValue('--vt-transform').trim() + ' away ' + nw.getPropertyValue('--vt-s-away').trim(),
+      types: [...vit.types].join(' '), anim: nw.animationName, duration: nw.animationDuration,
+      from: nw.getPropertyValue('--vit-transform').trim() + ' away ' + nw.getPropertyValue('--vit-s-away').trim(),
       start: focus()
     };
     const anims = document.getAnimations().filter(a => a.effect.pseudoElement === '::view-transition-new(root)');
@@ -512,7 +512,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
       r['t' + t] = focus();
     }
     anims.forEach(a => a.play());
-    await vt.finished; return r;
+    await vit.finished; return r;
   });
   console.log('pair moves :', JSON.stringify({ rest, travel, arrived }), '(the group starts on the chip, moves right and down and grows; it lands where the next frame draws it)');
   console.log('zoom       :', JSON.stringify(zoom), `(page ${Z} asks for zoom 4 over 900ms: from scale(4), s 4 → 1, blur 60px → 0, physical at every sample)`);
@@ -528,22 +528,24 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.goto(url + '#' + DASH); await p.waitForTimeout(900); await present(p);
   const steps = await p.evaluate(() => window.vit.steps);
   await p.evaluate(() => window.vit.next()); await p.waitForTimeout(60);
-  console.log('dashes     :', JSON.stringify({ steps, ...await p.evaluate(() => {
-    const s = document.querySelector('.vt-slide.is-active');
-    const an = s.getAnimations({ subtree: true });
-    const props = {};
-    for (const a of an) for (const k of Object.keys(a.effect.getKeyframes()[0] || {}))
-      if (!['offset', 'computedOffset', 'easing', 'composite'].includes(k)) props[k] = (props[k] || 0) + 1;
-    /* A dash pattern has to begin with a dash, so ink anywhere but the path's
-       start needs a leading dash of zero length — and a zero-length dash with a
-       round cap is painted as a dot, sitting on the path's first point for ever.
-       Every such path must therefore have butt caps. */
-    const roundZeroDashes = [...s.querySelectorAll('path')].filter(q => {
-      const d = (getComputedStyle(q).strokeDasharray || '').split(',').map(parseFloat);
-      return d.length === 4 && d[0] === 0 && getComputedStyle(q).strokeLinecap !== 'butt';
-    }).length;
-    return { animations: an.length, props, roundZeroDashes };
-  }) }), '(4 steps; one step animates two nodes on strokeDasharray alone, and no zero-length dash carries a round cap)');
+  console.log('dashes     :', JSON.stringify({
+    steps, ...await p.evaluate(() => {
+      const s = document.querySelector('.vit-slide.is-active');
+      const an = s.getAnimations({ subtree: true });
+      const props = {};
+      for (const a of an) for (const k of Object.keys(a.effect.getKeyframes()[0] || {}))
+        if (!['offset', 'computedOffset', 'easing', 'composite'].includes(k)) props[k] = (props[k] || 0) + 1;
+      /* A dash pattern has to begin with a dash, so ink anywhere but the path's
+         start needs a leading dash of zero length — and a zero-length dash with a
+         round cap is painted as a dot, sitting on the path's first point for ever.
+         Every such path must therefore have butt caps. */
+      const roundZeroDashes = [...s.querySelectorAll('path')].filter(q => {
+        const d = (getComputedStyle(q).strokeDasharray || '').split(',').map(parseFloat);
+        return d.length === 4 && d[0] === 0 && getComputedStyle(q).strokeLinecap !== 'butt';
+      }).length;
+      return { animations: an.length, props, roundZeroDashes };
+    })
+  }), '(4 steps; one step animates two nodes on strokeDasharray alone, and no zero-length dash carries a round cap)');
   await p.close();
 }
 
@@ -554,7 +556,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const look = async hash => {
     await p.goto(url + hash); await p.waitForTimeout(1200); await present(p);
     return p.evaluate(() => {
-      const s = document.querySelector('.vt-slide.is-active');
+      const s = document.querySelector('.vit-slide.is-active');
       const an = s.getAnimations({ subtree: true });
       return {
         steps: window.vit.steps, animations: an.length, running: an.filter(a => a.playState === 'running').length,
@@ -584,7 +586,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
     await p.goto(url + (F == null ? '#' + CLEF : '')); await p.waitForTimeout(800); await present(p);
     if (F != null) { await p.evaluate(f => window.vit.go(f), F); await p.waitForTimeout(1200); }
     return p.evaluate(async () => {
-      const s = document.querySelector('.vt-slide.is-active');
+      const s = document.querySelector('.vit-slide.is-active');
       const anims = s.getAnimations({ subtree: true });
       const paths = [...s.querySelector('[data-tween="clef"] [data-tween-at="0"]').querySelectorAll('path')];
       /* found by what they are, not by where they sit: the pen is the only
@@ -606,10 +608,12 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
         const z = V[h].q.getPointAtLength(Math.min(V[h].d[0], V[h].L)).matrixTransform(V[h].q.getScreenCTM());
         let ahead = 0;
         for (let k = 1; k <= 6; k++) if (V[(h + k) % N].d[0] > 0.05) ahead = k;
-        out['t' + t] = { at, penKeyframes: anims.find(a => a.effect.target === pen).effect.getKeyframes().length,
-                         headFill: +(V[h].d[0] / V[h].L).toFixed(2),
-                         inkEndToPen: +Math.hypot(z.x - at.x, z.y - at.y).toFixed(2),
-                         piecesOfInkAhead: ahead, pieces: N };
+        out['t' + t] = {
+          at, penKeyframes: anims.find(a => a.effect.target === pen).effect.getKeyframes().length,
+          headFill: +(V[h].d[0] / V[h].L).toFixed(2),
+          inkEndToPen: +Math.hypot(z.x - at.x, z.y - at.y).toFixed(2),
+          piecesOfInkAhead: ahead, pieces: N
+        };
       }
       return out;
     });
@@ -619,8 +623,8 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const later = await probe(p, 38);
   console.log('clef trail :', JSON.stringify(direct), '(the head fills 0…1 across the keyframe and the ink ends on the pen throughout, under 1px; nothing carries ink ahead of it)');
   console.log('enter later:', JSON.stringify(later), 'same place:',
-              later.t2000.at.x === direct.t2000.at.x && later.t2000.at.y === direct.t2000.at.y,
-              '(entered from page 38, seeked to the same times: identical to the reading above)');
+    later.t2000.at.x === direct.t2000.at.x && later.t2000.at.y === direct.t2000.at.y,
+    '(entered from page 38, seeked to the same times: identical to the reading above)');
   await p.close();
 }
 
@@ -638,7 +642,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.waitForTimeout(1200);
   const mid = await p.evaluate(() => ({ page: window.vit.index, hash: location.hash, leftover: document.activeViewTransition ? [...document.activeViewTransition.types].join(' ') : null }));
   await p.mouse.move(640, 360); await p.waitForTimeout(100);
-  const bar = await p.evaluate(() => { const r = document.querySelector('.vt-bar').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  const bar = await p.evaluate(() => { const r = document.querySelector('.vit-bar').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
   await p.mouse.click(900, 360); await p.waitForTimeout(60);
   await p.mouse.click(bar.x, bar.y);                                 // on the toolbar, mid-transition
   await p.waitForTimeout(1200);
@@ -654,14 +658,14 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const p = await b.newPage(VP); watch(p);
   await p.goto(url + '#' + CLEF); await p.waitForTimeout(800); await present(p);
   console.log('own transform:', JSON.stringify(await p.evaluate(() => {
-    const s = document.querySelector('.vt-slide.is-active');
+    const s = document.querySelector('.vit-slide.is-active');
     s.getAnimations({ subtree: true }).forEach(a => a.cancel());   // getCTM reads the animated transform while one runs
     const own = el => { const l = el.transform.baseVal, m = new DOMMatrix(); for (let i = 0; i < l.numberOfItems; i++) m.multiplySelf(l.getItem(i).matrix); return m; };
     const gap = el => { const a = own(el), b = el.parentNode.getCTM().inverse().multiply(el.getCTM()); return Math.max(...['a', 'b', 'c', 'd', 'e', 'f'].map(k => Math.abs(a[k] - b[k]))); };
-    const els = [...s.querySelectorAll('[data-vt-at="0"] [transform]')];
+    const els = [...s.querySelectorAll('[data-vit-at="0"] [transform]')];
     const t = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     t.setAttribute('transform', 'translate(10 20) rotate(30) scale(2 3)');
-    s.querySelector('[data-vt-at="0"]').appendChild(t);
+    s.querySelector('[data-vit-at="0"]').appendChild(t);
     const r = { nodes: els.length, worst: +Math.max(...els.map(gap)).toFixed(6), synthetic: +gap(t).toFixed(6) };
     t.remove(); return r;
   })), '(both under 1e-4)');
@@ -676,15 +680,15 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.goto(url + `#${W}.1`); await p.waitForTimeout(600); await present(p);
   await p.keyboard.press('ArrowLeft'); await p.waitForTimeout(120); await p.keyboard.press('ArrowLeft');
   await p.waitForTimeout(1200);
-  const names = () => p.evaluate(() => [...document.querySelectorAll('.vt-slide.is-active .vt-mark')].map(m => m.dataset.vtKey + '=' + getComputedStyle(m).viewTransitionName).join(' '));
+  const names = () => p.evaluate(() => [...document.querySelectorAll('.vit-slide.is-active .vit-mark')].map(m => m.dataset.vitKey + '=' + getComputedStyle(m).viewTransitionName).join(' '));
   const atRest = await names();
   await p.keyboard.press('ArrowRight'); await p.waitForTimeout(1000);
   const fig = await p.evaluate(async () => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit.prev(); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit.prev(); await vit.ready;
     const r = { squareGroup: document.getAnimations().some(a => /group\(m-pb-1-1\)/.test(a.effect.pseudoElement || '')) };
-    await vt.finished; return r;
+    await vit.finished; return r;
   });
   console.log('hasty      :', JSON.stringify({ hash: await p.evaluate(() => location.hash), namesAtRest: atRest, [`${L}.3→${L}.2`]: fig, after: await names() }), '(every name its own, never none; the square has a group)');
   await p.close();
@@ -694,12 +698,12 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
 {
   const p = await b.newPage(VP); watch(p);
   await p.goto(url + '#2.1'); await p.waitForTimeout(400); await present(p);
-  const state = () => p.evaluate(() => ({ black: document.body.classList.contains('vt-black'), deck: getComputedStyle(document.querySelector('.vt-deck')).visibility, help: document.querySelector('.vt-help').hidden ? 'hidden' : 'shown', page: window.vit.index, overview: document.querySelector('.vt-deck').classList.contains('vt-all') }));
+  const state = () => p.evaluate(() => ({ black: document.body.classList.contains('vit-black'), deck: getComputedStyle(document.querySelector('.vit-deck')).visibility, help: document.querySelector('.vit-help').hidden ? 'hidden' : 'shown', page: window.vit.index, overview: document.querySelector('.vit-deck').classList.contains('vit-all') }));
   const r = {};
   await p.keyboard.press('b'); await p.waitForTimeout(100); r.black = await state();
   await p.keyboard.press('ArrowRight'); await p.waitForTimeout(100); r.keyWhileBlack = await state();
   await p.keyboard.press('.'); await p.waitForTimeout(100); r.back = await state();
-  await p.keyboard.press('?'); await p.waitForTimeout(100); r.help = { ...await state(), rows: await p.evaluate(() => document.querySelectorAll('.vt-help tr').length) };
+  await p.keyboard.press('?'); await p.waitForTimeout(100); r.help = { ...await state(), rows: await p.evaluate(() => document.querySelectorAll('.vit-help tr').length) };
   await p.keyboard.press('ArrowRight'); await p.waitForTimeout(100); r.keyWhileHelp = await state();
   await p.keyboard.press('Escape'); await p.waitForTimeout(100); r.escClosesHelp = await state();
   await p.keyboard.press('o'); await p.waitForTimeout(900); await p.keyboard.press('Escape'); await p.waitForTimeout(900); r.escClosesOverview = await state();
@@ -714,32 +718,32 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const p = await b.newPage(VP); watch(p);
   await p.goto(url); await p.waitForTimeout(400); await present(p);
   const during = () => p.evaluate(async () => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit.next(); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit.next(); await vit.ready;
     const r = {
-      name: getComputedStyle(document.querySelector('.vt-bar')).viewTransitionName,
-      group: document.getAnimations().some(a => /\(vt-bar\)/.test(a.effect.pseudoElement || '')) || !!getComputedStyle(document.documentElement, '::view-transition-group(vt-bar)').backdropFilter.match(/blur/),
-      glass: getComputedStyle(document.documentElement, '::view-transition-group(vt-bar)').backdropFilter
+      name: getComputedStyle(document.querySelector('.vit-bar')).viewTransitionName,
+      group: document.getAnimations().some(a => /\(vit-bar\)/.test(a.effect.pseudoElement || '')) || !!getComputedStyle(document.documentElement, '::view-transition-group(vit-bar)').backdropFilter.match(/blur/),
+      glass: getComputedStyle(document.documentElement, '::view-transition-group(vit-bar)').backdropFilter
     };
-    await vt.finished; return r;
+    await vit.finished; return r;
   });
-  await p.waitForFunction(() => !document.querySelector('.vt-bar').classList.contains('is-shown'), null, { timeout: 6000 });   // auto-hide after 2.4 s
+  await p.waitForFunction(() => !document.querySelector('.vit-bar').classList.contains('is-shown'), null, { timeout: 6000 });   // auto-hide after 2.4 s
   const hidden = await during();
   await p.mouse.move(640, 360); await p.waitForTimeout(300);
   const shown = await during();
-  console.log('toolbar    :', JSON.stringify({ hidden, shown }), '(hidden: name none; shown: vt-bar with blur(8px) on its group)');
+  console.log('toolbar    :', JSON.stringify({ hidden, shown }), '(hidden: name none; shown: vit-bar with blur(8px) on its group)');
   await p.close();
 }
 
-/* ── speaker view: iframes load the deck itself, hash addressing, vt:move-ready sync, works over file:// ── */
+/* ── speaker view: iframes load the deck itself, hash addressing, vit:move-ready sync, works over file:// ── */
 {
   const ctx = await b.newContext(VP);
   const p = await ctx.newPage(); watch(p);
   await p.goto(url); await p.waitForTimeout(400); await present(p);
   console.log('notes      :', JSON.stringify(await p.evaluate(() => ({
-    count: document.querySelectorAll('.vt-group > .vt-note').length,
-    inLayout: getComputedStyle(document.querySelector('.vt-note')).display,
+    count: document.querySelectorAll('.vit-group > .vit-note').length,
+    inLayout: getComputedStyle(document.querySelector('.vit-note')).display,
   }))));
   const [w] = await Promise.all([ctx.waitForEvent('page'), p.keyboard.press('s')]);
   watch(w); await w.waitForTimeout(1000);
@@ -749,7 +753,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
     main: await p.evaluate(() => window.vit.index),
     popup: await w.evaluate(() => ({
       page: document.querySelector('header b').textContent,
-      note: document.querySelector('.vt-notes').textContent.slice(0, 12),
+      note: document.querySelector('.vit-notes').textContent.slice(0, 12),
       next: document.querySelector('aside iframe').hidden ? 'none' : 'yes',
     })),
     iframe: await Promise.all(inner().map(f => f.evaluate(() =>
@@ -767,19 +771,19 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
 
   // the popup's own toolbar: pinned bottom-right, state refreshed with the main window; the preview copies have no toolbar
   await p.evaluate(() => window.vit.go(0)); await p.waitForTimeout(900);
-  await w.evaluate(() => document.querySelector('.vt-bar button[aria-label^="Laser"]').click());   // laser clicked in the popup
+  await w.evaluate(() => document.querySelector('.vit-bar button[aria-label^="Laser"]').click());   // laser clicked in the popup
   await p.keyboard.press('ArrowRight'); await p.waitForTimeout(900);
   console.log('popup toolbar:', JSON.stringify(await w.evaluate(() => {
-    const bar = document.querySelector('.vt-bar'), r = bar.getBoundingClientRect();
+    const bar = document.querySelector('.vit-bar'), r = bar.getBoundingClientRect();
     return {
       bottomRight: [innerWidth - r.right, innerHeight - r.bottom].map(Math.round).join(','),
-      visible: getComputedStyle(bar).opacity, page: bar.querySelector('.vt-count').textContent,
+      visible: getComputedStyle(bar).opacity, page: bar.querySelector('.vit-count').textContent,
       laser: bar.querySelector('button[aria-label^="Laser"]').getAttribute('aria-pressed')
     };
   })), 'main window:', JSON.stringify(await p.evaluate(() => ({
-    page: document.querySelector('.vt-count').textContent, lasing: document.body.classList.contains('vt-lasing')
+    page: document.querySelector('.vit-count').textContent, lasing: document.body.classList.contains('vit-lasing')
   }))),
-    'toolbar in previews:', (await Promise.all(inner().map(f => f.evaluate(() => !!document.querySelector('.vt-bar'))))).join());
+    'toolbar in previews:', (await Promise.all(inner().map(f => f.evaluate(() => !!document.querySelector('.vit-bar'))))).join());
   // pointing at (25%, 50%) of the "current page" preview → the main window's dot lands at (25%, 50%) of the deck
   const at = await w.evaluate(() => {
     const q = document.querySelector('main iframe').getBoundingClientRect();
@@ -787,19 +791,19 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   });
   await w.mouse.move(at.x, at.y);
   console.log('point on preview:', JSON.stringify(await p.evaluate(() => {
-    const q = document.querySelector('.vt-deck').getBoundingClientRect(), l = document.querySelector('.vt-laser');
+    const q = document.querySelector('.vit-deck').getBoundingClientRect(), l = document.querySelector('.vit-laser');
     return {
       dot: l.classList.contains('is-on'), position: l.style.transform,
       expected: 'translate(' + (q.left + q.width * .25) + 'px, ' + (q.top + q.height * .5) + 'px)'
     };
   })));
   await w.mouse.move(at.x, 630);
-  console.log('leave preview: dot', await p.evaluate(() => document.querySelector('.vt-laser').classList.contains('is-on')));
+  console.log('leave preview: dot', await p.evaluate(() => document.querySelector('.vit-laser').classList.contains('is-on')));
   // the cursor and the DOM dot must be the same image
   console.log('same image :', JSON.stringify(await p.evaluate(() => {
     const u = s => (s.match(/url\("([^"]+)"\)/) || [])[1];
-    const cur = getComputedStyle(document.querySelector('.vt-deck')).cursor;
-    const dot = getComputedStyle(document.querySelector('.vt-laser'));
+    const cur = getComputedStyle(document.querySelector('.vit-deck')).cursor;
+    const dot = getComputedStyle(document.querySelector('.vit-laser'));
     return { same: !!u(cur) && u(cur) === u(dot.backgroundImage), dot: dot.width + ' ' + dot.backgroundSize };
   })));
   // clicking the "current page" preview = clicking the main deck: right side next, left third previous; the notes area does nothing
@@ -818,7 +822,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const before = await prog();
   await w.mouse.move(nowBox.l + nowBox.w * .5, nowBox.t + nowBox.h * .5); await w.mouse.wheel(0, 100); await p.waitForTimeout(400);
   const afterWheel = { page: await idx(), progress: await prog() };
-  const noteBox = await w.evaluate(() => { const q = document.querySelector('.vt-notes').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
+  const noteBox = await w.evaluate(() => { const q = document.querySelector('.vit-notes').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; });
   await w.mouse.move(noteBox.x, noteBox.y); await w.mouse.wheel(0, 100); await p.waitForTimeout(400);
   console.log('popup wheel:', JSON.stringify({ progressBar: before, oneNotchOnPreview: afterWheel, pageAfterNotchOnNotes: await idx() }));
   await ctx.close();

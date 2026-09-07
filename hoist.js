@@ -5,33 +5,33 @@
    honours.
 
    The identity channel is a Typst label: the SVG export writes it as a
-   <g data-typst-label="vt-key"> wrapping the content, and that <g> *is* the
+   <g data-typst-label="vit-key"> wrapping the content, and that <g> *is* the
    content boundary. Nothing is inferred: no geometry probing, no per-node
    assignment, no tolerance, no mask. Two marks whose boxes overlap are still
    two subtrees.
 
    Tagging reads the labels for the whole deck at once. Lifting has to lay a
    frame out to measure it, so it happens one frame at a time, when the runtime
-   asks: `window.vtLift(slide)`. An unlifted frame draws the same picture and
+   asks: `window.vitLift(slide)`. An unlifted frame draws the same picture and
    cannot morph. */
 
 (function () {
    "use strict";
 
    var NS = "http://www.w3.org/2000/svg";
-   var PREFIX = "vt-";
+   var PREFIX = "vit-";
 
-   /* The label grammar for a mark is read here and nowhere else: vt-key on the
-      <g> becomes data-vt-key on the host. What a mark declares about itself is
-      not in the label — the Typst side writes it into vtMarks, by key. The
+   /* The label grammar for a mark is read here and nowhere else: vit-key on the
+      <g> becomes data-vit-key on the host. What a mark declares about itself is
+      not in the label — the Typst side writes it into vitMarks, by key. The
       states inside it are tween's, with a grammar of their own. */
 
    /* True only when it did the work, so the caller knows to name the hosts. */
-   window.vtLift = function (slide) {
-      if (!slide || slide.dataset.vtLifted) return false;
-      var page = slide.querySelector(":scope > .vt-page");
+   window.vitLift = function (slide) {
+      if (!slide || slide.dataset.vitLifted) return false;
+      var page = slide.querySelector(":scope > .vit-page");
       var root = page && page.querySelector("svg");
-      if (!root) { slide.dataset.vtLifted = "1"; return false; }
+      if (!root) { slide.dataset.vitLifted = "1"; return false; }
 
       /* getBBox returns nothing that is not rendered, so the frame is laid out
          for the measurement and put back in the same task, unpainted. Beating
@@ -40,7 +40,7 @@
          thumbnails that way. The states go back to what the stylesheet says —
          the first one, and no other — so that a mark's box does not depend on
          the step the runtime happens to have stepped this frame to. */
-      var group = slide.closest(".vt-group");
+      var group = slide.closest(".vit-group");
       var states = [].slice.call(page.querySelectorAll("[data-tween-at]"));
       var was = [show(slide, "block"), group ? show(group, "block") : null];
       var stateWas = states.map(unstep);
@@ -49,7 +49,7 @@
          /* A document with no box measures every mark empty, and the flag
             above would make that permanent: leave it for the next caller. */
          if (!root.getBoundingClientRect().width) return false;
-         slide.dataset.vtLifted = "1";
+         slide.dataset.vitLifted = "1";
 
          var vb = root.viewBox.baseVal;
 
@@ -108,7 +108,7 @@
                itself. (An <svg> nested *inside* the page svg would not do: only
                elements in the CSS box tree are ever captured.) */
             var host = document.createElementNS(NS, "svg");
-            host.setAttribute("class", "vt-mark");
+            host.setAttribute("class", "vit-mark");
             host.setAttribute("viewBox", x + " " + y + " " + w + " " + h);
             /* Layout snaps the host's box to 1/64 px, and the default xMidYMid meet
                then scales uniformly by the smaller of the two ratios — a 1160px wide
@@ -120,7 +120,7 @@
             host.style.top = ((y - vb.y) / vb.height * 100) + "%";
             host.style.width = (w / vb.width * 100) + "%";
             host.style.height = (h / vb.height * 100) + "%";
-            host.dataset.vtKey = p.key;
+            host.dataset.vitKey = p.key;
 
             var wrap = document.createElementNS(NS, "g");
             wrap.setAttribute("transform", "matrix(" + [m.a, m.b, m.c, m.d, m.e, m.f].join(" ") + ")");
@@ -154,7 +154,7 @@
    }
 
    function pageNo(group) {
-      return [].indexOf.call(document.querySelectorAll(".vt-group"), group) + 1;
+      return [].indexOf.call(document.querySelectorAll(".vit-group"), group) + 1;
    }
 
    function bbox(el, toRoot) {

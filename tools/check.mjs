@@ -15,14 +15,14 @@ const SIZES = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 },
 /* the deck opens on the desk; everything here is about the page being presented.
    `window.vit` exists once the deck is ready, which is a wait and not a timeout */
 const present = async p => {
-  await p.waitForFunction(() => document.querySelector('.vt-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
+  await p.waitForFunction(() => document.querySelector('.vit-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
   await p.evaluate(() => { window.vit.mode = 'present'; });
   for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
 };
 /* the marks of a frame are lifted when the frame is first needed and swept up
    in idle time after that: geometry can only be compared once that is done */
 const alllifted = p => p.waitForFunction(
-  () => document.querySelectorAll('.vt-slide[data-vt-lifted]').length === document.querySelectorAll('.vt-slide').length,
+  () => document.querySelectorAll('.vit-slide[data-vit-lifted]').length === document.querySelectorAll('.vit-slide').length,
   null, { timeout: 60000 });
 const errs = [];
 const seen = [];
@@ -33,9 +33,9 @@ for (const vp of SIZES) {
   p.on('console', m => m.type() === 'error' && errs.push(m.text()));
   await p.goto(url); await present(p); await alllifted(p);
   seen.push(await p.evaluate(() =>
-    [...document.querySelectorAll('.vt-slide')].map(s =>
-      [...s.querySelectorAll('.vt-mark')].map(m =>
-        m.dataset.vtKey + ' ' +
+    [...document.querySelectorAll('.vit-slide')].map(s =>
+      [...s.querySelectorAll('.vit-mark')].map(m =>
+        m.dataset.vitKey + ' ' +
         [m.style.left, m.style.top, m.style.width, m.style.height]
           .map(v => (+v.replace('%', '')).toFixed(2)).join(' ')))));
   await p.close();
@@ -67,10 +67,10 @@ console.log('resolution independence: ' + (drift.length
     await p.evaluate(i => window.vit.go(i - 1), i);
     await p.waitForTimeout(760);
     steps.push(await p.evaluate(async i => {
-      const rest = document.querySelectorAll('.vt-mark').length;
-      const orig = document.startViewTransition.bind(document); let vt;
-      document.startViewTransition = a => (vt = orig(a));
-      window.vit.go(i); await vt.ready;
+      const rest = document.querySelectorAll('.vit-mark').length;
+      const orig = document.startViewTransition.bind(document); let vit;
+      document.startViewTransition = a => (vit = orig(a));
+      window.vit.go(i); await vit.ready;
       const seen = {};
       document.getAnimations().forEach(a => {
         const pe = a.effect && a.effect.pseudoElement; if (!pe) return;
@@ -92,16 +92,16 @@ console.log('resolution independence: ' + (drift.length
             .map(v => Math.round(+v)).join(',');
         out[k] = [box(kf[0]), box(kf[kf.length - 1])];
       });
-      const during = document.querySelectorAll('.vt-mark').length;
+      const during = document.querySelectorAll('.vit-mark').length;
       /* only fast-forward the transition (pseudo-element animations); the continuous slide(anim:) animations loop forever and finish() would throw */
       document.getAnimations().forEach(a => { if (a.effect && a.effect.pseudoElement) a.finish(); });
       await new Promise(r => setTimeout(r, 200));
       return {
         marks: out,
         cloned: during - rest,
-        clean: document.querySelectorAll('.vt-mark').length === rest,
-        unique: [...document.querySelectorAll('.vt-slide')].every(sl => {
-          const n = [...sl.querySelectorAll('.vt-mark')].map(m => m.style.viewTransitionName).filter(Boolean);   // a mark no transition has named yet has none
+        clean: document.querySelectorAll('.vit-mark').length === rest,
+        unique: [...document.querySelectorAll('.vit-slide')].every(sl => {
+          const n = [...sl.querySelectorAll('.vit-mark')].map(m => m.style.viewTransitionName).filter(Boolean);   // a mark no transition has named yet has none
           return n.length === new Set(n).size;      // uniqueness is only required among elements rendered **together**
         }),
       };

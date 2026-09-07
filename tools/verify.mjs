@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT  = join(HERE, '..', 'examples');
+const OUT = join(HERE, '..', 'examples');
 const SHOT = join(HERE, 'shots');
 rmSync(SHOT, { recursive: true, force: true });
 mkdirSync(SHOT, { recursive: true });
@@ -19,19 +19,19 @@ const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '-
 const VP = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 };
 /* the deck opens on the desk; everything here is about the page being presented */
 const present = async p => {
-  await p.waitForFunction(() => document.querySelector('.vt-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
+  await p.waitForFunction(() => document.querySelector('.vit-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
   await p.evaluate(() => { window.vit.mode = 'present'; });
-  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
 };
-const bare = p => p.evaluate(() => { const b = document.querySelector('.vt-bar'); if (b) b.remove(); });
-/* move and wait for it to be over: vt:move-done pairs one for one with
-   vt:move-ready,
+const bare = p => p.evaluate(() => { const b = document.querySelector('.vit-bar'); if (b) b.remove(); });
+/* move and wait for it to be over: vit:move-done pairs one for one with
+   vit:move-ready,
    so the listener goes on before the move and nothing is guessed */
 const move = (p, what, arg) => p.evaluate(([what, arg]) => new Promise(res => {
-  const deck = document.querySelector('.vt-deck');
+  const deck = document.querySelector('.vit-deck');
   const go = what === 'go' ? () => window.vit.go(arg) : () => { window.vit.step = arg === 'end' ? window.vit.steps : arg; };
   if ((what === 'go' && window.vit.index === arg) || (what === 'step' && window.vit.steps === 0)) return res();
-  deck.addEventListener('vt:move-done', () => res(), { once: true });
+  deck.addEventListener('vit:move-done', () => res(), { once: true });
   go();
 }), [what, arg]);
 
@@ -44,7 +44,7 @@ const n = await (async () => {
     await move(p, 'go', i);
     /* the PDF is the page at rest: step element animations to the end (the PDF shows the last state), cancel continuous ones (the PDF shows the rest state) */
     await move(p, 'step', 'end');
-    await p.evaluate(() => document.querySelector('.vt-slide.is-active').getAnimations({ subtree: true }).forEach(a => a.cancel()));
+    await p.evaluate(() => document.querySelector('.vit-slide.is-active').getAnimations({ subtree: true }).forEach(a => a.cancel()));
     await p.waitForTimeout(100);
     await p.screenshot({ path: join(SHOT, `html-${i + 1}.png`) });
   }
@@ -95,14 +95,14 @@ console.log(`  worst   ${worst.toFixed(3)}  ${worst < LIMIT ? '✓' : '✗'}   d
   await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
   await move(p, 'go', 5);                       // the page where the A/B boxes overlap
   await p.screenshot({ path: join(SHOT, 'v-full.png') });
-  await p.evaluate(() => document.querySelectorAll('.vt-mark').forEach(m => m.style.visibility = 'hidden'));
+  await p.evaluate(() => document.querySelectorAll('.vit-mark').forEach(m => m.style.visibility = 'hidden'));
   await p.screenshot({ path: join(SHOT, 'v-base.png') });
   await p.evaluate(() => {
-    document.querySelectorAll('.vt-mark').forEach(m => m.style.visibility = '');
-    document.querySelectorAll('.vt-page > svg:not(.vt-mark)').forEach(s => s.style.visibility = 'hidden');
+    document.querySelectorAll('.vit-mark').forEach(m => m.style.visibility = '');
+    document.querySelectorAll('.vit-page > svg:not(.vit-mark)').forEach(s => s.style.visibility = 'hidden');
   });
   await p.screenshot({ path: join(SHOT, 'v-regions.png') });
-  await p.evaluate(() => document.querySelectorAll('.vt-mark').forEach(m => {
+  await p.evaluate(() => document.querySelectorAll('.vit-mark').forEach(m => {
     if (m.style.viewTransitionName !== 'm-A') m.style.visibility = 'hidden';
   }));
   await p.screenshot({ path: join(SHOT, 'v-onlyA.png') });
@@ -116,9 +116,9 @@ for (const [tag, t] of [['morph', 0], ['morph', 130], ['morph', 260], ['morph', 
   const p = await b.newPage(VP);
   await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
   await p.evaluate(async t => {
-    const orig = document.startViewTransition.bind(document); let vt;
-    document.startViewTransition = a => (vt = orig(a));
-    window.vit.go(1); await vt.ready;
+    const orig = document.startViewTransition.bind(document); let vit;
+    document.startViewTransition = a => (vit = orig(a));
+    window.vit.go(1); await vit.ready;
     document.getAnimations().forEach(a => { a.pause(); a.currentTime = t; });
   }, t);
   await p.screenshot({ path: join(SHOT, `${tag}-${t}.png`) });
