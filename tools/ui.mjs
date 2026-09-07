@@ -628,8 +628,8 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
    During a transition the browser does no hit testing against the real DOM
    (the target is always <html>), so clicks are bound on document and judged
    by coordinates; on rapid clicks next() is computed from the accepted target
-   (want), not from the painted cur — paint() waits for the snapshot capture,
-   100ms+ the first time. */
+   (want), not from the frame on stage (cur) — stage() waits for the snapshot
+   capture, 100ms+ the first time. */
 {
   const p = await b.newPage(VP); watch(p);
   await p.goto(url); await p.waitForTimeout(400); await present(p);
@@ -732,7 +732,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   await p.close();
 }
 
-/* ── speaker view: iframes load the deck itself, hash addressing, vt:slide sync, works over file:// ── */
+/* ── speaker view: iframes load the deck itself, hash addressing, vt:move-ready sync, works over file:// ── */
 {
   const ctx = await b.newContext(VP);
   const p = await ctx.newPage(); watch(p);

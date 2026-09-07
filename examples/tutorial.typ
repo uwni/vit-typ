@@ -1305,10 +1305,12 @@
       // step, speed and mode are writable;
       // mode is "desk" | "present" | "overview"
 
-      document.querySelector('.vt-deck')
-        .addEventListener('vt:slide', e => {
-          e.detail            // { index, step, steps, … }
-        })
+      const deck = document.querySelector('.vt-deck')
+      // the new position is in the DOM, and then
+      // it has finished moving — one for one,
+      // e.detail is { index, step } for both
+      deck.addEventListener('vt:move-ready', on)
+      deck.addEventListener('vt:move-done', on)
       ```),
       screen(grid(
         columns: (auto, 1fr), column-gutter: 14pt, row-gutter: 6pt, align: (top, horizon),

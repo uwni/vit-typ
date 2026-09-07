@@ -24,6 +24,16 @@ const present = async p => {
   for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
 };
 const bare = p => p.evaluate(() => { const b = document.querySelector('.vt-bar'); if (b) b.remove(); });
+/* move and wait for it to be over: vt:move-done pairs one for one with
+   vt:move-ready,
+   so the listener goes on before the move and nothing is guessed */
+const move = (p, what, arg) => p.evaluate(([what, arg]) => new Promise(res => {
+  const deck = document.querySelector('.vt-deck');
+  const go = what === 'go' ? () => window.vit.go(arg) : () => { window.vit.step = arg === 'end' ? window.vit.steps : arg; };
+  if ((what === 'go' && window.vit.index === arg) || (what === 'step' && window.vit.steps === 0)) return res();
+  deck.addEventListener('vt:move-done', () => res(), { once: true });
+  go();
+}), [what, arg]);
 
 /* ── 1. frames at rest, compared with the PDF ─────────────────────────── */
 const n = await (async () => {
@@ -31,11 +41,9 @@ const n = await (async () => {
   await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
   const n = await p.evaluate(() => window.vit.total);
   for (let i = 0; i < n; i++) {
-    await p.evaluate(i => window.vit.go(i), i);
-    await p.waitForTimeout(900);
+    await move(p, 'go', i);
     /* the PDF is the page at rest: step element animations to the end (the PDF shows the last state), cancel continuous ones (the PDF shows the rest state) */
-    await p.evaluate(() => { window.vit.step = window.vit.steps; });
-    await p.waitForTimeout(900);
+    await move(p, 'step', 'end');
     await p.evaluate(() => document.querySelector('.vt-slide.is-active').getAnimations({ subtree: true }).forEach(a => a.cancel()));
     await p.waitForTimeout(100);
     await p.screenshot({ path: join(SHOT, `html-${i + 1}.png`) });
@@ -85,8 +93,7 @@ console.log(`  worst   ${worst.toFixed(3)}  ${worst < LIMIT ? '✓' : '✗'}   d
 {
   const p = await b.newPage(VP);
   await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
-  await p.evaluate(() => window.vit.go(5));      // the page where the A/B boxes overlap
-  await p.waitForTimeout(900);
+  await move(p, 'go', 5);                       // the page where the A/B boxes overlap
   await p.screenshot({ path: join(SHOT, 'v-full.png') });
   await p.evaluate(() => document.querySelectorAll('.vt-mark').forEach(m => m.style.visibility = 'hidden'));
   await p.screenshot({ path: join(SHOT, 'v-base.png') });

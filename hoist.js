@@ -46,10 +46,9 @@
    window.vtLift = function (slide) {
       if (!slide || slide.dataset.vtLifted) return false;
       tag();
-      slide.dataset.vtLifted = "1";
       var page = slide.querySelector(":scope > .vt-page");
       var root = page && page.querySelector("svg");
-      if (!root) return false;
+      if (!root) { slide.dataset.vtLifted = "1"; return false; }
 
       /* getBBox returns nothing that is not rendered, so the frame is laid out
          for the measurement and put back in the same task, unpainted. Beating
@@ -64,6 +63,11 @@
       var stateWas = states.map(unstep);
 
       try {
+         /* A document with no box measures every mark empty, and the flag
+            above would make that permanent: leave it for the next caller. */
+         if (!root.getBoundingClientRect().width) return false;
+         slide.dataset.vtLifted = "1";
+
          var vb = root.viewBox.baseVal;
 
          /* getCTM's target space differs between browsers: Chrome includes the

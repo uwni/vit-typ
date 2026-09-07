@@ -44,12 +44,12 @@
     flash(speed + "×");
   }
 
-  var cur = -1;       /* the frame that is painted */
-  var want = -1;       /* the accepted target. paint() runs only after the old
+  var cur = -1;       /* the frame on stage */
+  var want = -1;       /* the accepted target. stage() runs only after the old
                            snapshot is captured (100ms+ the first time); a next()
                            arriving meanwhile must count from the target, or two
                            clicks both become "go to the same page". Written only
-                           where a target is accepted — paint() must not touch it:
+                           where a target is accepted — stage() must not touch it:
                            the update callback of a skipped transition runs late
                            and would set the target back. */
 
@@ -122,7 +122,10 @@
     return a ? a.innerHTML : "";
   }
 
-  function paint(i) {
+  /* The update half of a view transition, and the only way onto the stage:
+     what it leaves is the state the browser captures — hence the lift. */
+  function stage(i) {
+    lift(slides[i]);
     cur = i;
     slides.forEach(function (s, k) {
       s.classList.toggle("is-active", k === i);
@@ -136,7 +139,13 @@
   function announce() {
     syncThumbs();
     try { history.replaceState(null, "", "#" + label(cur)); } catch (e) { }
-    deck.dispatchEvent(new CustomEvent("vt:slide", { detail: { index: cur, step: at(cur) } }));
+    deck.dispatchEvent(new CustomEvent("vt:move-ready", { detail: { index: cur, step: at(cur) } }));
+  }
+
+  /* One for one with `vt:move-ready`, including moves with nothing to animate
+     and moves cut short by the next. Opening the overview announces neither. */
+  function moveDone(i) {
+    deck.dispatchEvent(new CustomEvent("vt:move-done", { detail: { index: i, step: at(i) } }));
   }
 
   /* Hover preview: temporarily show frame f at step k in its group's
@@ -532,6 +541,7 @@
     if (k === from) return;
     s.vtAt = k;
     halt(s);
+    var ran = s.vtRun.length;
     var live = !instant && !reduced.matches;
     st.marks.forEach(function (m) {
       if (m.anim) return;
@@ -557,8 +567,13 @@
       if (olds.length) crossfade(s, host, m.states[a], m.states[b], olds, news, timing);
     });
     /* instant moves (landing, previews, thumbnails) are not "a step taken", so
-       they don't announce; the caller's paint() does */
-    if (!instant && s === slides[cur]) announce();
+       they don't announce; the caller's stage() does */
+    if (!instant && s === slides[cur]) {
+      announce();
+      var mine = s.vtRun.slice(ran).map(function (a) { return a.finished.catch(function () { }); });
+      if (mine.length) Promise.all(mine).then(function () { moveDone(cur); });
+      else moveDone(cur);
+    }
   }
 
   /* Cut a running step short — the new state already rests on its own
@@ -662,9 +677,9 @@
      value to restore and stay none for good, and the mark would only ever
      cross-fade from then on. */
   var pendingUndo = null;
-  function transition(types, update, setup) {
+  function transition(types, update, setup, done) {
     if (pendingUndo) pendingUndo();
-    if (!types) { update(); play(); return; }
+    if (!types) { update(); play(); if (done) done(); return; }
     var undo = [];
     if (setup) setup(undo);
     var vt = document.startViewTransition({ update: update, types: types });
@@ -672,7 +687,7 @@
       if (pendingUndo === flush) pendingUndo = null;
       while (undo.length) undo.pop()();
     };
-    var clear = function () { var latest = pendingUndo === flush; flush(); if (latest) play(); sweep(); };
+    var clear = function () { var latest = pendingUndo === flush; flush(); if (latest) play(); sweep(); if (done) done(); };
     vt.finished.then(clear, clear);
   }
 
@@ -685,13 +700,22 @@
        deck.css replays them in reverse when the direction is back. */
     var types = slides[Math.max(i, want)].dataset.transition;
     want = i;
-    lift(dest);
-    lift(slides[cur]);
+    lift(dest);               // before the transition: its setup reads both sides' marks
     stepTo(dest, k || 0, true);
-    transition(canVT && !reduced.matches && !over() && !atDesk() && types && (types + " " + dir).split(" "), function () { paint(i); }, function (undo) {
-      balance(slides[cur], dest, undo);
-      soloize(slides[cur], dest, undo);
-    });
+    transition(
+      canVT &&
+      !reduced.matches &&
+      !over() &&
+      !atDesk() &&
+      types &&
+      (types + " " + dir).split(" "),
+      function () { stage(i); },
+      function (undo) {
+        balance(slides[cur], dest, undo);
+        soloize(slides[cur], dest, undo);
+      },
+      function () { moveDone(i); }
+    );
   }
 
   /* go to a position: within the current frame it is a step (animated), otherwise a page change */
@@ -862,12 +886,12 @@
      every .vt-mark name with !important so the marks fold back into root:
      otherwise leftovers from the previous page would pair up and fly, which is
      the "page turn" animation, not "open". */
-  function zoomTo(i, update) {
+  function zoomTo(i, update, done) {
     var dest = groups[gOf[i]].el;
     transition(canVT && !reduced.matches && ["overview"], update, function (undo) {
       dest.style.viewTransitionName = "vt-overview";
       undo.push(function () { dest.style.viewTransitionName = ""; });
-    });
+    }, done);
   }
 
   function toggleOverview() {
@@ -883,7 +907,7 @@
     if (peeked && peeked.i !== i) unpeek();   // a preview of another page is put back; this page's is what opens
     peeked = null;
     if (k != null) stepTo(slides[i], k, true);
-    zoomTo(i, function () { deck.classList.remove("vt-all"); paint(i); });
+    zoomTo(i, function () { deck.classList.remove("vt-all"); stage(i); }, function () { moveDone(i); });
   }
 
   /* choosing a page: from the overview it opens, from the desk or the presentation it is where we go */
@@ -907,7 +931,7 @@
     view = pane.querySelector("iframe");
     notes = pane.querySelector(".vt-notes");
     document.body.appendChild(pane);
-    deck.addEventListener("vt:slide", syncPane);
+    deck.addEventListener("vt:move-ready", syncPane);
   }
 
   function syncPane() {
@@ -1053,7 +1077,7 @@
   function buildToolbar() {
     pdfHref = pdfLink();
     document.addEventListener("fullscreenchange", syncTools);
-    deck.addEventListener("vt:slide", syncTools);
+    deck.addEventListener("vt:move-ready", syncTools);
     if (mirror) return;
     var mainBar = buildBar(document);
     bars.push(mainBar);
@@ -1165,7 +1189,7 @@
      element animations play there as well. The window is about:blank and
      same-origin with the main window, so its DOM is built directly; the copies
      inside the iframes are never touched (under file:// every file is its own
-     origin), only their src changes. Sync comes from the vt:slide events that
+     origin), only their src changes. Sync comes from the vt:move-ready events that
      announce() fires, no polling. The notes are the page's
      <aside class="vt-note"> inside .vt-group, moved over as is. */
 
@@ -1269,7 +1293,7 @@
   }
 
   function initSpeaker() {
-    deck.addEventListener("vt:slide", syncSpeaker);
+    deck.addEventListener("vt:move-ready", syncSpeaker);
     /* close it when the main window goes, so no window is left out of sync */
     window.addEventListener("pagehide", function () { if (speaker && !speaker.closed) speaker.close(); });
   }
@@ -1299,13 +1323,13 @@
     deck.setAttribute("data-ready", "");
     root.style.setProperty("--vt-speed", speed);
     var h0 = fromHash();
-    lift(slides[h0.i]);
     stepTo(slides[h0.i], h0.at, true);
     if (!mirror) deck.classList.add("vt-desk");   // the deck opens on the desk; a preview opens on its page
-    paint(want = h0.i);
+    stage(want = h0.i);
+    moveDone(h0.i);
     play();
     showBar();
-    deck.addEventListener("vt:slide", sweep);
+    deck.addEventListener("vt:move-ready", sweep);
     sweep();
     /* a follow track is in deck px: refit it when the deck's box changes (observing reports the current box at once, hence after paint) */
     new ResizeObserver(function () {
