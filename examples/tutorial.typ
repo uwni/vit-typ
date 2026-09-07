@@ -1,4 +1,4 @@
-// vtslides — the tutorial deck. Every page teaches one part of the API: the
+// vit — the tutorial deck. Every page teaches one part of the API: the
 // left column is what you write, the right column is what it does, and the
 // line under it says when to reach for it and when not to.
 //
@@ -7,18 +7,18 @@
 //   typst compile --root . examples/tutorial.typ examples/out/tutorial.pdf
 //   typst compile --root . --features html examples/tutorial.typ examples/out/tutorial.html
 //
-// Once published, replace the next line with #import "@preview/vtslides:0.1.0": *
+// Once published, replace the next line with #import "@preview/vit:0.1.0": *
 #import "../lib.typ": *
 #import "@preview/cetz:0.4.1"
 // Third party packages, unchanged: theorion writes the theorem environments,
 // fletcher draws the commutative diagrams. Both have an HTML branch of their own,
 // and neither of them takes it here — a slide is an html.frame, and inside a frame
 // the target is the paged one, so what they draw is a picture, which is what
-// vtslides can move. `import cosmos.simple: *` brings theorion's environments;
-// fletcher is imported by name so its own `marks` never shadows vtslides' `mark`.
+// vit can move. `import cosmos.simple: *` brings theorion's environments;
+// fletcher is imported by name so its own `marks` never shadows vit' `mark`.
 #import "@preview/theorion:0.6.0": *
 #import cosmos.simple: *
-#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
 
 #show: show-theorion
 
@@ -78,14 +78,17 @@
 }
 
 #let key(body) = box(
-  inset: (x: 5pt, y: 2pt), radius: 3pt, fill: rgb("#222835"), stroke: .5pt + rgb("#39415a"),
+  inset: (x: 5pt, y: 2pt),
+  radius: 3pt,
+  fill: rgb("#222835"),
+  stroke: .5pt + rgb("#39415a"),
   text(size: 17pt, fill: hi, body),
 )
 
 #let body = {
   // ── 1. title ───────────────────────────────────────────────────────
   slide(
-    title: "vtslides",
+    title: "vit",
     note: [
       The deck opens on the desk: thumbnails on the left, the page beside them, these notes underneath.
       #key[Enter] presents, #key[Esc] comes back, #key[?] lists every key.
@@ -94,7 +97,7 @@
     ],
   )[
     #set align(center + horizon)
-    #mark("title")[#text(size: 76pt, weight: 700, fill: hi)[vtslides]]
+    #mark("title")[#text(size: 76pt, weight: 700, fill: hi)[vit]]
 
     #v(12pt)
     #mark("sub")[#text(size: 26pt, fill: dim)[Typst slides with View Transitions]]
@@ -116,7 +119,7 @@
     ]
   ])
   let deck-code = src(```typ
-  #import "@preview/vtslides:0.1.0": *
+  #import "@preview/vit:0.1.0": *
 
   #deck(title: "My talk")[
     #slide[
@@ -152,8 +155,12 @@
 
   // ── 3. the three words, and which API each one is ──────────────────
   let card(name, question, api, engine, hue) = block(
-    width: 100%, height: 400pt, inset: 16pt, radius: 6pt,
-    fill: hue.transparentize(90%), stroke: (left: 3pt + hue),
+    width: 100%,
+    height: 400pt,
+    inset: 16pt,
+    radius: 6pt,
+    fill: hue.transparentize(90%),
+    stroke: (left: 3pt + hue),
     stack(
       spacing: 12pt,
       text(size: 24pt, weight: 700, fill: hi, name),
@@ -204,7 +211,10 @@
 
   // ── 4. mark: identity ──────────────────────────────────────────────
   let chip(hue, sz) = box(
-    fill: hue.transparentize(75%), stroke: 2pt + hue, inset: (x: sz * 0.5, y: sz * 0.3), radius: 6pt,
+    fill: hue.transparentize(75%),
+    stroke: 2pt + hue,
+    inset: (x: sz * 0.5, y: sz * 0.3),
+    radius: 6pt,
     text(size: sz, weight: 700, fill: hue)[chip],
   )
   let chips(k) = screen({
@@ -235,7 +245,9 @@
 
   // ── 5. frames and positions ────────────────────────────────────────
   let mini(label, on) = block(
-    width: 160pt, height: 96pt, radius: 5pt,
+    width: 160pt,
+    height: 96pt,
+    radius: 5pt,
     fill: if on { blue.transparentize(82%) } else { rgb("#141922") },
     stroke: 1pt + if on { blue } else { rgb("#2a3141") },
     inset: 8pt,
@@ -260,7 +272,8 @@
       screen[
         #set align(center + horizon)
         #stack(
-          dir: ltr, spacing: 20pt,
+          dir: ltr,
+          spacing: 20pt,
           ..range(1, 4).map(i => mini("5." + str(i), i == k)),
         )
         #v(24pt)
@@ -275,7 +288,11 @@
 
   // ── 6. build ───────────────────────────────────────────────────────
   let item(n, hue, what) = block(
-    width: 100%, inset: 12pt, radius: 5pt, fill: hue.transparentize(88%), stroke: (left: 3pt + hue),
+    width: 100%,
+    inset: 12pt,
+    radius: 5pt,
+    fill: hue.transparentize(88%),
+    stroke: (left: 3pt + hue),
     text(size: 21pt, fill: hi)[*#n* — #what],
   )
   slide(
@@ -303,8 +320,12 @@
   // ── 7. reveal ──────────────────────────────────────────────────────
   let quad(at) = {
     let cell(label) = block(
-      width: 130pt, height: 90pt, radius: 5pt,
-      fill: blue.transparentize(88%), stroke: 1.5pt + blue, inset: 8pt,
+      width: 130pt,
+      height: 90pt,
+      radius: 5pt,
+      fill: blue.transparentize(88%),
+      stroke: 1.5pt + blue,
+      inset: 8pt,
       align(center + horizon, text(size: 26pt, fill: hi, label)),
     )
     box(width: 390pt, height: 250pt, {
@@ -345,23 +366,27 @@
   slide(
     title: "Split and merge",
     note: [One name pairs one couple, so the runtime clones the shorter side for the length of the transition and takes the clones away afterwards. Any counts work, not only 1 ↔ N.],
-    ..(((210pt, 140pt),), ((10pt, 20pt), (390pt, 250pt), (200pt, 130pt)), ((60pt, 250pt), (350pt, 30pt)), ((210pt, 140pt),))
-      .map(ps => lesson(
-        "Split and merge",
-        [A key that stands once on this frame and three times on the next *splits* into three; three to one *merges*. The counts need not divide.],
-        src(```typ
-        #let at(x, y) = place(dx: x, dy: y, mark("cell")[#cell])
+    ..(
+      ((210pt, 140pt),),
+      ((10pt, 20pt), (390pt, 250pt), (200pt, 130pt)),
+      ((60pt, 250pt), (350pt, 30pt)),
+      ((210pt, 140pt),),
+    ).map(ps => lesson(
+      "Split and merge",
+      [A key that stands once on this frame and three times on the next *splits* into three; three to one *merges*. The counts need not divide.],
+      src(```typ
+      #let at(x, y) = place(dx: x, dy: y, mark("cell")[#cell])
 
-        #slide(
-          at(210pt, 140pt),                     // one
-          at(10pt, 20pt) + at(390pt, 250pt) + at(200pt, 130pt),
-          at(60pt, 250pt) + at(350pt, 30pt),    // three to two
-          at(210pt, 140pt),                     // back to one
-        )
-        ```),
-        cells(ps),
-        when: [Names carry an occurrence index (`m-cell-1`, `m-cell-2`), so one key may stand several times.],
-      )),
+      #slide(
+        at(210pt, 140pt),                     // one
+        at(10pt, 20pt) + at(390pt, 250pt) + at(200pt, 130pt),
+        at(60pt, 250pt) + at(350pt, 30pt),    // three to two
+        at(210pt, 140pt),                     // back to one
+      )
+      ```),
+      cells(ps),
+      when: [Names carry an occurrence index (`m-cell-1`, `m-cell-2`), so one key may stand several times.],
+    )),
   )
 
   // ── 9. nesting ─────────────────────────────────────────────────────
@@ -394,8 +419,11 @@
 
   // ── 10. mark(transition:) ──────────────────────────────────────────
   let env(hue, body) = block(
-    width: 100%, inset: (left: 16pt, rest: 10pt), radius: 5pt,
-    fill: hue.transparentize(88%), stroke: (left: 3pt + hue),
+    width: 100%,
+    inset: (left: 16pt, rest: 10pt),
+    radius: 5pt,
+    fill: hue.transparentize(88%),
+    stroke: (left: 3pt + hue),
     text(size: 17pt, fill: hi, body),
   )
   slide(
@@ -409,11 +437,11 @@
         ]
       ]),
       [#v(10pt) #mark("thm", transition: "wipe-up", env(amber)[
-        #theorem(number: "2")[A real sequence converges if and only if it is Cauchy.]
-      ])],
+          #theorem(number: "2")[A real sequence converges if and only if it is Cauchy.]
+        ])],
       [#v(10pt) #mark("proof", transition: (enter: "wipe-left", leave: "zoom"), env(green)[
-        #proof[A Cauchy sequence is bounded, so it has a convergent subsequence, and the Cauchy condition pulls the whole sequence to that limit.]
-      ])],
+          #proof[A Cauchy sequence is bounded, so it has a convergent subsequence, and the Cauchy condition pulls the whole sequence to that limit.]
+        ])],
     ).map(r => lesson(
       "How a thing enters",
       [`mark(transition:)` is *this object's own* entrance and exit. It is used only where the mark is one-sided; a mark that is on both sides morphs regardless.],
@@ -454,7 +482,10 @@
         ..fxrow(raw("fade"), [cross-fade — the default]),
         ..fxrow(raw("slide"), [horizontal push; forward, the new page comes from the right]),
         ..fxrow(raw("rise"), [vertical push, in from the bottom]),
-        ..fxrow(raw("zoom"), [the new one shrinks into place from three times life size, out of focus, and lands sharp]),
+        ..fxrow(
+          raw("zoom"),
+          [the new one shrinks into place from three times life size, out of focus, and lands sharp],
+        ),
         ..fxrow(
           stack(spacing: 6pt, raw("wipe-left  wipe-right"), raw("wipe-up  wipe-down")),
           [reveal, named by the direction the front travels],
@@ -557,15 +588,14 @@
 
   // ── 14. element animation ──────────────────────────────────────────
   let wave(t) = cetz.canvas(length: 1.25cm, {
-    import cetz.draw: circle, line, rect, content
+    import cetz.draw: circle, content, line, rect
     rect((-0.5, -2.1), (8.5, 2.1), stroke: none)
     line((0, 0), (8, 0), stroke: .5pt + blue.darken(40%))
     let amp = 0.3 + 0.18 * t
     let f(x) = amp * calc.sin(1.2 * x - 0.5 * t)
     line(..range(0, 41).map(i => (i * 0.2, f(i * 0.2))), stroke: 1.5pt + blue)
     let x = 1.4 * t
-    circle((x, f(x)), radius: .25, stroke: none,
-      fill: color.mix((green, 100% - t * 20%), (amber, t * 20%)))
+    circle((x, f(x)), radius: .25, stroke: none, fill: color.mix((green, 100% - t * 20%), (amber, t * 20%)))
     content((4, -1.7), text(size: 30pt, fill: dim)[t = #t])
   })
   slide(
@@ -645,7 +675,10 @@
     (r * calc.cos(a), r * calc.sin(a))
   })
   let lerp(p, q, t) = (p.at(0) + t * (q.at(0) - p.at(0)), p.at(1) + t * (q.at(1) - p.at(1)))
-  let fixed(x) = { let t = str(int(calc.round(x * 10000))); t.slice(0, 1) + "." + t.slice(1) }
+  let fixed(x) = {
+    let t = str(int(calc.round(x * 10000)))
+    t.slice(0, 1) + "." + t.slice(1)
+  }
   let exhaust(k) = cetz.canvas(length: 1.12cm, {
     import cetz.draw: bezier, circle, content, merge-path, rect
     rect((-3.6, -4.6), (3.6, 4.6), stroke: none)
@@ -657,7 +690,9 @@
         bezier(p, q, lerp(p, q, 1 / 3), lerp(p, q, 2 / 3))
       }
     })
-    content((0, 3.9), text(size: 22pt, fill: dim)[#counts.enumerate().map(((j, n)) => text(fill: if j == k { hi } else { dim })[#n]).join[ · ]])
+    content((0, 3.9), text(size: 22pt, fill: dim)[#(
+      counts.enumerate().map(((j, n)) => text(fill: if j == k { hi } else { dim })[#n]).join[ · ]
+    )])
     content((0, -3.9), text(size: 22pt, fill: hi)[#sym.pi ≈ #fixed(counts.at(k) * calc.sin(calc.pi / counts.at(k)))])
   })
   slide(
@@ -689,7 +724,12 @@
       (transform: "translateY(0) scale(1, 1)", transformOrigin: "50% 100%", easing: "cubic-bezier(.45, 0, 1, .55)"),
       (transform: "translateY(420%) scale(1, 1)", transformOrigin: "50% 100%", offset: .46, easing: "linear"),
       (transform: "translateY(420%) scale(1.3, .7)", transformOrigin: "50% 100%", offset: .5, easing: "linear"),
-      (transform: "translateY(420%) scale(1, 1)", transformOrigin: "50% 100%", offset: .54, easing: "cubic-bezier(0, .45, .55, 1)"),
+      (
+        transform: "translateY(420%) scale(1, 1)",
+        transformOrigin: "50% 100%",
+        offset: .54,
+        easing: "cubic-bezier(0, .45, .55, 1)",
+      ),
       (transform: "translateY(0) scale(1, 1)", transformOrigin: "50% 100%"),
     ),
     duration: 1500,
@@ -783,12 +823,17 @@
   let accel(th1, th2, w1, w2) = {
     let d = th1 - th2
     let den = 3 - calc.cos(2 * d)
-    let a1 = (-3 * g * calc.sin(th1) - g * calc.sin(th1 - 2 * th2) - 2 * calc.sin(d) * (w2 * w2 + w1 * w1 * calc.cos(d))) / den
+    let a1 = (
+      (-3 * g * calc.sin(th1) - g * calc.sin(th1 - 2 * th2) - 2 * calc.sin(d) * (w2 * w2 + w1 * w1 * calc.cos(d))) / den
+    )
     let a2 = (2 * calc.sin(d) * (2 * w1 * w1 + 2 * g * calc.cos(th1) + w2 * w2 * calc.cos(d))) / den
     (a1, a2)
   }
   let rk4(st, h) = {
-    let f(s) = { let (a1, a2) = accel(..s); (s.at(2), s.at(3), a1, a2) }
+    let f(s) = {
+      let (a1, a2) = accel(..s)
+      (s.at(2), s.at(3), a1, a2)
+    }
     let add(a, b, k) = a.zip(b).map(((x, y)) => x + k * y)
     let k1 = f(st)
     let k2 = f(add(st, k1, h / 2))
@@ -826,8 +871,13 @@
     note: [Left: two keyframes rotating about the pivot. Right: 96 poses integrated with RK4 in Typst and played as keyframes — a pendulum run backwards is still a pendulum, so `alternate` is honest.],
     anim: (
       single: (
-        keyframes: ((transform: "rotate(32deg)", transformOrigin: "50% 0"), (transform: "rotate(-32deg)", transformOrigin: "50% 0")),
-        duration: 1400, direction: "alternate", easing: (0.42, 0, 0.58, 1),
+        keyframes: (
+          (transform: "rotate(32deg)", transformOrigin: "50% 0"),
+          (transform: "rotate(-32deg)", transformOrigin: "50% 0"),
+        ),
+        duration: 1400,
+        direction: "alternate",
+        easing: (0.42, 0, 0.58, 1),
       ),
       double: (duration: 8000, direction: "alternate"),
     ),
@@ -863,12 +913,19 @@
 
   // ── 20. waves ──────────────────────────────────────────────────────
   let sea(k) = cetz.canvas(length: 1.15cm, {
-    import cetz.draw: circle, line, rect, content
+    import cetz.draw: circle, content, line, rect
     let phi = k / 24 * 2 * calc.pi
     rect((-0.2, -2.2), (14.2, 3.2), stroke: none)
     circle((11.8, 2.2), radius: .5, fill: gold, stroke: none)
     let surf(a, w, v, y0) = x => y0 + a * calc.sin(w * x + v * phi) + a * .35 * calc.sin(2.3 * w * x - 1.7 * v * phi)
-    let layer(h, col) = line(..range(0, 57).map(i => (i * .25, h(i * .25))), (14, -2), (0, -2), close: true, fill: col, stroke: none)
+    let layer(h, col) = line(
+      ..range(0, 57).map(i => (i * .25, h(i * .25))),
+      (14, -2),
+      (0, -2),
+      close: true,
+      fill: col,
+      stroke: none,
+    )
     let h = surf(.35, 1.5, 1, -.1)
     layer(surf(.45, .9, 1, 1.1), rgb("#2b3a5c"))
     layer(surf(.4, 1.2, -1, .5), rgb("#3e5aa8"))
@@ -909,7 +966,7 @@
 
   // ── 21. CeTZ ───────────────────────────────────────────────────────
   let fig(r) = cetz.canvas(length: 1.3cm, {
-    import cetz.draw: circle, line, rect, content
+    import cetz.draw: circle, content, line, rect
     circle((0, 0), radius: r, fill: amber, stroke: none)
     line((-2, 0), (2, 0), stroke: 2pt + blue)
     rect((-1, -1), (1, 1), stroke: 1.5pt + hi)
@@ -945,7 +1002,10 @@
     set text(size: 24pt, fill: hi)
     let arrow(a, b, label) = if rev { edge(b, a, label, "->") } else { edge(a, b, label, "->") }
     diagram(cell-size: 24mm, edge-stroke: 1pt + rgb("#d5d9e2"), node-inset: 7pt, {
-      node((0, 0), $P$); node((1, 0), $B$); node((0, 1), $C$); node((1, 1), $D$)
+      node((0, 0), $P$)
+      node((1, 0), $B$)
+      node((0, 1), $C$)
+      node((1, 1), $D$)
       arrow((0, 0), (1, 0), $p$)
       arrow((0, 0), (0, 1), $q$)
       arrow((1, 0), (1, 1), $f$)
@@ -1065,7 +1125,7 @@
       "Presenting",
       [The player is part of the deck: no server, no build step. Open the HTML file and it is a presentation.],
       src(```js
-      window.vtslides
+      window.vit
       // { go, next, prev, index, total,
       //   step, steps, speed, mode, deck }
       // step, speed and mode are writable;
@@ -1098,8 +1158,11 @@
   // ── 26. choosing ───────────────────────────────────────────────────
   let pick(q, a, hue) = (
     block(
-      width: 100%, inset: (x: 10pt, y: 7pt), radius: 5pt,
-      fill: hue.transparentize(90%), stroke: (left: 3pt + hue),
+      width: 100%,
+      inset: (x: 10pt, y: 7pt),
+      radius: 5pt,
+      fill: hue.transparentize(90%),
+      stroke: (left: 3pt + hue),
       text(size: 16pt, fill: hi, q),
     ),
     text(size: 15pt, fill: dim, a),
@@ -1136,4 +1199,4 @@
   ]
 }
 
-#deck(title: "vtslides — a tutorial", body)
+#deck(title: "vit — a tutorial", body)

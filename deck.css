@@ -816,6 +816,8 @@ body.vt-black > * {
   z-index: 40;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 10px;
   background: rgba(0, 0, 0, 0.5);
   font:
     14px/1.5 ui-sans-serif,
@@ -836,6 +838,11 @@ body.vt-black > * {
 }
 .vt-help td {
   padding: 1px 6px;
+}
+.vt-about {
+  opacity: 0.55;
+  font-size: 12px;
+  letter-spacing: 0.04em;
 }
 .vt-help kbd {
   font: inherit;

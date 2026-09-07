@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT  = join(HERE, '..', 'examples', 'out');
+const OUT = join(HERE, '..', 'examples', 'out');
 const SHOT = join(HERE, 'shots');
 rmSync(SHOT, { recursive: true, force: true });
 mkdirSync(SHOT, { recursive: true });
@@ -19,8 +19,8 @@ const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '-
 const VP = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 };
 /* the deck opens on the desk; everything here is about the page being presented */
 const present = async p => {
-  await p.evaluate(() => { window.vtslides.mode = 'present'; });
-  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
+  await p.evaluate(() => { window.vit.mode = 'present'; });
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
 };
 const bare = p => p.evaluate(() => { const b = document.querySelector('.vt-bar'); if (b) b.remove(); });
 
@@ -28,12 +28,12 @@ const bare = p => p.evaluate(() => { const b = document.querySelector('.vt-bar')
 const n = await (async () => {
   const p = await b.newPage(VP);
   await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
-  const n = await p.evaluate(() => window.vtslides.total);
+  const n = await p.evaluate(() => window.vit.total);
   for (let i = 0; i < n; i++) {
-    await p.evaluate(i => window.vtslides.go(i), i);
+    await p.evaluate(i => window.vit.go(i), i);
     await p.waitForTimeout(900);
     /* the PDF is the page at rest: step element animations to the end (the PDF shows the last state), cancel continuous ones (the PDF shows the rest state) */
-    await p.evaluate(() => { window.vtslides.step = window.vtslides.steps; });
+    await p.evaluate(() => { window.vit.step = window.vit.steps; });
     await p.waitForTimeout(900);
     await p.evaluate(() => document.querySelector('.vt-slide.is-active').getAnimations({ subtree: true }).forEach(a => a.cancel()));
     await p.waitForTimeout(100);
@@ -84,7 +84,7 @@ console.log(`  worst   ${worst.toFixed(3)}  ${worst < LIMIT ? '✓' : '✗'}   d
 {
   const p = await b.newPage(VP);
   await p.goto(url); await p.waitForTimeout(500); await present(p); await bare(p);
-  await p.evaluate(() => window.vtslides.go(5));      // the page where the A/B boxes overlap
+  await p.evaluate(() => window.vit.go(5));      // the page where the A/B boxes overlap
   await p.waitForTimeout(900);
   await p.screenshot({ path: join(SHOT, 'v-full.png') });
   await p.evaluate(() => document.querySelectorAll('.vt-mark').forEach(m => m.style.visibility = 'hidden'));
@@ -110,7 +110,7 @@ for (const [tag, t] of [['morph', 0], ['morph', 130], ['morph', 260], ['morph', 
   await p.evaluate(async t => {
     const orig = document.startViewTransition.bind(document); let vt;
     document.startViewTransition = a => (vt = orig(a));
-    window.vtslides.go(1); await vt.ready;
+    window.vit.go(1); await vt.ready;
     document.getAnimations().forEach(a => { a.pause(); a.currentTime = t; });
   }, t);
   await p.screenshot({ path: join(SHOT, `${tag}-${t}.png`) });

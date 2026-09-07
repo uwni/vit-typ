@@ -11,11 +11,11 @@ const url = 'file://' + join(HERE, '..', 'examples', 'out', 'tutorial.html');
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
 
 const SIZES = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 },
-               { width: 900, height: 600 }, { width: 1440, height: 900 }];
+{ width: 900, height: 600 }, { width: 1440, height: 900 }];
 /* the deck opens on the desk; everything here is about the page being presented */
 const present = async p => {
-  await p.evaluate(() => { window.vtslides.mode = 'present'; });
-  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
+  await p.evaluate(() => { window.vit.mode = 'present'; });
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
 };
 const errs = [];
 const seen = [];
@@ -54,16 +54,16 @@ console.log('resolution independence: ' + (drift.length
   p.on('pageerror', e => errs.push(e.message));
   p.on('console', m => m.type() === 'error' && errs.push(m.text()));
   await p.goto(url); await p.waitForTimeout(400); await present(p);
-  const total = await p.evaluate(() => window.vtslides.total);
+  const total = await p.evaluate(() => window.vit.total);
   const steps = [];
   for (let i = 1; i < total; i++) {
-    await p.evaluate(i => window.vtslides.go(i - 1), i);
+    await p.evaluate(i => window.vit.go(i - 1), i);
     await p.waitForTimeout(760);
     steps.push(await p.evaluate(async i => {
       const rest = document.querySelectorAll('.vt-mark').length;
       const orig = document.startViewTransition.bind(document); let vt;
       document.startViewTransition = a => (vt = orig(a));
-      window.vtslides.go(i); await vt.ready;
+      window.vit.go(i); await vt.ready;
       const seen = {};
       document.getAnimations().forEach(a => {
         const pe = a.effect && a.effect.pseudoElement; if (!pe) return;
@@ -135,8 +135,8 @@ console.log('resolution independence: ' + (drift.length
   const longest = Object.keys(runs).sort((a, b) => runs[b] - runs[a])[0];
   console.log('continuity: ' + (breaks.length ? '✗ ' + breaks.join('; ')
     : '✓ every transition starts where the previous one ended' +
-      (longest ? ' (longest chain: m-' + longest + ', ' + runs[longest] + ' transitions)' : '') +
-      (skipped ? '; skipped ' + skipped + ' transitions with count changes' : '')));
+    (longest ? ' (longest chain: m-' + longest + ', ' + runs[longest] + ' transitions)' : '') +
+    (skipped ? '; skipped ' + skipped + ' transitions with count changes' : '')));
 }
 
 console.log('errors:', errs.length ? errs : 'none');

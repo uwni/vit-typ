@@ -7,9 +7,9 @@
 #set text(font: ("Noto Sans", "Noto Sans CJK SC"), size: 10pt, lang: "en")
 #set par(justify: false)
 
-#let docs = tidy.parse-module(read("../lib.typ"), name: "vtslides", require-all-parameters: true)
+#let docs = tidy.parse-module(read("../lib.typ"), name: "vit", require-all-parameters: true)
 
-#text(size: 22pt, weight: 700)[vtslides] #h(6pt) #text(fill: gray)[API]
+#text(size: 22pt, weight: 700)[vit] #h(6pt) #text(fill: gray)[API]
 #v(4pt)
 #eval(docs.description, mode: "markup")
 #v(8pt)

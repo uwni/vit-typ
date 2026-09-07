@@ -1,4 +1,4 @@
-/* ── vtslides · path data ────────────────────────────────────────────────
+/* ── vit · path data ────────────────────────────────────────────────
    Two states whose paths are not the same list of commands. Two path()
    values interpolate only if they are the same list of commands (CSS
    Shapes); otherwise the shape snaps at the midpoint while the transform

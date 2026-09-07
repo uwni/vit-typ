@@ -1,4 +1,4 @@
-/// vtslides — lay out whole pages in Typst, `mark` what should morph, and let
+/// vit — lay out whole pages in Typst, `mark` what should morph, and let
 /// the browser do the rest.
 ///
 /// The identity channel is a *label*: the SVG export turns `<lbl>` into a
@@ -68,6 +68,12 @@
 /// -> array
 #let transitions = ("fade", "slide", "rise", "zoom", "wipe-left", "wipe-right", "wipe-up", "wipe-down", "none")
 
+/// The package's version, read from the manifest so there is one place to bump
+/// it. Not named `version`: that is a Typst built-in, and `import: *` would
+/// shadow it.
+/// -> str
+#let _version = toml("typst.toml").package.version
+
 /// The document's target, as `deck` sets it. `mark` needs to know which
 /// backend it is in, but inside `html.frame` `target()` is always `"paged"`
 /// (the frame is laid out as paper), so the value has to come in through
@@ -127,7 +133,12 @@
     _bezier(v)
     "cubic-bezier(" + v.map(str).join(", ") + ")"
   } else if t == color { v.to-hex() } else if t in (ratio, length, angle) { repr(v) } else {
-    panic("a transition setting is a number, a string, a colour or the four numbers of a cubic Bézier; " + k + " is a " + str(t))
+    panic(
+      "a transition setting is a number, a string, a colour or the four numbers of a cubic Bézier; "
+        + k
+        + " is a "
+        + str(t),
+    )
   }
 }
 
@@ -138,7 +149,10 @@
   let knob(k, v) = {
     assert(
       k in _knobs,
-      message: "a transition setting is a variable deck.css reads: " + repr(_knobs.keys().sorted()) + " — not " + repr(k),
+      message: "a transition setting is a variable deck.css reads: "
+        + repr(_knobs.keys().sorted())
+        + " — not "
+        + repr(k),
     )
     _css-value(k, v)
   }
@@ -153,7 +167,10 @@
       message: "one side of a transition is an effect name, or (effect: name, …settings)",
     )
     assert(x.effect in transitions, message: "a transition effect must be one of " + repr(transitions))
-    (effect: x.effect, vars: (:) + x.pairs().filter(((k, v)) => k != "effect").map(((k, v)) => (k, knob(k, v))).to-dict())
+    (
+      effect: x.effect,
+      vars: (:) + x.pairs().filter(((k, v)) => k != "effect").map(((k, v)) => (k, knob(k, v))).to-dict(),
+    )
   }
   if t == none { return none }
   if type(t) == str { return (enter: side(t), leave: side(t), vars: (:)) }
@@ -227,10 +244,7 @@
     )
   }
   (
-    sels.join(",\n")
-      + " {\n"
-      + vars.pairs().map(((k, v)) => "  --vt-" + k + ": " + v + ";\n").join()
-      + "}\n"
+    sels.join(",\n") + " {\n" + vars.pairs().map(((k, v)) => "  --vt-" + k + ": " + v + ";\n").join() + "}\n"
   )
 }
 
@@ -356,7 +370,10 @@
   let s = states.pos()
   assert(s.len() > 0, message: "mark needs at least one body")
   assert(states.named().len() == 0, message: "mark takes no named argument other than transition")
-  assert(type(key) == str and key.match(regex("^[A-Za-z0-9_-]+$")) != none, message: "a mark key is letters, digits, _ and -: " + repr(key))
+  assert(
+    type(key) == str and key.match(regex("^[A-Za-z0-9_-]+$")) != none,
+    message: "a mark key is letters, digits, _ and -: " + repr(key),
+  )
   let fx = _pair(transition)
   // the label is the identity; the effect goes into the marks table deck() writes (see _marks)
   let lbl = label("vt-" + key)
@@ -366,11 +383,11 @@
   if s.len() == 1 { [#meta#box(s.first())#lbl] } else {
     context if _target.get() == "html" {
       [#meta#box({
-        [#box(s.first())#label("vt-" + key + "@0")]
-        for (i, x) in s.enumerate().slice(1) {
-          place(top + left, [#box(x)#label("vt-" + key + "@" + str(i))])
-        }
-      })#lbl]
+          [#box(s.first())#label("vt-" + key + "@0")]
+          for (i, x) in s.enumerate().slice(1) {
+            place(top + left, [#box(x)#label("vt-" + key + "@" + str(i))])
+          }
+        })#lbl]
     } else { [#meta#box(if key in _anim.get() { s.first() } else { s.last() })#lbl] }
   }
 }
@@ -395,7 +412,10 @@
   let sets = ()
   for m in query(<vt-mark>) {
     let v = m.value
-    assert(v.key not in t or t.at(v.key).transition == v.transition, message: "mark \"" + v.key + "\" is given two different transitions; one object has one")
+    assert(
+      v.key not in t or t.at(v.key).transition == v.transition,
+      message: "mark \"" + v.key + "\" is given two different transitions; one object has one",
+    )
     t.insert(v.key, (transition: v.transition))
     for b in v.sets { if b not in sets { sets.push(b) } }
   }
@@ -412,7 +432,7 @@
 #let deck(
   /// Document title.
   /// -> str
-  title: "vtslides",
+  title: "vit",
   /// Layout width. The PDF page size; in the HTML every frame's `html.frame` is
   /// the same size — `slide` reads `page.width` / `page.height`, nothing is
   /// hard-coded.
@@ -483,9 +503,18 @@
       html.elem(
         "style",
         attrs: (id: "vt-style"),
-        ":root{--vt-page:" + fill.to-hex() + ";--vt-w:" + str(width.pt()) + ";--vt-h:" + str(height.pt())
-          + ";--vt-duration:" + str(duration) + "ms"
-          + ";--vt-easing:cubic-bezier(" + easing.map(str).join(", ") + ")}\n"
+        ":root{--vt-page:"
+          + fill.to-hex()
+          + ";--vt-w:"
+          + str(width.pt())
+          + ";--vt-h:"
+          + str(height.pt())
+          + ";--vt-duration:"
+          + str(duration)
+          + "ms"
+          + ";--vt-easing:cubic-bezier("
+          + easing.map(str).join(", ")
+          + ")}\n"
           + read("deck.css")
           + _sets(fx)
           + marks.css,
@@ -497,6 +526,7 @@
           "data-duration": str(duration),
           "data-easing": easing.map(str).join(" "),
           "data-theme": if theme == auto { "auto" } else { theme },
+          "data-version": _version,
           "data-pdf": if pdf == auto { "auto" } else if pdf == none { "none" } else { pdf },
         ),
         body,
@@ -691,7 +721,9 @@
     let fx = if own == none { _fx.get() } else { own }
     // every frame carries the types of the transition into it: the first frame of the
     // page the page's (none: no transition), the others the frame-to-frame one
-    let attrs(i) = if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else { section + ("data-transition": _types(fx)) }
+    let attrs(i) = if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
+      section + ("data-transition": _types(fx))
+    }
     if target() == "html" {
       html.elem(
         "div",

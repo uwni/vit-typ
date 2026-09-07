@@ -1,4 +1,4 @@
-/* ── vtslides · runtime ─────────────────────────────────────────────────
+/* ── vit · runtime ─────────────────────────────────────────────────
    The player. Three jobs:
    · Transitions — a page/frame change starts one View Transition with the
      types the Typst side wrote on the frame plus the direction; everything
@@ -22,8 +22,8 @@
      Navigation walks frames, the overview shows groups. The title is a hidden
      .vt-title inside the group; the browser flattens it to plain text. */
   var groups = [];      // { el, title, from, to, pos }  `to` exclusive
-  var gOf    = [];      // frame index → group index
-  var gn     = 0;
+  var gOf = [];      // frame index → group index
+  var gn = 0;
 
   /* deck(duration:), deck(easing:) — the Typst side decides every default, this side only reads */
   var defaultMs, EASING;
@@ -39,13 +39,13 @@
   function durMs(ms) { return Math.round(ms / speed); }
   function setSpeed(v) {
     speed = Math.min(4, Math.max(0.25, Math.round(v * 100) / 100));
-    try { localStorage.setItem("vt-speed", speed); } catch (e) {}
+    try { localStorage.setItem("vt-speed", speed); } catch (e) { }
     root.style.setProperty("--vt-speed", speed);
     flash(speed + "×");
   }
 
-  var cur   = -1;       /* the frame that is painted */
-  var want  = -1;       /* the accepted target. paint() runs only after the old
+  var cur = -1;       /* the frame that is painted */
+  var want = -1;       /* the accepted target. paint() runs only after the old
                            snapshot is captured (100ms+ the first time); a next()
                            arriving meanwhile must count from the target, or two
                            clicks both become "go to the same page". Written only
@@ -77,7 +77,7 @@
   function settings() {
     defaultMs = parseInt(deck.dataset.duration, 10);
     EASING = deck.dataset.easing.split(" ").map(Number);   // the four numbers of a cubic Bézier
-    try { speed = parseFloat(localStorage.getItem("vt-speed")) || 1; } catch (e) {}
+    try { speed = parseFloat(localStorage.getItem("vt-speed")) || 1; } catch (e) { }
     reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
     prefersLight = window.matchMedia("(prefers-color-scheme: light)");
     canVT = typeof document.startViewTransition === "function";
@@ -135,7 +135,7 @@
      from here — fired on every page change and every step. */
   function announce() {
     syncThumbs();
-    try { history.replaceState(null, "", "#" + label(cur)); } catch (e) {}
+    try { history.replaceState(null, "", "#" + label(cur)); } catch (e) { }
     deck.dispatchEvent(new CustomEvent("vt:slide", { detail: { index: cur, step: at(cur) } }));
   }
 
@@ -359,7 +359,7 @@
           list.every(function (el, q) { return el.tagName === m.nodes[0][q].tagName; });
       });
       if (!ok) {
-        console.info("[vtslides] the states of " + m.key + " differ in structure (node count or types); they cross-fade instead of morphing");
+        console.info("[vit] the states of " + m.key + " differ in structure (node count or types); they cross-fade instead of morphing");
         m.nodes = null;
       }
       /* a mark named in slide(anim:) lends its states to the continuous animation and is not stepped */
@@ -374,9 +374,11 @@
      unchanged. The table maps SVG attribute name → the same property's name in
      the CSSOM / in keyframes (keyframes only accept the IDL name;
      "stroke-width" is silently dropped). */
-  var PROPS = { d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
-                opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
-                x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry" };
+  var PROPS = {
+    d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
+    opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
+    x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry"
+  };
 
   /* What differs across the nodes in list (same position in each state):
      `props`, the attributes in PROPS that are not all equal, and `other`, true
@@ -466,7 +468,7 @@
   function note(m, what) {
     if (m.noted) return;
     m.noted = true;
-    console.info("[vtslides] " + m.key + ": " + what + " cannot be interpolated and cross-fades instead.");
+    console.info("[vit] " + m.key + ": " + what + " cannot be interpolated and cross-fades instead.");
   }
 
   /* ── cross-fade: for what has no in-between ───────────────────────────
@@ -553,7 +555,7 @@
      frame not on stage is paused. */
 
   function animSpec(s) {
-    if (!s.vtSpec) { s.vtSpec = {}; try { s.vtSpec = JSON.parse(s.dataset.anim || "{}"); } catch (e) {} }
+    if (!s.vtSpec) { s.vtSpec = {}; try { s.vtSpec = JSON.parse(s.dataset.anim || "{}"); } catch (e) { } }
     return s.vtSpec;
   }
   function fromStates(o) { return !o.keyframes && !o.follow; }
@@ -564,21 +566,21 @@
       var spec = animSpec(s);
       Object.keys(spec).forEach(function (key) {
         var o = spec[key], el = s.querySelector('.vt-mark[data-vt-key="' + key + '"]');
-        if (!el) { console.warn("[vtslides] anim: no mark " + key + " on this frame"); return; }
+        if (!el) { console.warn("[vit] anim: no mark " + key + " on this frame"); return; }
         var keep = function (a, fit) { a.pause(); s.vtAnims.push({ a: a, fit: fit }); };
         if (fromStates(o)) {
           var m = stepsOf(s).marks.filter(function (m) { return m.key === key; })[0];
-          if (!m || !m.nodes) { console.warn("[vtslides] anim: " + key + " has no keyframes, no follow and no states to play"); return; }
+          if (!m || !m.nodes) { console.warn("[vit] anim: " + key + " has no keyframes, no follow and no states to play"); return; }
           m.nodes[0].forEach(function (node, j) {
             var column = m.nodes.map(function (list) { return list[j]; }), diff = changed(column);
             if (!diff.props.length) return;
             var frames = column.map(function (el) { return values(el, diff.props, {}); });
-            if (!settle(frames)) console.warn("[vtslides] anim: a path of " + key + " differs in structure between states and cannot be aligned; it will switch between keyframes");
+            if (!settle(frames)) console.warn("[vit] anim: a path of " + key + " differs in structure between states and cannot be aligned; it will switch between keyframes");
             keep(animate(node, frames, o));
           });
         } else if (o.follow) {
           var track = s.querySelector('.vt-mark[data-vt-key="' + o.follow + '"] path');
-          if (!track) { console.warn("[vtslides] anim: " + key + " should follow " + o.follow + ", but this frame has no such mark or it has no path"); return; }
+          if (!track) { console.warn("[vit] anim: " + key + " should follow " + o.follow + ", but this frame has no such mark or it has no path"); return; }
           el.style.offsetRotate = o.orient ? "auto" : "0deg";
           /* Chrome resolves path() coordinates against the element's own box, the
              spec against the containing block, and offset-position cannot fix it.
@@ -586,7 +588,7 @@
              readings coincide; it starts at 0% anyway, the rest position is moot. */
           el.style.left = el.style.top = "0";
           keep(animate(el, [{ offsetDistance: "0%" }, { offsetDistance: "100%" }], o),
-               function () { el.style.offsetPath = pathIn(track); });
+            function () { el.style.offsetPath = pathIn(track); });
         } else keep(animate(el, o.keyframes, o));
       });
     }
@@ -702,10 +704,10 @@
 
     if (atDesk() && e.key === "Enter") { e.preventDefault(); present(); return; }   // Enter presents; the other "next" keys walk the deck
 
-    if (NEXT[e.key])      { e.preventDefault(); next(); }
+    if (NEXT[e.key]) { e.preventDefault(); next(); }
     else if (PREV[e.key]) { e.preventDefault(); prev(); }
     else if (e.key === "Home") { e.preventDefault(); pick(0); }
-    else if (e.key === "End")  { e.preventDefault(); pick(groups[gn - 1].from); }
+    else if (e.key === "End") { e.preventDefault(); pick(groups[gn - 1].from); }
     else if (e.key === "f") { e.preventDefault(); toggleFullscreen(); }
     else if (e.key === "l") { e.preventDefault(); toggleLaser(); }
     else if (e.key === "s") { e.preventDefault(); openSpeaker(); }
@@ -744,7 +746,12 @@
       var d = e.target.closest(".vt-dots i");
       if (d) { pick(+d.dataset.frame, +d.dataset.at); return; }
       var g = e.target.closest(".vt-group");
-      if (g) { pick(slides.indexOf(g.querySelector(".vt-slide.is-thumb"))); return; }   // what you see is what opens
+      if (g) {
+        var f = slides.indexOf(g.querySelector(".vt-slide"));
+        if (peeked && gOf[peeked.i] === gOf[f]) pick(peeked.i, peeked.at);   // a dot being previewed opens its own position
+        else pick(f, 0);
+        return;
+      }
       if (atDesk() && frac(e, view)) present();   // the preview is the page: clicking it starts the presentation
       return;
     }
@@ -813,7 +820,7 @@
 
   function toggleFullscreen() {
     if (document.fullscreenElement) document.exitFullscreen();
-    else root.requestFullscreen().catch(function () {});
+    else root.requestFullscreen().catch(function () { });
   }
 
   /* Overview ⇄ presenting: a whole-page zoom, no element-level morph.
@@ -919,6 +926,10 @@
       });
     });
     help.appendChild(table);
+    var about = document.createElement("div");
+    about.className = "vt-about";
+    about.textContent = "vit" + (deck.dataset.version ? " " + deck.dataset.version : "");
+    help.appendChild(about);
     help.addEventListener("click", toggleHelp);
     document.body.appendChild(help);
   }
@@ -1129,7 +1140,7 @@
   function openSpeaker() {
     if (speaker && !speaker.closed) { speaker.focus(); return; }
     speaker = window.open("", "vt-speaker", "popup,width=1040,height=640");
-    if (!speaker) { console.warn("[vtslides] the speaker view was blocked by the browser; allow pop-ups for this page."); return; }
+    if (!speaker) { console.warn("[vit] the speaker view was blocked by the browser; allow pop-ups for this page."); return; }
 
     /* the same stylesheet as this document's, as it is (its speaker rules are under .vt-speaker, the layout's size, background and easing open it), the same theme */
     var d = speaker.document;
@@ -1266,13 +1277,14 @@
     new ResizeObserver(function () {
       (slides[cur].vtAnims || []).forEach(function (x) { if (x.fit) x.fit(); });
     }).observe(deck);
-    window.vtslides = {
+    window.vit = {
       go: go, next: next, prev: prev,
       get index() { return cur; },
       get total() { return n; },
       get step() { return at(cur); }, set step(k) { stepTo(slides[cur], k); },
       get steps() { return stepsOf(slides[cur]).n; },
       get speed() { return speed; }, set speed(v) { setSpeed(v); },
+      get version() { return deck.dataset.version || null; },
       /* "desk" (where it opens), "present" or "overview" — what the toolbar and Esc / Enter / o switch between */
       get mode() { return over() ? "overview" : atDesk() ? "desk" : "present"; },
       set mode(m) {
