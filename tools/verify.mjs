@@ -1,5 +1,5 @@
 /* PDF ↔ HTML pixel comparison + frozen mid-transition frames + region decomposition.
-   Needs examples/out/ compiled, plus poppler (pdftoppm) and ImageMagick (compare).
+   Needs examples/tutorial.{html,pdf} compiled, plus poppler (pdftoppm) and ImageMagick (compare).
    Usage: node tools/verify.mjs            (screenshots land in tools/shots/)      */
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = join(HERE, '..', 'examples', 'out');
+const OUT  = join(HERE, '..', 'examples');
 const SHOT = join(HERE, 'shots');
 rmSync(SHOT, { recursive: true, force: true });
 mkdirSync(SHOT, { recursive: true });
@@ -19,8 +19,9 @@ const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox', '-
 const VP = { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 };
 /* the deck opens on the desk; everything here is about the page being presented */
 const present = async p => {
+  await p.waitForFunction(() => document.querySelector('.vt-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
   await p.evaluate(() => { window.vit.mode = 'present'; });
-  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
+  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => {});
 };
 const bare = p => p.evaluate(() => { const b = document.querySelector('.vt-bar'); if (b) b.remove(); });
 

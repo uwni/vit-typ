@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const url = 'file://' + join(HERE, '..', 'examples', 'out', 'tutorial.html');
+const url = 'file://' + join(HERE, '..', 'examples', 'tutorial.html');
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
 
 const SIZES = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 },

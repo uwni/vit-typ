@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const url = 'file://' + join(HERE, '..', 'examples', 'out', 'tutorial.html');
+const url = 'file://' + join(HERE, '..', 'examples', 'tutorial.html');
 const EXE = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const b = await chromium.launch({ executablePath: EXE, args: ['--no-sandbox'] });
 const VP = { viewport: { width: 1280, height: 720 } };
@@ -16,7 +16,7 @@ const errs = [];
    (the wave), F the number of frames before it; T is the theorem page (three
    marks with entrances of their own), L the assembly page (layers), Z the page
    whose own transition sets the zoom knobs, and C the continuous pages. */
-const W = 14, F = 32, T = 10, L = 13, Z = 12, BALLS = 17, FOLLOW = 18, PEND = 19, SEA = 20;
+const W = 14, F = 32, T = 10, L = 13, Z = 12, BALLS = 17, FOLLOW = 18, CLEF = 19, SEA = 20;
 /* The deck opens on the desk, whose preview is a second copy of this document:
    wait for this copy to be ready, present, then let that one finish loading, so
    the page is quiet and the timings below are the deck's own. A tutorial page is
@@ -536,7 +536,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
     });
   };
   console.log('balls      :', JSON.stringify(await look('#' + BALLS)), '(5 svg host animations, 5 keyframes, delay 0…560)');
-  console.log('pendulums  :', JSON.stringify(await look('#' + PEND)), '(single: one svg host; double: one 96-keyframe animation per path; no steps)');
+  console.log('clef       :', JSON.stringify(await look('#' + CLEF)), '(one 46-keyframe animation per moving path; 21 paths, of which the pinned rect and the circle on the origin never move, so 19; no steps)');
   console.log('sea        :', JSON.stringify(await look('#' + SEA)), '(one 25-keyframe animation per path; no steps)');
   await p.close();
 }
@@ -551,18 +551,25 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   console.log('enter later:', JSON.stringify(await p.evaluate(async () => {
     const s = document.querySelector('.vt-slide.is-active');
     const anims = s.getAnimations({ subtree: true });
-    const paths = [...s.querySelector('[data-vt-state="double"][data-vt-at="0"]').querySelectorAll('path')];
-    const rods = paths[2], pivot = paths[3];
-    const pc = pivot.getBoundingClientRect(), px = pc.x + pc.width / 2, py = pc.y + pc.height / 2;
+    /* the trail's head is the pen: two paths animated independently, so if the
+       keyframes were read while the frame was off stage they would drift apart */
+    const paths = [...s.querySelector('[data-vt-state="clef"][data-vt-at="0"]').querySelectorAll('path')];
+    /* found by what they are, not by where they sit: the pen is the only filled
+       path, the head of the trail the widest stroke */
+    const pen = paths.find(q => (q.getAttribute('fill') || 'none') !== 'none');
+    const head = paths.filter(q => q.getAttribute('stroke-width'))
+                      .sort((x, y) => y.getAttribute('stroke-width') - x.getAttribute('stroke-width'))[0];
     let worst = 0;
-    for (let i = 0; i < 90; i++) {                       // live: the rod's d runs as SMIL, its transform as a Web Animation
+    for (let i = 0; i < 90; i++) {
       await new Promise(r => requestAnimationFrame(r));
-      const q = rods.getPointAtLength(0.01).matrixTransform(rods.getScreenCTM());
-      worst = Math.max(worst, Math.hypot(q.x - px, q.y - py));
+      const q = head.getPointAtLength(0.01).matrixTransform(head.getScreenCTM());
+      const c = pen.getBoundingClientRect();
+      worst = Math.max(worst, Math.hypot(q.x - (c.x + c.width / 2), q.y - (c.y + c.height / 2)));
     }
-    const kf = anims.find(a => a.effect.target === rods).effect.getKeyframes();
-    return { rodTransform: kf[0].transform.slice(0, 6), worstPivotGap: +worst.toFixed(2) };
-  })), '(matrix, gap under 1px)');
+    const kf = anims.find(a => a.effect.target === head).effect.getKeyframes();
+    return { headKeyframes: kf.length, animates: Object.keys(kf[0]).filter(k => !['offset', 'computedOffset', 'easing', 'composite'].includes(k)).join(),
+             worstPenGap: +worst.toFixed(2) };
+  })), '(one keyframe per state on transform and d; the trail head never leaves the pen: gap under 1px)');
   await p.close();
 }
 
@@ -594,7 +601,7 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
    (order matters) ───────────────────────────────────────────────────── */
 {
   const p = await b.newPage(VP); watch(p);
-  await p.goto(url + '#' + PEND); await p.waitForTimeout(800); await present(p);
+  await p.goto(url + '#' + CLEF); await p.waitForTimeout(800); await present(p);
   console.log('own transform:', JSON.stringify(await p.evaluate(() => {
     const s = document.querySelector('.vt-slide.is-active');
     s.getAnimations({ subtree: true }).forEach(a => a.cancel());   // getCTM reads the animated transform while one runs
@@ -776,9 +783,18 @@ const MOTION = `(ps) => { const cs = getComputedStyle(document.documentElement, 
   const two = await idx();
   await p.mouse.wheel(0, -100); await p.waitForTimeout(350);
   const back = await idx();
-  for (let i = 0; i < 12; i++) { await p.mouse.wheel(0, 12); await p.waitForTimeout(8); }
-  for (let i = 0; i < 10; i++) { await p.mouse.wheel(0, Math.max(1, 8 - i)); await p.waitForTimeout(16); }
-  await p.waitForTimeout(400);
+  /* One trackpad flick plus its inertia: many small deltas inside the runtime's
+     300 ms swallow window. Sent from inside the page — 22 Playwright round trips
+     take over a second, four times the window, so the harness would be measuring
+     itself rather than the gesture. */
+  await p.evaluate(async () => {
+    const send = dy => document.dispatchEvent(new WheelEvent('wheel',
+      { deltaY: dy, clientX: 640, clientY: 360, bubbles: true, cancelable: true }));
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    for (let i = 0; i < 12; i++) { send(12); await wait(8); }
+    for (let i = 0; i < 10; i++) { send(Math.max(1, 8 - i)); await wait(16); }
+  });
+  await p.waitForTimeout(600);
   const pad = await idx();
   await p.keyboard.press('o'); await p.waitForTimeout(900);
   await p.mouse.wheel(0, 100); await p.waitForTimeout(350);

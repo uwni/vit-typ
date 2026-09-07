@@ -4,8 +4,8 @@
 //
 // One compile per format:
 //
-//   typst compile --root . examples/tutorial.typ examples/out/tutorial.pdf
-//   typst compile --root . --features html examples/tutorial.typ examples/out/tutorial.html
+//   typst compile --root . examples/tutorial.typ examples/tutorial.pdf
+//   typst compile --root . --features html examples/tutorial.typ examples/tutorial.html
 //
 // Once published, replace the next line with #import "@preview/vit:0.1.0": *
 #import "../lib.typ": *
@@ -19,6 +19,8 @@
 #import "@preview/theorion:0.6.0": *
 #import cosmos.simple: *
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, edge, node
+// komet is a WASM plugin: it does the Fourier transform at compile time
+#import "@preview/komet:0.2.0" as komet
 
 #show: show-theorion
 
@@ -813,100 +815,142 @@
   ]
 
   // ── 19. states played over time ────────────────────────────────────
-  let pendulum = cetz.canvas(length: 0.7cm, {
-    import cetz.draw: circle, line
-    line((0, 0), (0, -6.5), stroke: 2pt + hi)
-    circle((0, 0), radius: .1, fill: dim, stroke: none)
-    circle((0, -6.5), radius: .55, fill: amber, stroke: none)
-  })
-  let g = 9.81
-  let accel(th1, th2, w1, w2) = {
-    let d = th1 - th2
-    let den = 3 - calc.cos(2 * d)
-    let a1 = (
-      (-3 * g * calc.sin(th1) - g * calc.sin(th1 - 2 * th2) - 2 * calc.sin(d) * (w2 * w2 + w1 * w1 * calc.cos(d))) / den
-    )
-    let a2 = (2 * calc.sin(d) * (2 * w1 * w1 + 2 * g * calc.cos(th1) + w2 * w2 * calc.cos(d))) / den
-    (a1, a2)
-  }
-  let rk4(st, h) = {
-    let f(s) = {
-      let (a1, a2) = accel(..s)
-      (s.at(2), s.at(3), a1, a2)
-    }
-    let add(a, b, k) = a.zip(b).map(((x, y)) => x + k * y)
-    let k1 = f(st)
-    let k2 = f(add(st, k1, h / 2))
-    let k3 = f(add(st, k2, h / 2))
-    let k4 = f(add(st, k3, h))
-    range(4).map(i => st.at(i) + h / 6 * (k1.at(i) + 2 * k2.at(i) + 2 * k3.at(i) + k4.at(i)))
-  }
-  let poses = {
-    let st = (2.2, 2.6, 0, 0)
+  // A treble clef, outlined the way a handwriting tutorial draws one. Not the
+  // boundary of the filled glyph — that is four separate curves, the silhouette
+  // and the three holes the stroke encloses — but the outline of the *pen*: the
+  // stroke's centreline offset to both sides by the local ink width, with a cap
+  // at each end. Where the stroke crosses itself the two outlines simply cross,
+  // so this is one closed curve by construction, sampled here at 128 points.
+  // Being closed, its series is periodic: the turn closes and the loop needs no
+  // `alternate`. (tools/clef.py derives it from the glyph.)
+  let clef = (
+    (-0.0264, -1.1348), (-0.1029, -1.1888), (-0.0056, -1.2455), (0.1104, -1.2291),
+    (0.2035, -1.1588), (0.2447, -1.0493), (0.2419, -0.9314), (0.2209, -0.8151),
+    (0.1961, -0.6995), (0.1721, -0.5837), (0.1491, -0.4677), (0.1259, -0.3517),
+    (0.1027, -0.2358), (0.0794, -0.1198), (0.0561, -0.0039), (0.0328, 0.112),
+    (0.0098, 0.228), (-0.0153, 0.3435), (-0.0397, 0.4592), (-0.0631, 0.5751),
+    (-0.0865, 0.6911), (-0.1019, 0.8082), (-0.108, 0.9263), (-0.0975, 1.044),
+    (-0.0691, 1.1586), (-0.0073, 1.2581), (0.0996, 1.3), (0.2036, 1.2487),
+    (0.2611, 1.1474), (0.2758, 1.0302), (0.274, 0.9121), (0.2556, 0.7954),
+    (0.2208, 0.6826), (0.1585, 0.5824), (0.0882, 0.4873), (0.0178, 0.3923),
+    (-0.0588, 0.3024), (-0.1434, 0.2198), (-0.2251, 0.1342), (-0.295, 0.0391),
+    (-0.3488, -0.0661), (-0.3727, -0.1813), (-0.3672, -0.2992), (-0.329, -0.4104),
+    (-0.2566, -0.5034), (-0.1623, -0.5743), (-0.0522, -0.6161), (0.0652, -0.6268),
+    (0.1794, -0.5987), (0.2873, -0.551), (0.3627, -0.4616), (0.3875, -0.3468),
+    (0.3725, -0.2302), (0.3077, -0.1328), (0.1978, -0.0959), (0.0816, -0.0753),
+    (-0.0244, -0.1234), (-0.0889, -0.2207), (-0.0833, -0.3373), (-0.0174, -0.4339),
+    (-0.0134, -0.475), (-0.1073, -0.4044), (-0.1644, -0.3019), (-0.1766, -0.1852),
+    (-0.138, -0.0742), (-0.0617, 0.0151), (0.0438, 0.0668), (0.1607, 0.0636),
+    (0.2758, 0.0365), (0.3789, -0.0182), (0.4413, -0.1177), (0.4664, -0.2328),
+    (0.4586, -0.3505), (0.4253, -0.4636), (0.357, -0.5592), (0.2568, -0.6202),
+    (0.1439, -0.6553), (0.0266, -0.6649), (-0.0897, -0.6447), (-0.1976, -0.5971),
+    (-0.2918, -0.526), (-0.3688, -0.4366), (-0.4224, -0.3315), (-0.453, -0.2174),
+    (-0.4664, -0.1002), (-0.4498, 0.0166), (-0.4117, 0.1284), (-0.3576, 0.2335),
+    (-0.2898, 0.3302), (-0.2132, 0.4203), (-0.1294, 0.5037), (-0.0443, 0.5859),
+    (0.0409, 0.6678), (0.1227, 0.7529), (0.1803, 0.856), (0.2141, 0.9689),
+    (0.2155, 1.0868), (0.1657, 1.1893), (0.062, 1.1722), (-0.003, 1.074),
+    (-0.0403, 0.9621), (-0.0518, 0.8446), (-0.0447, 0.7266), (-0.0237, 0.6103),
+    (-0.0015, 0.4941), (0.0206, 0.378), (0.0467, 0.2627), (0.0709, 0.1469),
+    (0.0945, 0.031), (0.118, -0.0849), (0.1414, -0.2008), (0.1646, -0.3167),
+    (0.1878, -0.4327), (0.2117, -0.5485), (0.2394, -0.6635), (0.2674, -0.7783),
+    (0.2898, -0.8944), (0.2992, -1.0121), (0.2787, -1.128), (0.2135, -1.2254),
+    (0.1122, -1.2846), (-0.0043, -1.3), (-0.1175, -1.2693), (-0.2013, -1.1876),
+    (-0.2299, -1.0751), (-0.1948, -0.9657), (-0.0837, -0.9435), (-0.0039, -1.0236),
+  )
+  let M = 75 // harmonics kept
+  let C = 6 // epicycle circles drawn
+  let S = 45 // states in one turn
+  let K = 12 // trail chunks
+  let L = 15 // pen samples per chunk; K * L = P, so the trail is the whole turn
+  let P = 180 // pen samples round the turn — the trail's smoothness, independent of S
+  let step = calc.quo(P, S) // a whole number: state j sits on pen sample step * j
+
+  // komet's fft is a WASM plugin: complex in, complex out, run at compile time.
+  // Its "backward" normalisation puts no factor on the forward transform, so a
+  // coefficient is the transform over N; an index past N/2 is a negative frequency.
+  let coef = {
+    let n = clef.len()
     let out = ()
-    for i in range(96) {
-      out.push(st)
-      for j in range(10) { st = rk4(st, 0.008) }
+    for (k, z) in komet.fft(clef).enumerate() {
+      let (re, im) = (z.at(0) / n, z.at(1) / n)
+      out.push((n: if k * 2 <= n { k } else { k - n }, re: re, im: im, r: calc.sqrt(re * re + im * im)))
+    }
+    out.sorted(key: e => -e.r).slice(0, M)
+  }
+  // the chain at time t: every term turns at its own frequency, and the end of
+  // the chain is the pen
+  let chain(t) = {
+    let (x, y) = (0.0, 0.0)
+    let out = ((0.0, 0.0),)
+    for e in coef {
+      let (cs, sn) = (calc.cos(e.n * t), calc.sin(e.n * t))
+      x += e.re * cs - e.im * sn
+      y += e.re * sn + e.im * cs
+      out.push((x, y))
     }
     out
   }
-  let tip(s) = {
-    let (th1, th2, ..) = s
-    let p1 = (calc.sin(th1), -calc.cos(th1))
-    (p1, (p1.at(0) + calc.sin(th2), p1.at(1) - calc.cos(th2)))
-  }
-  let trace = poses.map(s => tip(s).at(1))
-  let pose(s) = cetz.canvas(length: 1.5cm, {
+  let chains = range(S).map(j => chain(2 * calc.pi * j / S))
+  let pen = range(P).map(i => chain(2 * calc.pi * i / P).last())
+  let epicycles(j) = cetz.canvas(length: 4.20cm, {
     import cetz.draw: circle, line, rect
-    rect((-2.2, -2.2), (2.2, 2.2), stroke: none)
-    line(..trace, stroke: .6pt + blue.transparentize(55%))
-    let (p1, p2) = tip(s)
-    line((0, 0), p1, p2, stroke: 2pt + hi)
-    circle((0, 0), radius: .07, fill: dim, stroke: none)
-    circle(p1, radius: .16, fill: amber, stroke: none)
-    circle(p2, radius: .16, fill: green, stroke: none)
+    // the widest the circles ever reach, over every state: pin it, or the
+    // origin moves from state to state
+    rect((-0.83, -1.43), (0.83, 1.34), stroke: none)
+    let j = calc.rem(j, S) // the last state is the first: the turn closes
+    let ch = chains.at(j)
+    for i in range(C) { circle(ch.at(i), radius: coef.at(i).r, stroke: 0.4pt + dim.transparentize(48%)) }
+    line(..ch, stroke: 0.5pt + hi.transparentize(30%))
+    // the trail: the pen's own past, one stroke per chunk, wrapping the whole
+    // way round — solid just behind the pen, gone by the time it comes back
+    for q in range(K) {
+      let f = 1 - q / (K - 1)
+      line(
+        ..range(L + 1).map(i => pen.at(calc.rem(step * j - q * L - i + P * 4, P))),
+        stroke: (paint: blue.transparentize(100% - 100% * f), thickness: (0.3 + 2.2 * f) * 1pt),
+      )
+    }
+    circle(pen.at(step * j), radius: 0.035, fill: green, stroke: none)
   })
   slide(
     title: "States played over time",
-    note: [Left: two keyframes rotating about the pivot. Right: 96 poses integrated with RK4 in Typst and played as keyframes — a pendulum run backwards is still a pendulum, so `alternate` is honest.],
-    anim: (
-      single: (
-        keyframes: (
-          (transform: "rotate(32deg)", transformOrigin: "50% 0"),
-          (transform: "rotate(-32deg)", transformOrigin: "50% 0"),
-        ),
-        duration: 1400,
-        direction: "alternate",
-        easing: (0.42, 0, 0.58, 1),
-      ),
-      double: (duration: 8000, direction: "alternate"),
-    ),
+    note: [
+      A treble clef, outlined the way a handwriting tutorial draws one: the pen's own
+      outline, crossing itself wherever the stroke does, so it is a single closed curve.
+      Sampled at 128 points and turned into #M rotating vectors by komet's FFT, a WASM
+      plugin run at compile time, so the HTML carries only the states it produced. The
+      end of the chain is the pen.
+
+      One turn of the series is one period, so the last state *is* the first and the loop
+      has no seam to hide: `direction` stays `normal`. The trail is the pen's whole past —
+      #K strokes round the turn, solid just behind the pen and gone by the time it comes
+      back — so the shape is always there, brightest where the pen has just been.
+    ],
+    anim: (clef: (duration: 6000)),
   )[
     #lesson(
       "States played over time",
       [Name a multi-state `mark` in `anim:` with neither `keyframes` nor `follow`, and the *states become the keyframes*: stepping turns into playing.],
       src(```typ
-      #let poses = {                  // RK4, in Typst
-        let st = (2.2, 2.6, 0, 0); let out = ()
-        for i in range(96) {
-          out.push(st)
-          for j in range(10) { st = rk4(st, 0.008) }
+      #import "@preview/komet:0.2.0" as komet
+
+      #let coef = {               // the M largest terms of the DFT
+        let n = clef.len()
+        let out = ()
+        for (k, z) in komet.fft(clef).enumerate() {
+          let (re, im) = (z.at(0) / n, z.at(1) / n)
+          out.push((n: if k * 2 <= n { k } else { k - n },
+                    re: re, im: im, r: calc.sqrt(re * re + im * im)))
         }
-        out
+        out.sorted(key: e => -e.r).slice(0, M)
       }
-      #slide(anim: (
-        single: (keyframes: (…), duration: 1400,
-                 direction: "alternate"),
-        double: (duration: 8000, direction: "alternate"),
-      ))[
-        #mark("single")[#pendulum]
-        #mark("double", ..poses.map(pose))
+      // epicycles(j) draws the chain at t = 2πj/S, then the pen's
+      // whole past as twelve strokes fading round the turn
+      #slide(anim: (clef: (duration: 6000)))[
+        #mark("clef", ..range(S + 1).map(epicycles))
       ]
       ```),
-      screen[
-        #place(dx: 90pt, dy: 30pt, mark("single")[#pendulum])
-        #place(dx: 230pt, dy: 10pt, mark("double", ..poses.map(pose)))
-      ],
+      screen(align(center + horizon, mark("clef", ..range(S + 1).map(epicycles)))),
       when: [A mark named this way counts no steps, and the PDF shows its first state.],
     )
   ]

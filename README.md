@@ -227,11 +227,17 @@ three places:
   compositor, only `offset-distance` moves. `orient: true` turns it with the
   tangent.
 - Neither, and the `mark` of that key carries several states: the states are the
-  keyframes. The N poses one piece of code computed are played continuously,
+  keyframes. The N states one piece of code computed are played continuously,
   one animation per node, read exactly like a step of an element animation. The
-  double pendulum is 96 poses integrated with RK4 in Typst and played with
-  `anim: (double: (duration: 8000, direction: "alternate"))`; the sea is 25
-  states of three stacked sines, first and last equal, looping seamlessly. A
+  tutorial's clef is a Fourier series — komet's FFT, run at compile time, turns
+  a treble clef into 75 rotating vectors, and 45 states of the chain are played
+  with `anim: (clef: (duration: 6000))`; one turn of the series is one period, so
+  the last state is the first and the loop has nothing to hide. What is
+  transformed is the outline of the *pen*, not of the filled glyph: the stroke's
+  centreline offset to both sides by the local ink width and capped at the ends,
+  which crosses itself where the stroke does and is therefore a single closed
+  curve — the way a handwriting tutorial draws a letter.
+  The sea is 25 states of three stacked sines, first and last equal again. A
   mark named this way counts no steps, and the PDF shows its first state.
 
 Animations start once the page transition has finished, pause when the frame
@@ -450,6 +456,7 @@ tools/verify.mjs    PDF ↔ HTML pixel comparison, frozen mid-transition frames
 tools/ui.mjs        toolbar / laser / desk / overview / touch / transitions / transition settings / element & continuous animation / speaker view
 tools/knobs.typ     a three-page deck whose transitions set duration, easing and effect knobs, compiled by ui.mjs
 tools/gencss.py     writes the transition block of deck.css from a table of effects (`python3 tools/gencss.py`)
+tools/clef.py       derives the tutorial's clef from a font glyph: skeleton, Eulerian trail, offset outline
 ```
 
 `tools/` need `playwright` (`paths.mjs` only Node); `verify.mjs` also needs `pdftoppm` (poppler) and
