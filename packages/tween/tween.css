@@ -7,3 +7,14 @@
 [data-tween-at="0"] {
   display: inline;
 }
+
+/* A declaration made where an element could be written stands around what it
+   moves; one carried out of a frame stands at the end of the document and
+   points back at it, drawing nothing. */
+tween-play,
+waapi-anim {
+  display: block;
+}
+.waapi-decls {
+  display: none;
+}

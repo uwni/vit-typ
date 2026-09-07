@@ -25,8 +25,6 @@ window.tween = (function () {
    };
    var noted = {};
 
-   /* What a host carried over for us, if anything. */
-   function decls() { return typeof tweenDecls === "undefined" ? [] : tweenDecls; }
 
    /* What differs across the nodes in list (same position in each state):
       `props`, the attributes in PROPS that are not all equal, and `other`, true
@@ -175,7 +173,7 @@ window.tween = (function () {
          stepped — it said so itself, in the one place a declaration can be
          written. A host that steps drawings asks; it does not read labels. */
       plays: function (box) {
-         return !!box.closest('[data-tween-play],[data-typst-label^="tween-play@"]');
+         return !!box.closest('tween-play,[data-typst-label^="tween-play@"]');
       },
 
       /* These states, played over time instead of stepped: one animation per
@@ -193,28 +191,15 @@ window.tween = (function () {
          }).filter(Boolean);
       },
 
-      /* Whatever a drawing declared about itself, where it could say it: at the
-         top of an HTML document tween makes its own frame and can wrap it, so a
-         page with no host at all plays by itself. Inside a host that makes the
-         frames, only the label crosses into the SVG — the host carries the
-         options, and drives this with play() above. */
-      apply: function (root) {
-         var r = root || document;
-         var start = function (el, o) {
-            if (el.dataset.tweenPlayOn) return;
-            el.dataset.tweenPlayOn = "1";
-            api.boxes(el).forEach(function (box) {
-               var as = api.play(box, o, "tween:play");
-               if (waapi.reduced()) as.forEach(function (a) { a.pause(); });
-            });
-         };
-         r.querySelectorAll("[data-tween-play]").forEach(function (el) {
-            var o; try { o = JSON.parse(el.dataset.tweenPlay); } catch (e) { return; }
-            start(el, o);
-         });
-         r.querySelectorAll('[data-typst-label^="tween-play@"]').forEach(function (el) {
-            var o = decls()[+el.getAttribute("data-typst-label").slice(11)];
-            if (o) start(el, o);
+      /* This drawing, playing what it declared. Once per drawing: a second call
+         finds it already going. */
+      start: function (host, o) {
+         if (host.dataset.tweenPlayOn) return;
+         host.dataset.tweenPlayOn = "1";
+         tag(host);
+         api.boxes(host).forEach(function (box) {
+            var as = api.play(box, o, "tween:play");
+            if (waapi.reduced()) as.forEach(function (a) { a.pause(); });
          });
       },
 
@@ -240,7 +225,25 @@ window.tween = (function () {
       }
    };
 
-   if (document.readyState === "loading") addEventListener("DOMContentLoaded", function () { api.apply(); });
-   else api.apply();
+   /* The declaration is an element and the browser says when it is in the
+      document. Around the drawing where an element could be written; outside
+      the frames, pointing at the ordinal in a label, where none could. */
+   customElements.define("tween-play", class extends HTMLElement {
+      connectedCallback() {
+         /* Upgraded while the document is still parsing, this element's own
+            children are not there yet and neither is what it points at, so the
+            work waits for the document to be whole. */
+         if (document.readyState === "loading") { addEventListener("DOMContentLoaded", this.run.bind(this), { once: true }); return; }
+         this.run();
+      }
+      run() {
+         var o;
+         try { o = JSON.parse(this.dataset.spec); } catch (e) { return; }
+         var at = this.dataset.at;
+         var el = at == null ? this : document.querySelector('[data-typst-label="tween-play@' + at + '"]');
+         if (el) api.start(el, o);
+      }
+   });
+
    return api;
 })();

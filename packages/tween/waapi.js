@@ -17,10 +17,6 @@ window.waapi = window.waapi || (function () {
    /* A followed path is sampled in the element's own pixels, so it is measured
       again whenever the layout can have moved. The list is of measurements, not
       of animations — those the browser keeps. */
-   /* The list a host carried over for the declarations that could not ride on
-      an element of their own. A page with none has no such variable. */
-   function decls() { return typeof tweenDecls === "undefined" ? [] : tweenDecls; }
-
    var fits = [];
    addEventListener("resize", function () { fits.forEach(function (f) { f(); }); });
 
@@ -84,39 +80,49 @@ window.waapi = window.waapi || (function () {
       /* The browser's own answer to "should anything move at all". */
       reduced: function () { return reduced.matches; },
 
- /* Whatever the Typst side declared: one element, its keyframes and its
-         options. Where an element could be written they ride on it as data;
-         inside a frame, where only a label crosses, they ride on an ordinal
-         into the list the host carried over. Applied once per element, so a
-         document that grows more of them later only has to say so again. */
-      apply: function (root) {
-         var r = root || document;
-         var start = function (el, o) {
-            if (el.dataset.waapiOn) return;
-            el.dataset.waapiOn = "1";
-            var role = o.name ? "waapi:" + o.name : "waapi", a;
-            if (o.follow) {
-               var track = document.querySelector('[data-typst-label="' + o.follow + '"] path');
-               if (!track) { console.info("[waapi] nothing labelled " + o.follow + " carries a path to follow"); return; }
-               var run = api.follow(el, track, { duration: o.duration, delay: o.delay, iterations: o.iterations, direction: o.direction, easing: o.easing, orient: o.orient, role: role }, null);
-               fits.push(run.fit);
-               run.fit();
-               a = run.anim;
-            } else a = api.animate(el, o.keyframes, o, role);
-            if (!o.play || reduced.matches) a.pause();
-         };
-         r.querySelectorAll("[data-waapi]").forEach(function (el) {
-            var o; try { o = JSON.parse(el.dataset.waapi); } catch (e) { return; }
-            start(el, o);
-         });
-         r.querySelectorAll('[data-typst-label^="waapi@"]').forEach(function (el) {
-            var o = decls()[+el.getAttribute("data-typst-label").slice(6)];
-            if (o) start(el, o);
-         });
+      /* Whatever the Typst side declared for one element: its keyframes and its
+         options, or a path to run along. */
+      start: function (el, o) {
+         if (el.dataset.waapiOn) return null;
+         el.dataset.waapiOn = "1";
+         var role = o.name ? "waapi:" + o.name : "waapi", a;
+         if (o.follow) {
+            var track = document.querySelector('[data-typst-label="waapi-track:' + o.follow + '"] path');
+            if (!track) { console.info("[waapi] no track named " + o.follow + " on this page, or it has no path"); return null; }
+            var run = api.follow(el, track, {
+               duration: o.duration, delay: o.delay, iterations: o.iterations,
+               direction: o.direction, easing: o.easing, orient: o.orient, role: role
+            }, null);
+            fits.push(run.fit);
+            run.fit();
+            a = run.anim;
+         } else a = api.animate(el, o.keyframes, o, role);
+         if (!o.play || reduced.matches) a.pause();
+         return a;
       }
    };
 
-   if (document.readyState === "loading") addEventListener("DOMContentLoaded", function () { api.apply(); });
-   else api.apply();
+   /* The declaration is an element, and the browser says when it is in the
+      document — no sweep, no "already done" pass, and a page that grows more of
+      them later needs no second call. It stands around the thing it moves where
+      an element could be written; outside the frames, pointing at the ordinal
+      in a label, where none could. */
+   customElements.define("waapi-anim", class extends HTMLElement {
+      connectedCallback() {
+         /* Upgraded while the document is still parsing, this element's own
+            children are not there yet and neither is what it points at, so the
+            work waits for the document to be whole. */
+         if (document.readyState === "loading") { addEventListener("DOMContentLoaded", this.run.bind(this), { once: true }); return; }
+         this.run();
+      }
+      run() {
+         var o;
+         try { o = JSON.parse(this.dataset.spec); } catch (e) { return; }
+         var at = this.dataset.at;
+         var el = at == null ? this : document.querySelector('[data-typst-label="waapi-anim@' + at + '"]');
+         if (el) api.start(el, o);
+      }
+   });
+
    return api;
 })();

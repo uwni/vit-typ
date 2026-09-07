@@ -24,14 +24,21 @@
 #let _decl = counter("waapi-decl")
 
 /// Everything this document's animated things declared, in the order they
-/// declared it. A host that makes its own frames writes it into the page,
-/// beside `js`:
-///
-/// ```typ
-/// #html.elem("script", "const tweenDecls = " + json.encode(declarations()) + ";")
-/// ```
-/// -> array
-#let declarations() = query(<waapi-decl>).map(m => m.value)
+/// declared it, as the elements that carry it back out of the frames: one per
+/// declaration, pointing at the ordinal in its label. A host that makes its own
+/// frames puts this at the end of its body; the elements draw nothing and are
+/// upgraded by the runtime, which is where the animation starts.
+/// -> content
+#let declarations() = context {
+  html.elem(
+    "div",
+    attrs: (class: "waapi-decls"),
+    query(<waapi-decl>)
+      .enumerate()
+      .map(((k, m)) => html.elem(m.value.tag, attrs: ("data-at": str(k), "data-spec": json.encode(m.value.spec, pretty: false))))
+      .join(),
+  )
+}
 
 /// A document that makes its own `html.frame`s says so once, around its body:
 /// `#show: host`. That is also where the declarations are carried out of the
@@ -41,21 +48,54 @@
 #let host(body) = context {
   html-target.update(true)
   body
-  if target() == "html" {
-    context html.elem("script", "const tweenDecls = " + json.encode(declarations()) + ";")
-  }
+  if target() == "html" { declarations() }
 }
 
-/// One declaration: an element carrying it where an element can be written, a
-/// label and an ordinal where only labels can, and nothing at all on paper.
-#let declared(kind, spec, body) = context {
+/// One declaration. Where an element can be written it is one — a custom
+/// element around the thing, upgraded by the runtime the moment it is in the
+/// document. Inside a frame no element survives, so the declaration becomes a
+/// label with an ordinal and the host emits the element outside, pointing back
+/// at it. Nothing at all on paper.
+///
+/// `tag` names the custom element, and so which runtime owns the declaration:
+/// `waapi-anim` for an element that moves, `tween-play` for a drawing that
+/// plays its states.
+#let declared(tag, spec, body) = context {
   if target() == "html" {
-    html.elem("div", attrs: ("data-" + kind: json.encode(spec)), body)
+    html.elem(tag, attrs: ("data-spec": json.encode(spec, pretty: false)), body)
   } else if html-target.get() {
     let k = _decl.get().first()
     _decl.step()
-    [#metadata(spec)<waapi-decl>#box(body)#label(kind + "@" + str(k))]
+    [#metadata((tag: tag, spec: spec))<waapi-decl>#box(body)#label(tag + "@" + str(k))]
   } else { body }
+}
+
+/// A path for something else to run along: the body, named, so that
+/// `animate(follow: name)` can find it. The name is this package's to give out,
+/// not the document's — it becomes a label under a namespace of our own, and
+/// nothing you label yourself can collide with it.
+///
+/// ```typ
+/// #waapi.track("orbit")[#cetz.canvas(..)]
+/// #waapi.animate(follow: "orbit", duration: 4000)[#circle(radius: 4pt)]
+/// ```
+///
+/// The first `<path>` of what it wraps is the track, and a label only reaches
+/// the browser through the SVG export: at the top of an HTML document this
+/// makes the frame itself, and inside a host's frame it is already in one.
+/// -> content
+#let track(
+  /// -> str
+  name,
+  /// -> content
+  body,
+) = context {
+  assert(
+    type(name) == str and name.match(regex("^[A-Za-z0-9_-]+$")) != none,
+    message: "a track name is letters, digits, _ and -: " + repr(name),
+  )
+  let named = [#box(body)#label("waapi-track:" + name)]
+  if target() == "html" { html.frame(named) } else { named }
 }
 
 /// One animated element: the body in a box the browser can animate, and the
@@ -99,9 +139,8 @@
   /// A name, so a host can find this one among the others.
   /// -> none | str
   name: none,
-  /// Run this element along a path instead of giving it keyframes: the Typst
-  /// label of the element whose first `<path>` is the track (`<track>` in the
-  /// document, `"track"` here). Only `offset-distance` moves, on the
+  /// Run this element along a path instead of giving it keyframes: the name of
+  /// a `track` on the same page. Only `offset-distance` moves, on the
   /// compositor; `orient` turns the element with the tangent.
   /// -> none | str
   follow: none,
@@ -127,7 +166,7 @@
     message: "waapi: easing is four numbers of a cubic Bézier, or a name the browser knows",
   )
   declared(
-    "waapi",
+    "waapi-anim",
     (
       keyframes: keyframes,
       duration: duration,

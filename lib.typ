@@ -514,11 +514,10 @@
         ),
         body,
       )
-      // what the drawings declared about themselves: carried, never read
-      html.elem(
-        "script",
-        "const vitMarks = " + json.encode(marks.table) + ";const tweenDecls = " + json.encode(_tween.declarations()) + ";",
-      )
+      html.elem("script", "const vitMarks = " + json.encode(marks.table) + ";")
+      // what the drawings declared about themselves, carried back out of the
+      // frames they were written in: the deck emits them, and never reads them
+      _tween.declarations()
       html.script(read("hoist.js"))
       html.script(_tween.js)
       html.script(read("runtime.js"))

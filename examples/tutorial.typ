@@ -210,8 +210,8 @@
         ))),
         at(3, mark("w-co", transition: "rise", card(
           "Continuous animation",
-          "An object moving on its own, with nobody pressing anything.",
-          "mark(anim: …)",
+          "Something moving on its own, with nobody pressing anything.",
+          "tween(play: …) · waapi.animate",
           "Web Animations, running while the page rests here.",
           green,
         ))),
@@ -920,14 +920,14 @@
   )[
     #lesson(
       "follow: an element along a path",
-      [`follow: "track"` runs an element's centre along the first path of whatever carries that label, on the compositor. It is the one convenience in the binding.],
+      [`waapi.track` names a path and `follow:` runs an element's centre along it, on the compositor. It is the one convenience in the binding.],
       src(```typ
-      #place(dx: 20pt, dy: 30pt)[#box(cetz.canvas({
+      #place(dx: 20pt, dy: 30pt, waapi.track("orbit", cetz.canvas({
         import cetz.draw: line
         line(..lissajous, close: true)
-      }))<track>]
+      })))
       #place(dx: 20pt, dy: 30pt, waapi.animate(
-        follow: "track", duration: 4000,
+        follow: "orbit", duration: 4000,
       )[#std.circle(radius: .3cm)])
       #place(dx: 430pt, dy: 120pt, waapi.animate(
         keyframes: ((transform: "rotate(0)"),
@@ -936,14 +936,16 @@
       )[#std.rect(…)])
       ```),
       screen[
-        #place(dx: 20pt, dy: 40pt)[#box(cetz.canvas(length: 1cm, {
+        #place(dx: 20pt, dy: 40pt, waapi.track("orbit", cetz.canvas(length: 1cm, {
           import cetz.draw: line
           line(..lissajous, close: true, stroke: 1.5pt + blue)
-        }))<track>]
+        })))
         #place(
           dx: 20pt,
           dy: 40pt,
-          waapi.animate(follow: "track", duration: 4000)[#std.circle(radius: .26cm, fill: green)],
+          waapi.animate(follow: "orbit", duration: 4000)[
+            #std.circle(radius: .26cm, fill: green)
+          ],
         )
         #place(
           dx: 430pt,
@@ -1161,42 +1163,45 @@
     // the widest the circles ever reach, over every state: pin it, or the
     // origin moves from state to state
     rect((-0.83, -1.43), (0.83, 1.34), stroke: none)
-    states(play: (duration: 6000), ..range(S + 1).map(j => {
-    let j = calc.rem(j, S) // the last state is the first: the turn closes
-    let ch = chains.at(j)
-    for i in range(C) { circle(ch.at(i), radius: coef.at(i).r, stroke: 0.4pt + dim.transparentize(48%)) }
-    line(..ch, stroke: 0.5pt + hi.transparentize(30%))
-    // The trail. The pieces never move — a piece is the same two points in every
-    // state — so there is no geometry to interpolate; what the states move is
-    // the light on each piece, and how much of it is inked. Both are numbers the
-    // browser interpolates, so both are continuous in time. Gone, not removed:
-    // the states of a mark must have the same nodes, so a dead piece stays in
-    // the drawing at zero opacity and zero ink.
-    for a in range(S) {
-      let age = calc.rem(j - a + S * 4, S)
-      // ink only where the pen has already been, and only as far back as the
-      // tail reaches: the piece ahead of the pen must be empty at the state, or
-      // it would empty itself while it brightens and put ink in front of the pen
-      let ink = if age >= 1 and age <= TAIL { 1.0 } else { 0.0 }
-      let f = calc.max(0.0, 1 - calc.max(0.0, age - 1) / TAIL)
-      line(
-        ..range(SUB + 1).map(k => pen.at(calc.rem(a * SUB + k, P))),
-        stroke: (
-          paint: blue.transparentize(100% - 100% * f),
-          thickness: (0.3 + 2.2 * f) * 1pt,
-          // butt, so that two pieces meeting end to end do not paint the same
-          // millimetre twice — with a translucent stroke that would bead at every
-          // joint. The turn inside a piece is a proper join, and the turn at a
-          // joint is small because the curve is sampled far finer than the pieces.
-          cap: "butt",
-          join: "round",
-          dash: (array: (ink * seg.at(a), 4 * seg.at(a)), phase: 0pt),
-        ),
-      )
-    }
-    // The pen, at the end of the chain.
-    circle(pen.at(step * j), radius: DOT, fill: green, stroke: none)
-    }))
+    states(
+      play: (duration: 6000),
+      ..range(S + 1).map(j => {
+        let j = calc.rem(j, S) // the last state is the first: the turn closes
+        let ch = chains.at(j)
+        for i in range(C) { circle(ch.at(i), radius: coef.at(i).r, stroke: 0.4pt + dim.transparentize(48%)) }
+        line(..ch, stroke: 0.5pt + hi.transparentize(30%))
+        // The trail. The pieces never move — a piece is the same two points in every
+        // state — so there is no geometry to interpolate; what the states move is
+        // the light on each piece, and how much of it is inked. Both are numbers the
+        // browser interpolates, so both are continuous in time. Gone, not removed:
+        // the states of a mark must have the same nodes, so a dead piece stays in
+        // the drawing at zero opacity and zero ink.
+        for a in range(S) {
+          let age = calc.rem(j - a + S * 4, S)
+          // ink only where the pen has already been, and only as far back as the
+          // tail reaches: the piece ahead of the pen must be empty at the state, or
+          // it would empty itself while it brightens and put ink in front of the pen
+          let ink = if age >= 1 and age <= TAIL { 1.0 } else { 0.0 }
+          let f = calc.max(0.0, 1 - calc.max(0.0, age - 1) / TAIL)
+          line(
+            ..range(SUB + 1).map(k => pen.at(calc.rem(a * SUB + k, P))),
+            stroke: (
+              paint: blue.transparentize(100% - 100% * f),
+              thickness: (0.3 + 2.2 * f) * 1pt,
+              // butt, so that two pieces meeting end to end do not paint the same
+              // millimetre twice — with a translucent stroke that would bead at every
+              // joint. The turn inside a piece is a proper join, and the turn at a
+              // joint is small because the curve is sampled far finer than the pieces.
+              cap: "butt",
+              join: "round",
+              dash: (array: (ink * seg.at(a), 4 * seg.at(a)), phase: 0pt),
+            ),
+          )
+        }
+        // The pen, at the end of the chain.
+        circle(pen.at(step * j), radius: DOT, fill: green, stroke: none)
+      }),
+    )
   })
   slide(
     title: "States played over time",
@@ -1259,29 +1264,32 @@
     // the box and the sun do not move, so they are the canvas's own
     rect((-0.2, -2.2), (14.2, 3.2), stroke: none)
     circle((11.8, 2.2), radius: .5, fill: gold, stroke: none)
-    states(play: (duration: 4000), ..range(0, 25).map(k => {
-    let phi = k / 24 * 2 * calc.pi
-    let surf(a, w, v, y0) = x => y0 + a * calc.sin(w * x + v * phi) + a * .35 * calc.sin(2.3 * w * x - 2 * v * phi)
-    let layer(h, col) = line(
-      ..range(0, 57).map(i => (i * .25, h(i * .25))),
-      (14, -2),
-      (0, -2),
-      close: true,
-      fill: col,
-      stroke: none,
+    states(
+      play: (duration: 4000),
+      ..range(0, 25).map(k => {
+        let phi = k / 24 * 2 * calc.pi
+        let surf(a, w, v, y0) = x => y0 + a * calc.sin(w * x + v * phi) + a * .35 * calc.sin(2.3 * w * x - 2 * v * phi)
+        let layer(h, col) = line(
+          ..range(0, 57).map(i => (i * .25, h(i * .25))),
+          (14, -2),
+          (0, -2),
+          close: true,
+          fill: col,
+          stroke: none,
+        )
+        let h = surf(.35, 1.5, 1, -.1)
+        layer(surf(.45, .9, 1, 1.1), rgb("#2b3a5c"))
+        layer(surf(.4, 1.2, -1, .5), rgb("#3e5aa8"))
+        layer(h, blue)
+        let x = 4.5
+        let y = h(x)
+        let slope = (h(x + .05) - h(x - .05)) / .1
+        content((x, y + .25), angle: calc.atan(slope), {
+          set text(size: 22pt)
+          box(baseline: -7pt, polygon(fill: gold, (0pt, 0pt), (30pt, 0pt), (25pt, 10pt), (5pt, 10pt)))
+        })
+      }),
     )
-    let h = surf(.35, 1.5, 1, -.1)
-    layer(surf(.45, .9, 1, 1.1), rgb("#2b3a5c"))
-    layer(surf(.4, 1.2, -1, .5), rgb("#3e5aa8"))
-    layer(h, blue)
-    let x = 4.5
-    let y = h(x)
-    let slope = (h(x + .05) - h(x - .05)) / .1
-    content((x, y + .25), angle: calc.atan(slope), {
-      set text(size: 22pt)
-      box(baseline: -7pt, polygon(fill: gold, (0pt, 0pt), (30pt, 0pt), (25pt, 10pt), (5pt, 10pt)))
-    })
-    }))
   })
   slide(
     title: "A seamless loop",
@@ -1540,8 +1548,8 @@
         ..pick("A page grows a line at a time?", [`build` — the later parts push the layout], green),
         ..pick("Parts arrive but nothing may shift?", [`reveal` — what is to come holds its space], cyan),
         ..pick("A drawing gains something outside itself?", [`layers` — what was there glides as one picture], gold),
-        ..pick("A curve must bend, a pose must change?", [`mark` with states — a transition only cross-fades], amber),
-        ..pick("It must move with nobody pressing?", [`mark(anim:)`], rgb("#e599f7")),
+        ..pick("A curve must bend, a pose must change?", [`tween` — a transition only cross-fades], amber),
+        ..pick("It must move with nobody pressing?", [`tween(play:)`, `waapi.animate`], rgb("#e599f7")),
       )),
       when: [Out of reach: z-order, silently clipped overflow, a bitmap halfway through a big size change.],
     )

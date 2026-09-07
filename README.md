@@ -259,8 +259,8 @@ ms, `easing`, `direction`, `iterations` — infinite and linear by default),
 passed to `el.animate()` as is. `waapi.animate(keyframes: …)` moves one element:
 the tutorial's bouncing balls are five of them with piecewise `easing` for
 gravity, a `scale` squash on the landing frame and a `delay` to stagger them.
-`waapi.animate(follow: "track")` runs an element's centre along the first
-`<path>` of whatever carries that label, via CSS `offset-path`, so only
+`waapi.track` names a path and `waapi.animate(follow: …)` runs an element's
+centre along it, via CSS `offset-path`, so only
 `offset-distance` moves, on the compositor; `orient: true` turns it with the
 tangent. `tween(..states, play: …)` plays a drawing's states over time instead
 of leaving them to be stepped, one animation per node — including a whole CeTZ
