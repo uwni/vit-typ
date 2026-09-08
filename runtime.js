@@ -358,8 +358,8 @@
 
   /* the engine returns the animations and the undo; the frame keeps the undo,
      so that halt() can put back what a cancelled cross-fade changed */
-  const fade = (s, host, oldG, newG, olds, news, timing) => {
-    const r = tween.crossfade(host, oldG, newG, olds, news, timing);
+  const fade = (s, oldG, newG, olds, news, timing) => {
+    const r = tween.crossfade(oldG, newG, olds, news, timing);
     for (const a of r.anims) a.id = STEP;
     (s.vitUndo ??= []).push(r.undo);
     r.anims.at(-1).finished.then(r.undo, r.undo);
@@ -380,8 +380,7 @@
       m.states.forEach((g, i) => { g.style.display = i === b ? "inline" : "none"; });
       if (a === b || !live) continue;
       const timing = { duration: durMs(defaultMs), delay: 0, iterations: 1, direction: "normal", easing: EASING };
-      const host = m.states[b].closest(".vit-mark") ?? s;
-      if (!m.nodes) { mine = mine.concat(fade(s, host, m.states[a], m.states[b], null, null, timing)); continue; }
+      if (!m.nodes) { mine = mine.concat(fade(s, m.states[a], m.states[b], null, null, timing)); continue; }
       /* Each node of the new state animates from the value of its counterpart in
          the old state to its own; the end is the node's own attribute, so it
          lands there by itself and nothing has to be committed. What has no
@@ -392,7 +391,7 @@
         if (f.frames) mine.push(waapi.animate(el, f.frames, timing, STEP));
         if (f.fade) { olds.push(old); news.push(el); }
       });
-      if (olds.length) mine = mine.concat(fade(s, host, m.states[a], m.states[b], olds, news, timing));
+      if (olds.length) mine = mine.concat(fade(s, m.states[a], m.states[b], olds, news, timing));
     }
     /* instant moves (landing, previews, thumbnails) are not "a step taken", so
        they don't announce; the caller's stage() does */

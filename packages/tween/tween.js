@@ -172,17 +172,22 @@ window.tween = (() => {
       },
 
       /* For what has no in-between. The old fades out while the new fades in,
-         with plus-lighter inside an isolated host so a pixel both draw alike
-         does not dim halfway. `olds` are nodes of the old state to keep visible
-         while the rest of it is hidden. The caller calls undo when they end. */
-      crossfade(host, oldG, newG, olds, news, timing) {
+         with plus-lighter so a pixel both draw alike does not dim halfway.
+         `olds` are nodes of the old state to keep visible while the rest of it
+         is hidden. The caller calls undo when they end.
+
+         What is isolated is the container of the two states and nothing wider:
+         plus-lighter adds to whatever is painted under it, so a host that also
+         held the rest of the drawing would have the pair brighten against it
+         for the length of the step and drop back when the blend mode goes. */
+      crossfade(oldG, newG, olds, news, timing) {
          let cleanup = [];
          const set = (el, prop, v) => {
             const was = el.style[prop];
             el.style[prop] = v;
             cleanup.push(() => { el.style[prop] = was; });
          };
-         set(host, "isolation", "isolate");
+         set(oldG.closest("[data-tween]") ?? oldG.parentNode, "isolation", "isolate");
          set(oldG, "display", "inline");
          set(oldG, "mixBlendMode", "plus-lighter");
          set(newG, "mixBlendMode", "plus-lighter");
