@@ -68,7 +68,7 @@
 /// every duration, whoever wrote it.
 /// -> array
 // Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as _tween
-#import "packages/tween/lib.typ" as _tween
+#import "@local/tween:0.1.0" as _tween
 
 // The player's own markup — everything the reader sees that is not the deck.
 #import "chrome/bar.typ": bar as _bar

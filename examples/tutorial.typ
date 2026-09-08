@@ -12,7 +12,7 @@
 // Element animation — stepped and played alike — is tween's, not the deck's.
 // compat.cetz is its layer for CeTZ: cetz.draw with `over(…)` allowed in place
 // of any argument. Once published: #import "@preview/tween:0.1.0": tween, waapi, compat
-#import "../packages/tween/lib.typ": tween, waapi, compat
+#import "@local/tween:0.1.0": tween, waapi, compat
 #import "@preview/cetz:0.5.2"
 #let cz = compat.cetz.tweened(cetz)
 // Third party packages, unchanged: theorion writes the theorem environments,
