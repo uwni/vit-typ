@@ -1,7 +1,7 @@
 /// The key table, shown on `?`. The README lists the same keys, and
 /// `runtime.js` binds them.
 
-#let keys = (
+#let _keys = (
   ("→ ↓ PageDown Space Enter n j", "Next: step, frame or page"),
   ("← ↑ PageUp Backspace p k", "Previous"),
   ("Home / End", "First / last page"),
@@ -20,7 +20,7 @@
   class: "vit-help",
   hidden: true,
   {
-    html.table(html.tbody(keys.map(((k, what)) => html.tr({
+    html.table(html.tbody(_keys.map(((k, what)) => html.tr({
       html.td(html.kbd(k))
       html.td(what)
     })).join()))

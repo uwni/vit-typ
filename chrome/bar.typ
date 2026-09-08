@@ -2,7 +2,7 @@
 /// binds them and keeps their state. There is one per window: the main one and
 /// the speaker view's.
 
-#import "icons.typ": icon, icons
+#import "icons.typ": icon
 
 // `aria-label` and `data-act` are not Typst identifiers, so the elements that
 // carry them are written with `html.elem` rather than the typed functions.
@@ -11,6 +11,23 @@
   "button",
   attrs: (type: "button", title: title, "aria-label": title, "data-act": act),
   body,
+)
+
+/// A button with two faces — desk ⇄ present, full ⇄ exit. Each is
+/// `(icon, title)` and carries its own words, so the runtime shows one face
+/// and takes its title with it; `at-rest` is the face a fresh page shows.
+#let _swap(act, at-rest, other) = _button(
+  at-rest.at(1),
+  act,
+  {
+    let face(f, ..rest) = html.elem(
+      "span",
+      attrs: ("data-icon": f.at(0), "data-title": f.at(1), ..rest.named()),
+      icon(f.at(0)),
+    )
+    face(at-rest)
+    face(other, hidden: "hidden")
+  },
 )
 
 /// `pdf`: the handout's href, `none` for no download button, or `auto` to let
@@ -22,7 +39,7 @@
   attrs: (class: "vit-bar" + if shown { " is-shown" }),
   {
     html.div(class: "vit-count", "")
-    _button("Desk (Esc)", "desk", icons("desk", "play"))
+    _swap("desk", ("desk", "Desk (Esc)"), ("play", "Present (Enter)"))
     _button("Overview (o)", "overview", icon("grid"))
     _button("Laser pointer (l)", "laser", icon("laser"))
     _button("Speaker view (s)", "speaker", icon("notes"))
@@ -37,6 +54,6 @@
         icon("down"),
       )
     }
-    _button("Full screen (f)", "full", icons("full", "unfull"))
+    _swap("full", ("full", "Full screen (f)"), ("unfull", "Exit full screen (f)"))
   },
 )

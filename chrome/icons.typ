@@ -11,7 +11,7 @@
   },
 )
 
-#let path = (
+#let _path = (
   desk: "M4 5h16v14H4zM10 5v14",
   play: "M8 5l11 7-11 7z",
   grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
@@ -24,15 +24,8 @@
 
 /// One icon by name; `laser` carries its dot.
 #let icon(name) = _svg(
-  path.at(name),
+  _path.at(name),
   extra: if name == "laser" {
     html.elem("circle", attrs: (cx: "12", cy: "12", r: "2.6", fill: "currentColor", stroke: "none"))
   },
 )
-
-/// Two icons in one button, the second hidden: a button that swaps icon
-/// (desk ⇄ present, full ⇄ exit) carries both, and the runtime shows one.
-#let icons(a, b) = {
-  html.elem("span", attrs: ("data-icon": a), icon(a))
-  html.elem("span", attrs: ("data-icon": b, hidden: "hidden"), icon(b))
-}

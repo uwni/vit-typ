@@ -732,9 +732,14 @@
     return m ? `${m[1]}.pdf` : "";
   };
 
-  /* two icons in a button, one shown: what it does now, or what it will */
-  const showIcon = (el, name) => {
+  /* A button with two faces shows one of them, and wears its words: what it
+     does now, or what it will. Both faces are in the document. */
+  const showFace = (el, name) => {
     for (const i of el.querySelectorAll("[data-icon]")) i.hidden = i.dataset.icon !== name;
+    const on = el.querySelector(`[data-icon="${name}"]`);
+    if (!on) return;
+    el.title = on.dataset.title;
+    el.setAttribute("aria-label", on.dataset.title);
   };
 
   const wireBar = el => {
@@ -824,14 +829,10 @@
     for (const b of bars) {
       b.el.ownerDocument.body.classList.toggle("vit-lasing", lasing);   // the speaker window's cursor follows too
       b.count.textContent = text;
-      showIcon(b.desk, atDesk() ? "play" : "desk");
-      b.desk.title = atDesk() ? "Present (Enter)" : "Desk (Esc)";
-      b.desk.setAttribute("aria-label", b.desk.title);
+      showFace(b.desk, atDesk() ? "play" : "desk");
       b.overview.setAttribute("aria-pressed", String(over()));
       b.laser.setAttribute("aria-pressed", String(lasing));
-      showIcon(b.full, fs ? "unfull" : "full");
-      b.full.title = fs ? "Exit full screen (f)" : "Full screen (f)";
-      b.full.setAttribute("aria-label", b.full.title);
+      showFace(b.full, fs ? "unfull" : "full");
     }
   };
 
