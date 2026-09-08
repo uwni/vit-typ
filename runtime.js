@@ -121,7 +121,7 @@
   /* Thumbnails, counter, address bar and speaker view all learn where we are
      from here — fired on every page change and every step. */
   const announce = () => {
-    syncThumbs();
+    syncThumbs(true);
     try { history.replaceState(null, "", `#${label(cur)}`); } catch { }
     deck.dispatchEvent(new CustomEvent("vit:move-ready", { detail: { index: cur, step: at(cur) } }));
   };
@@ -146,10 +146,11 @@
   };
 
   /* Which frame a thumbnail shows: the one being previewed, else the current
-     frame while we are on that page, otherwise the last frame at its last
-     step (the finished page, like a handout). The only writer of is-thumb
-     and the dots' state. */
-  const syncThumbs = () => {
+     frame while we are on that page, otherwise the last frame at its last step
+     (the finished page, like a handout). The only writer of is-thumb and the
+     dots' state. `scroll` only on a real move — hovering a dot previews a step
+     and must leave the rail where the reader put it. */
+  const syncThumbs = (scroll = false) => {
     const now = idx(cur);
     groups.forEach((g, k) => {
       const here = gOf[cur] === k, peekHere = peeked && gOf[peeked.i] === k;
@@ -161,7 +162,7 @@
       if (!here && !peekHere && gOf[want] !== k) stepTo(slides[shown], stepsOf(slides[shown]).n, true);
       for (let i = g.from; i < g.to; i++) slides[i].classList.toggle("is-thumb", i === shown);
       g.el.classList.toggle("is-here", here);
-      if (here && atDesk()) g.el.scrollIntoView({ block: "nearest" });
+      if (scroll && here && atDesk()) g.el.scrollIntoView({ block: "nearest" });
       /* Dots show progress, not position: everything passed is solid, the current
          one a notch brighter. Same rule for every page — pages behind us fully
          solid, pages ahead fully hollow. */
@@ -713,7 +714,7 @@
     deck.classList.remove("vit-all");
     deck.classList.add("vit-desk");
     still(slides[cur]);
-    syncThumbs();
+    syncThumbs(true);
     syncPane();
     syncTools();
     showBar();

@@ -70,6 +70,10 @@ window.waapi ??= (() => {
       start(el, o) {
          if (el.dataset.waapiOn) return null;
          el.dataset.waapiOn = "1";
+         /* An SVG element resolves percentages and the transform origin against
+            the viewBox, so translateY(420%) would be 420% of the page and a
+            rotation would orbit its centre. The author means the element. */
+         if (el instanceof SVGElement) el.style.transformBox = "fill-box";
          const role = o.name ? `waapi:${o.name}` : "waapi";
          let a;
          if (o.follow) {
