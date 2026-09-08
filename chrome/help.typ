@@ -18,13 +18,29 @@
   ("?", "This help"),
 )
 
-#let help(version: none) = html.dialog(
+#let help(version: none, compilation-time: none) = html.dialog(
   class: "vit-help",
   {
-    html.table(html.tbody(_keys.map(((k, what)) => html.tr({
-      html.td(html.kbd(k))
-      html.td(what)
-    })).join()))
-    html.div(class: "vit-about", "vit" + if version != none { " " + str(version) } else { "" })
+    html.table(
+      html.tbody(
+        _keys
+          .map(((k, what)) => html.tr({
+            html.td(html.kbd(k))
+            html.td(what)
+          }))
+          .join(),
+      ),
+    )
+    let info = (
+      "vit",
+      if version != none {
+        str(version)
+      },
+      if compilation-time != none {
+        "build " + compilation-time.display()
+      },
+    ).join(" ")
+
+    html.div(class: "vit-about", info)
   },
 )
