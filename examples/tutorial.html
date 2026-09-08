@@ -279,8 +279,8 @@ body {
   padding: 4px 6px;
   border-radius: 99px;
   background: var(--vit-glass);
-  backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 /* three states, one shape: what is still ahead is an outline, what has been
    passed is filled in the muted colour, the position we are on is filled in the
@@ -810,8 +810,8 @@ html:active-view-transition-type(overview) .vit-mark {
   border-radius: 10px;
   background: var(--vit-glass);
   border: 1px solid var(--vit-line);
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   font:
     500 12px/1 ui-sans-serif,
     system-ui,
@@ -932,7 +932,8 @@ body:has(.vit-deck:is(.vit-all, .vit-desk)) .vit-trail {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.12s ease;
-  background: var(--vit-laser) center / var(--vit-laser-size) var(--vit-laser-size) no-repeat;
+  background: var(--vit-laser) center / var(--vit-laser-size)
+    var(--vit-laser-size) no-repeat;
   view-transition-name: vit-laser;
 }
 .vit-laser.is-on {
@@ -1035,7 +1036,6 @@ body.vit-black > * {
   padding: 1px 6px;
 }
 .vit-about {
-  opacity: 0.55;
   font-size: 12px;
   letter-spacing: 0.04em;
 }
