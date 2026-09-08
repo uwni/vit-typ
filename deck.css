@@ -903,14 +903,10 @@ body.vit-black > * {
 
 /* ── key help (?) ─────────────────────────────────────────────────────── */
 .vit-help {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 10px;
-  background: rgba(0, 0, 0, 0.5);
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: none;
   font:
     14px/1.5 ui-sans-serif,
     system-ui,
@@ -918,8 +914,20 @@ body.vit-black > * {
   color: var(--vit-fg2);
   cursor: pointer;
 }
-.vit-help[hidden] {
-  display: none;
+/* showModal focuses the dialog itself when it holds nothing focusable, and a
+   ring around the whole sheet is noise; the controls inside keep theirs. */
+.vit-help:focus,
+.vit-settings:focus {
+  outline: none;
+}
+/* only when open: a display here would override the closed dialog's own */
+.vit-help[open] {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.vit-help::backdrop {
+  background: rgba(0, 0, 0, 0.5);
 }
 .vit-help table {
   padding: 14px 22px;
@@ -950,20 +958,18 @@ body.vit-black > * {
    like. Each control says what it sets in data-set; the runtime reads that.
    Same overlay as the help — a click on the backdrop closes it. */
 .vit-settings {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  display: grid;
-  place-items: center;
-  background: rgba(0, 0, 0, 0.5);
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: none;
   font:
     14px/1.5 ui-sans-serif,
     system-ui,
     sans-serif;
   color: var(--vit-fg2);
 }
-.vit-settings[hidden] {
-  display: none;
+.vit-settings::backdrop {
+  background: rgba(0, 0, 0, 0.5);
 }
 .vit-settings form {
   display: grid;

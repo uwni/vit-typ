@@ -22,9 +22,11 @@
 
 #let _out(what) = html.elem("output", attrs: ("data-out": what))
 
-#let settings() = html.elem(
-  "div",
-  attrs: (class: "vit-settings", hidden: "hidden"),
+/// A `<dialog>`, opened with showModal: the deck behind it goes inert, so a
+/// click meant for a slider cannot also turn the page, and Escape closes it
+/// without anyone binding a key.
+#let settings() = html.dialog(
+  class: "vit-settings",
   html.elem("form", attrs: (method: "dialog"), {
     html.elem("h2", "Settings")
 

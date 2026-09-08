@@ -512,8 +512,8 @@
 
     /* a black screen and the help are modal: only their own keys act */
     if (black) { if (e.key === "b" || e.key === "." || e.key === "Escape") { e.preventDefault(); toggleBlack(); } return; }
-    if (!help.hidden) { if (e.key === "?" || e.key === "Escape") { e.preventDefault(); toggleHelp(); } return; }
-    if (panel && !panel.hidden) { if (e.key === "," || e.key === "Escape") { e.preventDefault(); toggleSettings(); } return; }
+    if (help.open) { if (e.key === "?") { e.preventDefault(); toggleHelp(); } return; }   // Escape is the dialog's own
+    if (panel?.open) { if (e.key === ",") { e.preventDefault(); toggleSettings(); } return; }   // Escape is the dialog's own
 
     if (atDesk() && e.key === "Enter") { e.preventDefault(); present(); return; }   // Enter presents; the other "next" keys walk the deck
 
@@ -551,6 +551,22 @@
   };
   const tap = q => { if (q.x < 1 / 3) prev(); else next(); };
 
+  /* Where in `box` an event landed, or null if it was not the box's to read.
+     Whose it is, is the platform's answer: a modal dialog makes what is behind
+     it inert and takes the event itself, a link or a button in the layout
+     takes its own, and the margin beside the stage is the body's.
+
+     While a transition runs the whole page is a set of snapshots and nothing
+     is hit-tested, so every event targets <html>. That is an answer too — no
+     element could claim it, and the deck is the only thing acting — but it
+     does not tell the toolbar apart, which is drawn over the stage and stays
+     up. Its buttons are as dead as everything else then; the test below is
+     only so that stabbing at one does not turn the page instead. */
+  const ours = (e, box) =>
+    box.contains(e.target) ? frac(e, box)
+      : pendingUndo && e.target === root ? (bar && frac(e, bar) ? null : frac(e, box))
+        : null;
+
   const onClick = e => {
     if (over() || atDesk()) {
       const d = e.target.closest(".vit-dots i");
@@ -564,16 +580,15 @@
       return;
     }
     if (e.target.closest("a, button, input, select, textarea, pre, table")) return;
-    if (bar && frac(e, bar)) return;         // a click on the toolbar during a transition is not a page turn
     if (lasing && touching) return;          // pointing by touch is not a page turn
-    const q = frac(e, deck);
+    const q = ours(e, deck);
     if (q) tap(q);
   };
 
   let tx = 0, ty = 0, swiping = false;
   const onTouchStart = e => {
     const t = e.changedTouches[0];
-    swiping = !!frac(t, atDesk() ? view : deck);
+    swiping = !!ours(t, atDesk() ? view : deck);
     tx = t.clientX;
     ty = t.clientY;
   };
@@ -600,7 +615,7 @@
     if (wheelAcc > 0) next(); else prev();
     wheelAcc = 0;
   };
-  const onWheel = e => { if (!over() && frac(e, atDesk() ? view : deck)) wheel(e); };
+  const onWheel = e => { if (!over() && ours(e, atDesk() ? view : deck)) wheel(e); };
 
   /* "#3" = page 3, first position; "#3.4" = page 3, fourth position (frames and steps flattened) */
   const fromHash = () => {
@@ -729,10 +744,10 @@
 
   /* the key table, on ? */
   let help = null;
-  const toggleHelp = () => { help.hidden = !help.hidden; };
+  const toggleHelp = () => { if (help.open) help.close(); else help.showModal(); };
   const findHelp = () => {
     help = document.querySelector(".vit-help");
-    help?.addEventListener("click", toggleHelp);
+    help?.addEventListener("click", () => help.close());
   };
 
   /* ── settings ────────────────────────────────────────────────────────
@@ -771,7 +786,7 @@
   /* the controls show what is in force, whatever moved it — a key, the panel
      or another window */
   const syncSettings = () => {
-    if (!panel || panel.hidden) return;
+    if (!panel || !panel.open) return;
     for (const el of panel.querySelectorAll("[data-set]")) {
       const dial = DIALS[el.dataset.set];
       if (!dial) continue;
@@ -784,8 +799,8 @@
   };
 
   const toggleSettings = () => {
-    panel.hidden = !panel.hidden;
-    syncSettings();
+    if (panel.open) panel.close();
+    else { panel.showModal(); syncSettings(); }
   };
 
   const resetSettings = () => {
@@ -805,15 +820,10 @@
       if (dial) { dial.write(e.target.value); syncSettings(); }
     });
     panel.addEventListener("click", e => {
-      if (e.target === panel) { toggleSettings(); return; }          // the backdrop
+      if (e.target === panel) { panel.close(); return; }             // the backdrop
       const seg = e.target.closest(".vit-seg [data-value]");
       if (seg) { DIALS[seg.parentNode.dataset.set].write(seg.dataset.value); syncSettings(); return; }
       if (e.target.closest('[data-act="reset"]')) resetSettings();
-    });
-    /* Escape closes it even from inside a slider, where the deck's own keys
-       are deliberately ignored */
-    panel.addEventListener("keydown", e => {
-      if (e.key === "Escape") { e.stopPropagation(); toggleSettings(); }
     });
   };
 

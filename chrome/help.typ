@@ -1,5 +1,6 @@
 /// The key table, shown on `?`. The README lists the same keys, and
-/// `runtime.js` binds them.
+/// `runtime.js` binds them. A `<dialog>`, opened with showModal, so the deck
+/// behind it goes inert and Escape closes it on its own.
 
 #let _keys = (
   ("→ ↓ PageDown Space Enter n j", "Next: step, frame or page"),
@@ -17,9 +18,8 @@
   ("?", "This help"),
 )
 
-#let help(version: none) = html.div(
+#let help(version: none) = html.dialog(
   class: "vit-help",
-  hidden: true,
   {
     html.table(html.tbody(_keys.map(((k, what)) => html.tr({
       html.td(html.kbd(k))
