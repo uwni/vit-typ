@@ -17,7 +17,7 @@ navigates, tidies the DOM once at load, and hands the browser two states.
 
 ## Requirements
 
-- Typst 0.15, for `--features html`.
+- Typst 0.15 +.
 - A browser with same-document View Transitions including transition types and
   `view-transition-class`, and CSS `d` for path morphing. Blink and Gecko have
   both; in Safari 27 preview switch on the "CSS d property" flag under
