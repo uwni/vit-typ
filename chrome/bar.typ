@@ -43,6 +43,7 @@
     _button("Overview (o)", "overview", icon("grid"))
     _button("Laser pointer (l)", "laser", icon("laser"))
     _button("Speaker view (s)", "speaker", icon("notes"))
+    _button("Settings (,)", "settings", icon("tune"))
     if pdf != none {
       html.elem(
         "a",

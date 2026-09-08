@@ -13,6 +13,7 @@
   ("s", "Speaker view"),
   ("b / .", "Black screen"),
   ("- / = / 0", "Slower / faster / normal speed"),
+  (",", "Settings"),
   ("?", "This help"),
 )
 

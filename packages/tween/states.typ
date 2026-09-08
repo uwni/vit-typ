@@ -23,8 +23,8 @@
 /// A label is the only identity the SVG export carries and it lands on a box,
 /// so every state is boxed and labelled: the container is `tween` (or
 /// `tween:name` when it is named) and the states are `tween@0`, `tween@1`, …;
-/// the runtime reads
-/// that grammar and writes the attributes the stylesheet and the engine use.
+/// the runtime reads that grammar and writes the attributes the stylesheet and
+/// the engine use.
 ///
 /// The PDF has no runtime and shows one state — the last by default, the
 /// finished drawing, as a handout would; `still` says which.

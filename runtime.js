@@ -32,8 +32,9 @@
   const durMs = ms => Math.round(ms / speed);
   const setSpeed = v => {
     speed = Math.min(4, Math.max(0.25, Math.round(v * 100) / 100));
-    try { localStorage.setItem("vit-speed", speed); } catch { }
+    store("vit-speed", speed);
     root.style.setProperty("--vit-speed", speed);
+    syncSettings();
     flash(`${speed}×`);
   };
 
@@ -60,11 +61,21 @@
      starts, head[i] where it starts within its page. */
   const POS = [], head = [], abs = [];
 
+  /* One reader and one writer for everything the presenter chooses. */
+  const store = (k, v) => {
+    try {
+      if (v === undefined) return localStorage.getItem(k);
+      if (v === null) localStorage.removeItem(k);
+      else localStorage.setItem(k, v);
+    } catch { }
+    return v;
+  };
+
   /* deck(…) parameters, the presenter's speed, what this browser can do */
   const settings = () => {
     defaultMs = parseInt(deck.dataset.duration, 10);
     EASING = deck.dataset.easing.split(" ").map(Number);   // the four numbers of a cubic Bézier
-    try { speed = parseFloat(localStorage.getItem("vit-speed")) || 1; } catch { }
+    speed = parseFloat(store("vit-speed")) || 1;
     reduced = matchMedia("(prefers-reduced-motion: reduce)");
     prefersLight = matchMedia("(prefers-color-scheme: light)");
     canvit = typeof document.startViewTransition === "function";
@@ -153,8 +164,12 @@
   /* Which frame a thumbnail shows: the one being previewed, else the current
      frame while we are on that page, otherwise the last frame at its last step
      (the finished page, like a handout). The only writer of is-thumb and the
-     dots' state. `scroll` only on a real move — hovering a dot previews a step
-     and must leave the rail where the reader put it. */
+     dots' state.
+
+     `scroll` brings the current thumbnail into view: "center" when the grid
+     opens, so you can see where you are, and true — nearest — on a move, so
+     the rail does not jump. Hovering a dot passes neither: a preview must
+     leave the rail where the reader put it. */
   const syncThumbs = (scroll = false) => {
     const now = idx(cur);
     groups.forEach((g, k) => {
@@ -167,7 +182,7 @@
       if (!here && !peekHere && gOf[want] !== k) stepTo(slides[shown], stepCount(slides[shown]), true);
       for (let i = g.from; i < g.to; i++) slides[i].classList.toggle("is-thumb", i === shown);
       g.el.classList.toggle("is-here", here);
-      if (scroll && here && atDesk()) g.el.scrollIntoView({ block: "nearest" });
+      if (scroll && here && (atDesk() || over())) g.el.scrollIntoView({ block: scroll === "center" ? "center" : "nearest" });
       /* Dots show progress, not position: everything passed is solid, the current
          one a notch brighter. Same rule for every page — pages behind us fully
          solid, pages ahead fully hollow. */
@@ -498,6 +513,7 @@
     /* a black screen and the help are modal: only their own keys act */
     if (black) { if (e.key === "b" || e.key === "." || e.key === "Escape") { e.preventDefault(); toggleBlack(); } return; }
     if (!help.hidden) { if (e.key === "?" || e.key === "Escape") { e.preventDefault(); toggleHelp(); } return; }
+    if (panel && !panel.hidden) { if (e.key === "," || e.key === "Escape") { e.preventDefault(); toggleSettings(); } return; }
 
     if (atDesk() && e.key === "Enter") { e.preventDefault(); present(); return; }   // Enter presents; the other "next" keys walk the deck
 
@@ -510,6 +526,7 @@
     else if (e.key === "s") { e.preventDefault(); openSpeaker(); }
     else if (e.key === "b" || e.key === ".") { e.preventDefault(); toggleBlack(); }
     else if (e.key === "?") { e.preventDefault(); toggleHelp(); }
+    else if (e.key === ",") { e.preventDefault(); toggleSettings(); }
     else if (e.key === "-") { e.preventDefault(); setSpeed(speed / 1.25); }
     else if (e.key === "=" || e.key === "+") { e.preventDefault(); setSpeed(speed * 1.25); }
     else if (e.key === "0") { e.preventDefault(); setSpeed(1); }
@@ -633,6 +650,9 @@
       deck.classList.remove("vit-desk");
       deck.classList.add("vit-all");
       still(slides[cur]);
+      /* the grid opens where we are, not at the top; inside the update callback,
+         so the zoom flies to where the thumbnail will actually be */
+      syncThumbs("center");
       syncTools();
     });
   };
@@ -715,6 +735,88 @@
     help?.addEventListener("click", toggleHelp);
   };
 
+  /* ── settings ────────────────────────────────────────────────────────
+     A control in the panel names what it sets in data-set, and appears here
+     once: how to read it, how to apply it, and how to say it. */
+  const TRAIL = 400;
+  let panel = null;
+
+  const DIALS = {
+    speed: {
+      read: () => speed,
+      write: v => setSpeed(+v),
+      say: v => `${(+v).toFixed(2).replace(/\.?0+$/, "")}×`,
+    },
+    trail: {
+      read: () => trailMs,
+      write: v => setTrail(+v),
+      say: v => (+v ? `${+v} ms` : "off"),
+    },
+    ink: {
+      read: () => store("vit-ink") ?? laserInk,
+      write: v => { store("vit-ink", v); applyLaser(); },
+      say: v => String(v).toUpperCase(),
+    },
+    size: {
+      read: () => +(store("vit-size") ?? laserSize),
+      write: v => { store("vit-size", +v); applyLaser(); },
+      say: v => `${+v} px`,
+    },
+    theme: {
+      read: () => store("vit-theme") ?? deck.dataset.theme,
+      write: v => { store("vit-theme", v); applyTheme(); },
+    },
+  };
+
+  /* the controls show what is in force, whatever moved it — a key, the panel
+     or another window */
+  const syncSettings = () => {
+    if (!panel || panel.hidden) return;
+    for (const el of panel.querySelectorAll("[data-set]")) {
+      const dial = DIALS[el.dataset.set];
+      if (!dial) continue;
+      const v = dial.read();
+      if (el.tagName === "INPUT") el.value = v;
+      else for (const b of el.children) b.setAttribute("aria-pressed", String(b.dataset.value === v));
+      const out = panel.querySelector(`[data-out="${el.dataset.set}"]`);
+      if (out && dial.say) out.textContent = dial.say(v);
+    }
+  };
+
+  const toggleSettings = () => {
+    panel.hidden = !panel.hidden;
+    syncSettings();
+  };
+
+  const resetSettings = () => {
+    for (const k of ["vit-speed", "vit-trail", "vit-ink", "vit-size", "vit-theme"]) store(k, null);
+    setSpeed(1);
+    setTrail(TRAIL);
+    applyLaser();
+    applyTheme();
+    syncSettings();
+  };
+
+  const findSettings = () => {
+    panel = document.querySelector(".vit-settings");
+    if (!panel) return;
+    panel.addEventListener("input", e => {
+      const dial = DIALS[e.target.dataset.set];
+      if (dial) { dial.write(e.target.value); syncSettings(); }
+    });
+    panel.addEventListener("click", e => {
+      if (e.target === panel) { toggleSettings(); return; }          // the backdrop
+      const seg = e.target.closest(".vit-seg [data-value]");
+      if (seg) { DIALS[seg.parentNode.dataset.set].write(seg.dataset.value); syncSettings(); return; }
+      if (e.target.closest('[data-act="reset"]')) resetSettings();
+    });
+    /* Escape closes it even from inside a slider, where the deck's own keys
+       are deliberately ignored */
+    panel.addEventListener("keydown", e => {
+      if (e.key === "Escape") { e.stopPropagation(); toggleSettings(); }
+    });
+  };
+
   /* ── toolbar ─────────────────────────────────────────────────────────
      Outside .vit-deck with its own view-transition-name, so a page transition
      never drags it along. There are two — the main window's, which auto-hides,
@@ -741,7 +843,7 @@
   };
 
   const wireBar = el => {
-    const acts = { desk: toggleDesk, overview: toggleOverview, laser: toggleLaser, speaker: openSpeaker, full: toggleFullscreen };
+    const acts = { desk: toggleDesk, overview: toggleOverview, laser: toggleLaser, speaker: openSpeaker, settings: toggleSettings, full: toggleFullscreen };
     const b = { el, count: el.querySelector(".vit-count") };
     for (const [act, run] of Object.entries(acts)) {
       const btn = el.querySelector(`[data-act="${act}"]`);
@@ -803,20 +905,104 @@
   const dot = (x, y) => {
     laser.style.transform = `translate(${x}px,${y}px)`;
     laser.classList.add("is-on");
+    trail(x, y);
   };
 
+  /* ── the tracer ──────────────────────────────────────────────────────
+     Where the pointer has just been, a segment at a time. It can be no longer
+     than the document left room for — that is the ceiling below — and one
+     point a frame at most, or a 1000 Hz mouse would spend the whole tracer
+     inside a few milliseconds. */
+  const FRAME = 16;
+  let segs = [], pts = [], trailMs = 0, trailRaf = 0;
+
+  /* ── what the laser looks like ───────────────────────────────────────
+     deck.css owns the drawing; this owns the colour and the size. Its URL and
+     its ink are read once, so no colour or size is written here. */
+  let laserUrl = "", laserInk = "", laserSize = 32, laserPx = 32;
+  const enc = hex => "%23" + hex.replace("#", "").toLowerCase();
+
+  const applyLaser = () => {
+    const ink = store("vit-ink") ?? laserInk;
+    const size = laserPx = +(store("vit-size") ?? laserSize);
+    root.style.setProperty("--vit-laser-ink", ink);
+    root.style.setProperty("--vit-laser-size", `${size}px`);
+    root.style.setProperty("--vit-laser-hot", String(size / 2));
+    root.style.setProperty("--vit-laser", laserUrl
+      .replaceAll(enc(laserInk), enc(ink))
+      .replace(/width='\d+' height='\d+'/, `width='${size}' height='${size}'`));
+  };
+
+  const findLaserLook = () => {
+    const css = getComputedStyle(root);
+    laserUrl = css.getPropertyValue("--vit-laser").trim();
+    laserInk = css.getPropertyValue("--vit-laser-ink").trim();
+    laserSize = parseFloat(css.getPropertyValue("--vit-laser-size")) || laserSize;
+    applyLaser();
+  };
+
+  const findTrail = () => {
+    segs = [...(document.querySelector(".vit-trail")?.children ?? [])];
+    const kept = parseInt(store("vit-trail"), 10);
+    setTrail(Number.isFinite(kept) ? kept : TRAIL);
+  };
+
+  const setTrail = ms => {
+    trailMs = Math.min(Math.max(Math.round(ms) || 0, 0), segs.length * FRAME);
+    store("vit-trail", trailMs);
+    if (!trailMs) clearTrail();
+    syncSettings();
+  };
+
+  const clearTrail = () => {
+    pts.length = 0;
+    for (const s of segs) s.removeAttribute("d");
+  };
+
+  /* Newest segment first, so the piece at the dot is always segs[0] and the
+     tail runs off the end of what there is. Keeps drawing after the pointer
+     stops, until the last point has aged out. */
+  const drawTrail = () => {
+    trailRaf = 0;
+    const now = performance.now();
+    while (pts.length && now - pts[0].t > trailMs) pts.shift();
+    for (let i = 0; i < segs.length; i++) {
+      const b = pts[pts.length - 1 - i], a = pts[pts.length - 2 - i];
+      if (!a || !b) { segs[i].removeAttribute("d"); continue; }
+      const left = 1 - (now - a.t) / trailMs;    // 1 at the dot, 0 at the tail
+      segs[i].setAttribute("d", `M${a.x} ${a.y}L${b.x} ${b.y}`);
+      /* The tracer is the dot's own streak, so it is drawn to the dot's size,
+         and it thins to nothing at the tail — that, and the oldest point
+         dropping off, is the whole of the fade. */
+      segs[i].setAttribute("stroke-width", (laserPx * 0.22 * left * left).toFixed(2));
+    }
+    if (pts.length) trailRaf = requestAnimationFrame(drawTrail);
+  };
+
+  const trail = (x, y) => {
+    if (!trailMs || !segs.length) return;
+    const now = performance.now(), last = pts[pts.length - 1];
+    if (last && now - last.t < FRAME) { last.x = x; last.y = y; }
+    else pts.push({ x, y, t: now });
+    if (pts.length > segs.length + 1) pts.shift();
+    if (!trailRaf) trailRaf = requestAnimationFrame(drawTrail);
+  };
+
+  /* The mouse's dot is the cursor, so there is nothing to place — but the
+     tracer is ours to draw whichever pointer is in use. */
   const route = e => {
     const mouse = e.pointerType === "mouse" || e.pointerType === "";
     touching = !mouse;
     document.body.classList.toggle("vit-nomouse", touching);
-    if (!lasing || mouse || over() || atDesk()) { laser.classList.remove("is-on"); return; }
-    dot(e.clientX, e.clientY);
+    if (!lasing || over() || atDesk()) { laser.classList.remove("is-on"); clearTrail(); return; }
+    if (mouse) { laser.classList.remove("is-on"); trail(e.clientX, e.clientY); }
+    else dot(e.clientX, e.clientY);
   };
 
   const toggleLaser = () => {
     lasing = !lasing;
     document.body.classList.toggle("vit-lasing", lasing);
-    if (!lasing) laser.classList.remove("is-on");
+    if (!lasing) { laser.classList.remove("is-on"); clearTrail(); }
     syncTools();
     showBar();
   };
@@ -848,7 +1034,7 @@
      and the speaker window copies the same tokens. */
   let speaker = null, spk = null, spkFrom = 0;
   const applyTheme = () => {
-    const t = deck.dataset.theme;
+    const t = store("vit-theme") ?? deck.dataset.theme;
     root.dataset.theme = t === "auto" ? (prefersLight.matches ? "light" : "dark") : t;
     if (speaker && !speaker.closed) speaker.document.documentElement.dataset.theme = root.dataset.theme;
   };
@@ -988,6 +1174,9 @@
       get step() { return at(cur); }, set step(k) { stepTo(slides[cur], k); },
       get steps() { return stepCount(slides[cur]); },
       get speed() { return speed; }, set speed(v) { setSpeed(v); },
+      /* how long the laser's tracer lasts, in ms; 0 is none, and the document's
+         room for it is the ceiling */
+      get trail() { return trailMs; }, set trail(v) { setTrail(v); },
       get version() { return deck.dataset.version || null; },
       /* "desk" (where it opens), "present" or "overview" — what the toolbar and Esc / Enter / o switch between */
       get mode() { return over() ? "overview" : atDesk() ? "desk" : "present"; },
@@ -1007,13 +1196,16 @@
     if (!n) return;
     settings();
     /* a preview only presents: the chrome belongs to the window driving it */
-    if (mirror) for (const el of document.querySelectorAll(".vit-bar, .vit-pane, .vit-help, .vit-laser, template.vit-speaker-body")) el.remove();
+    if (mirror) for (const el of document.querySelectorAll(".vit-bar, .vit-pane, .vit-help, .vit-settings, .vit-laser, .vit-trail, template.vit-speaker-body")) el.remove();
     buildModel();
     readDots();
     findToolbar();
     findPane();
     findLaser();
+    findLaserLook();
+    findTrail();
     findHelp();
+    findSettings();
     initTheme();
     initSpeaker();
     initInput();

@@ -122,8 +122,9 @@
             the element's is always "element user space → root viewBox space",
             whatever the convention.
 
-            Invisible at 1280×720, where the scale happens to be 1; at any other
-            window size every hoisted element drifts down-right proportionally. */
+            Read the absolute value and every hoisted element drifts down-right
+            in proportion to the window, at every size but the one where the
+            scale happens to be 1. */
          const inv = root.getScreenCTM().inverse();
          const toRoot = el => inv.multiply(el.getScreenCTM());
 

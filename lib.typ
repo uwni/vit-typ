@@ -70,12 +70,13 @@
 // Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as _tween
 #import "packages/tween/lib.typ" as _tween
 
-// The player's own markup: a toolbar, the desk, the help, the speaker view.
+// The player's own markup — everything the reader sees that is not the deck.
 #import "chrome/bar.typ": bar as _bar
 #import "chrome/dots.typ": cap as _cap, dots as _dots
 #import "chrome/help.typ": help as _help
 #import "chrome/laser.typ": laser as _laser
 #import "chrome/pane.typ": pane as _pane
+#import "chrome/settings.typ": settings as _settings
 #import "chrome/speaker.typ": speaker as _speaker
 
 
@@ -550,6 +551,7 @@
       _pane()
       _laser()
       _help(version: version)
+      _settings()
       _speaker(pdf: href)
       html.elem("script", "const vitMarks = " + json.encode(marks.table) + ";")
       // what the drawings declared about themselves, carried back out of the
