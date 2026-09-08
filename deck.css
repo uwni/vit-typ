@@ -107,8 +107,7 @@ body {
   overflow: visible;
   view-transition-class: vit-mo;
 }
-/* title and speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
-.vit-title,
+/* speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
 .vit-note {
   display: none;
 }

@@ -17,8 +17,8 @@
   let deck, slides, n;
 
   /* ── group = one page, frame = one layout state of that page ────────
-     Navigation walks frames, the overview shows groups. The title is a hidden
-     .vit-title inside the group; the browser flattens it to plain text. */
+     Navigation walks frames, the overview shows groups. The title is the
+     thumbnail's caption, which the browser has flattened to plain text. */
   const groups = [];      // { el, title, from, to, pos }  `to` exclusive
   const gOf = [];         // frame index → group index
   let gn = 0;
@@ -70,10 +70,14 @@
     canvit = typeof document.startViewTransition === "function";
   };
 
+  /* How many steps a frame has, from data-steps — so the whole model is known
+     before a single page is opened. */
+  const stepCount = s => +s.dataset.steps || 0;
+
   /* pages, frames and steps into the position sequence */
   const buildModel = () => {
     for (const el of deck.querySelectorAll(".vit-group")) {
-      const t = el.querySelector(".vit-title");
+      const t = el.querySelector(".vit-cap span");
       const g = { el, title: t ? t.textContent.trim() : "", from: gOf.length, to: gOf.length };
       for (const _ of el.querySelectorAll(".vit-slide")) { gOf.push(groups.length); g.to++; }
       groups.push(g);
@@ -84,7 +88,7 @@
       for (let i = g.from; i < g.to; i++) {
         head[i] = g.pos.length;
         abs[i] = POS.length;
-        for (let k = 0; k <= stepsOf(slides[i]).n; k++) {
+        for (let k = 0; k <= stepCount(slides[i]); k++) {
           const q = { i, at: k, n: POS.length };
           g.pos.push(q);
           POS.push(q);
@@ -160,7 +164,7 @@
          settled) has already been positioned — don't move it back. The moment
          the overview zoom starts, the browser stops hit-testing the real DOM and
          the dots receive pointerleave first. */
-      if (!here && !peekHere && gOf[want] !== k) stepTo(slides[shown], stepsOf(slides[shown]).n, true);
+      if (!here && !peekHere && gOf[want] !== k) stepTo(slides[shown], stepCount(slides[shown]), true);
       for (let i = g.from; i < g.to; i++) slides[i].classList.toggle("is-thumb", i === shown);
       g.el.classList.toggle("is-here", here);
       if (scroll && here && atDesk()) g.el.scrollIntoView({ block: "nearest" });
@@ -176,37 +180,27 @@
     });
   };
 
-  /* Thumbnail caption and position dots. Built by the runtime, like the
-     toolbar — the layout must not contain player parts. They are children of
-     the group, not of a slide, so the overview zoom (named on the group) does
-     not blow the caption up to full screen. */
-  const buildCaptions = () => {
-    groups.forEach((g, k) => {
-      const cap = document.createElement("div");
-      cap.className = "vit-cap";
-      cap.innerHTML = "<b></b><span></span>";
-      cap.firstChild.textContent = k + 1;
-      cap.lastChild.textContent = g.title;
-      cap.lastChild.title = g.title;
-      g.el.insertBefore(cap, g.el.firstChild);
+  /* Caption and dots pair off with the page's positions in order: the nth dot
+     is the nth position. The tooltip is the caption as the browser flattened it
+     to text. */
+  const readDots = () => {
+    for (const g of groups) {
+      const cap = g.el.querySelector(".vit-cap span");
+      if (cap) cap.title = g.title;
 
-      if (g.pos.length < 2) return;
-      const dots = document.createElement("div");
-      dots.className = "vit-dots";
-      g.dots = g.pos.map((q, d) => {
-        const el = document.createElement("i");
-        el.dataset.frame = q.i;
-        el.dataset.at = q.at;
-        el.title = `Step ${d + 1}`;
+      const rail = g.el.querySelector(".vit-dots");
+      if (!rail) continue;
+      g.dots = [...rail.children];
+      g.dots.forEach((el, d) => {
+        const q = g.pos[d];
+        if (!q) return;
+        el.vitPos = q;
         /* hovering swaps the thumbnail to that step — no need to open the page to
            see which step is which */
         el.addEventListener("pointerenter", () => peek(q.i, q.at));
-        dots.appendChild(el);
-        return el;
       });
-      dots.addEventListener("pointerleave", () => peek(null));
-      g.el.appendChild(dots);
-    });
+      rail.addEventListener("pointerleave", () => peek(null));
+    }
   };
 
   /* ── the same key several times on one page ─────────────────────────
@@ -347,15 +341,13 @@
       box,
       states: tween.states(box),
     }));
-    let steps = 0;
     for (const m of marks) {
       m.nodes = tween.nodes(m.states, m.key);
       /* a drawing that plays its states over time is not stepped; whether it
          does is its own business, so we ask rather than look */
       m.anim = tween.plays(m.box);
-      if (!m.anim) steps = Math.max(steps, m.states.length - 1);
     }
-    return (s.vitSteps = { marks, n: steps });
+    return (s.vitSteps = { marks, n: stepCount(s) });
   };
 
   /* A step's animations are the deck's to cancel when the next one starts; a
@@ -501,22 +493,6 @@
   const NEXT = new Set(["ArrowRight", "ArrowDown", "PageDown", " ", "Enter", "n", "j"]);
   const PREV = new Set(["ArrowLeft", "ArrowUp", "PageUp", "Backspace", "p", "k"]);
 
-  /* the keys, as the help overlay lists them; README keeps the same table */
-  const KEYS = [
-    ["→ ↓ PageDown Space Enter n j", "Next: step, frame or page"],
-    ["← ↑ PageUp Backspace p k", "Previous"],
-    ["Home / End", "First / last page"],
-    ["1 – 9", "Page"],
-    ["o / a", "Overview (Esc closes it)"],
-    ["Esc / Enter", "Desk ⇄ presenting"],
-    ["f", "Full screen"],
-    ["l", "Laser pointer"],
-    ["s", "Speaker view"],
-    ["b / .", "Black screen"],
-    ["- / = / 0", "Slower / faster / normal speed"],
-    ["?", "This help"],
-  ];
-
   const onKey = e => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const t = e.target;
@@ -564,7 +540,7 @@
   const onClick = e => {
     if (over() || atDesk()) {
       const d = e.target.closest(".vit-dots i");
-      if (d) { pick(+d.dataset.frame, +d.dataset.at); return; }
+      if (d) { if (d.vitPos) pick(d.vitPos.i, d.vitPos.at); return; }
       const g = e.target.closest(".vit-group");
       if (g) {
         const f = slides.indexOf(g.querySelector(".vit-slide"));
@@ -693,14 +669,11 @@
      the real transitions. Going either way is instant — the page is on screen
      twice while the desk is up, and no zoom can be drawn between. */
   let pane = null, view = null, notes = null;
-  const buildPane = () => {
-    if (mirror) return;
-    pane = document.createElement("div");
-    pane.className = "vit-pane";
-    pane.innerHTML = "<div class='vit-view'><iframe class='vit-mirror' name='vit-mirror' title='Preview'></iframe></div><div class='vit-notes'></div>";
+  const findPane = () => {
+    pane = document.querySelector(".vit-pane");
+    if (!pane) return;
     view = pane.querySelector("iframe");
     notes = pane.querySelector(".vit-notes");
-    document.body.appendChild(pane);
     deck.addEventListener("vit:move-ready", syncPane);
   };
 
@@ -740,98 +713,49 @@
   /* the key table, on ? */
   let help = null;
   const toggleHelp = () => { help.hidden = !help.hidden; };
-  const buildHelp = () => {
-    help = document.createElement("div");
-    help.className = "vit-help";
-    help.hidden = true;
-    const table = document.createElement("table");
-    for (const row of KEYS) {
-      const tr = table.insertRow();
-      row.forEach((cell, k) => {
-        const td = tr.insertCell();
-        td.appendChild(k ? document.createTextNode(cell) : Object.assign(document.createElement("kbd"), { textContent: cell }));
-      });
-    }
-    help.appendChild(table);
-    const about = document.createElement("div");
-    about.className = "vit-about";
-    about.textContent = `vit${deck.dataset.version ? ` ${deck.dataset.version}` : ""}`;
-    help.appendChild(about);
-    help.addEventListener("click", toggleHelp);
-    document.body.appendChild(help);
+  const findHelp = () => {
+    help = document.querySelector(".vit-help");
+    help?.addEventListener("click", toggleHelp);
   };
 
   /* ── toolbar ─────────────────────────────────────────────────────────
-     Built by the runtime, so every deck has one. Lives outside .vit-deck with
-     its own view-transition-name, so a page transition never drags it along.
-     A toolbar can be built in any document: one in the main window
-     (auto-hiding), one in the speaker view (always shown, bottom right).
-     Buttons call the same functions; syncTools() refreshes them together. */
+     Outside .vit-deck with its own view-transition-name, so a page transition
+     never drags it along. There are two — the main window's, which auto-hides,
+     and the speaker view's, which does not. Each button names what it does in
+     data-act, and syncTools() refreshes them together. */
 
-  const ICON = {
-    desk: "M4 5h16v14H4zM10 5v14",
-    play: "M8 5l11 7-11 7z",
-    grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
-    laser: "M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1",
-    down: "M12 4v10M8 12l4 4 4-4M5 20h14",
-    notes: "M5 4h14v16H5zM8.5 9h7M8.5 13h7M8.5 17h4",
-    full: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
-    unfull: "M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5",
-  };
-
-  const svg = (d, extra = "") => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/>${extra}</svg>`;
-
-  /* PDF download. data-pdf="auto" is the .pdf with this page's name, "none" no
-     button. download + target=_blank together: where the download attribute is
-     ignored it merely opens a tab. */
-  let pdfHref = "";
+  /* A download link with no address wants the .pdf beside this page: this
+     page's own address is the one thing about the link only the browser knows.
+     The name ends where a query or a fragment starts, and a deck opened at
+     #12.3 is the ordinary case. */
   const pdfLink = () => {
-    const v = deck.dataset.pdf;
-    if (v === "none") return "";
-    if (v !== "auto") return v;
-    const m = /^([^?#]*)\.x?html?$/i.exec(location.href);
+    const m = /^([^?#]*)\.x?html?(?=[?#]|$)/i.exec(location.href);
     return m ? `${m[1]}.pdf` : "";
   };
 
-  const buildBar = doc => {
-    const button = (title, markup, action) => {
-      const el = doc.createElement("button");
-      el.type = "button";
-      el.title = title;
-      el.setAttribute("aria-label", title);
-      el.innerHTML = markup;
-      el.addEventListener("click", e => { e.stopPropagation(); action(); });
-      return el;
-    };
-    const b = { el: doc.createElement("div"), count: doc.createElement("div") };
-    b.el.className = "vit-bar";
-    b.count.className = "vit-count";
-    b.el.appendChild(b.count);
+  /* two icons in a button, one shown: what it does now, or what it will */
+  const showIcon = (el, name) => {
+    for (const i of el.querySelectorAll("[data-icon]")) i.hidden = i.dataset.icon !== name;
+  };
 
-    b.desk = button("Desk (Esc)", svg(ICON.desk), toggleDesk);
-    b.el.appendChild(b.desk);
-    b.overview = button("Overview (o)", svg(ICON.grid), toggleOverview);
-    b.el.appendChild(b.overview);
-    b.laser = button("Laser pointer (l)", svg(ICON.laser, '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>'), toggleLaser);
-    b.el.appendChild(b.laser);
-    b.el.appendChild(button("Speaker view (s)", svg(ICON.notes), openSpeaker));
-
-    if (pdfHref) {
-      const a = doc.createElement("a");
-      a.className = "vit-dl";
-      a.href = pdfHref;
-      a.download = "";
-      a.target = "_blank";
-      a.rel = "noopener";
-      a.title = "Download PDF";
-      a.setAttribute("aria-label", "Download PDF");
-      a.innerHTML = svg(ICON.down);
-      a.addEventListener("click", e => e.stopPropagation());
-      b.el.appendChild(a);
+  const wireBar = el => {
+    const acts = { desk: toggleDesk, overview: toggleOverview, laser: toggleLaser, speaker: openSpeaker, full: toggleFullscreen };
+    const b = { el, count: el.querySelector(".vit-count") };
+    for (const [act, run] of Object.entries(acts)) {
+      const btn = el.querySelector(`[data-act="${act}"]`);
+      if (!btn) continue;
+      b[act] = btn;
+      btn.addEventListener("click", e => { e.stopPropagation(); run(); });
     }
-
-    b.full = button("Full screen (f)", svg(ICON.full), toggleFullscreen);
-    b.el.appendChild(b.full);
+    const dl = el.querySelector(".vit-dl");
+    if (dl) {
+      if (!dl.getAttribute("href")) {
+        const href = pdfLink();
+        if (href) dl.href = href;
+        else dl.remove();                     // no name to build one from
+      }
+      dl.addEventListener("click", e => e.stopPropagation());
+    }
     return b;
   };
 
@@ -839,15 +763,12 @@
      (iframe name="vit-mirror"): they only display, no toolbar. */
   const bars = [];
   let bar = null;
-  const buildToolbar = () => {
-    pdfHref = pdfLink();
+  const findToolbar = () => {
     document.addEventListener("fullscreenchange", syncTools);
     deck.addEventListener("vit:move-ready", syncTools);
-    if (mirror) return;
-    const mainBar = buildBar(document);
-    bars.push(mainBar);
-    bar = mainBar.el;
-    document.body.appendChild(bar);
+    bar = document.querySelector(".vit-bar");
+    if (!bar) return;
+    bars.push(wireBar(bar));
     bar.addEventListener("pointerenter", showBar);
     bar.addEventListener("pointerleave", showBar);
   };
@@ -875,11 +796,7 @@
   let lasing = false;
   let touching = false;   // whether the latest input was non-mouse
   let laser = null;
-  const buildLaser = () => {
-    laser = document.createElement("div");
-    laser.className = "vit-laser";
-    document.body.appendChild(laser);
-  };
+  const findLaser = () => { laser = document.querySelector(".vit-laser"); };
 
   const dot = (x, y) => {
     laser.style.transform = `translate(${x}px,${y}px)`;
@@ -908,12 +825,12 @@
     for (const b of bars) {
       b.el.ownerDocument.body.classList.toggle("vit-lasing", lasing);   // the speaker window's cursor follows too
       b.count.textContent = text;
-      b.desk.innerHTML = svg(atDesk() ? ICON.play : ICON.desk);
+      showIcon(b.desk, atDesk() ? "play" : "desk");
       b.desk.title = atDesk() ? "Present (Enter)" : "Desk (Esc)";
       b.desk.setAttribute("aria-label", b.desk.title);
       b.overview.setAttribute("aria-pressed", String(over()));
       b.laser.setAttribute("aria-pressed", String(lasing));
-      b.full.innerHTML = svg(fs ? ICON.unfull : ICON.full);
+      showIcon(b.full, fs ? "unfull" : "full");
       b.full.title = fs ? "Exit full screen (f)" : "Full screen (f)";
       b.full.setAttribute("aria-label", b.full.title);
     }
@@ -966,11 +883,8 @@
     d.documentElement.className = "vit-speaker";
     d.documentElement.dataset.theme = root.dataset.theme;
     d.title = `Speaker view · ${document.title}`;
-    d.body.innerHTML =
-      "<div class='prog'><i></i></div>" +
-      "<header><b></b><span></span><time title='Click to reset'>00:00</time></header>" +
-      "<main><iframe class='vit-mirror' name='vit-mirror'></iframe><div class='vit-notes'></div></main>" +
-      "<aside><small>Next</small><iframe class='vit-mirror' name='vit-mirror'></iframe></aside>";
+    /* the window's whole body, its toolbar included */
+    d.body.appendChild(d.importNode(document.querySelector("template.vit-speaker-body").content, true));
     spk = {
       page: d.querySelector("header b"), title: d.querySelector("header span"),
       clock: d.querySelector("time"), note: d.querySelector(".vit-notes"),
@@ -986,9 +900,7 @@
     }, 1000);
 
     /* its own toolbar, always shown bottom right; buttons and state are the main window's */
-    const b = buildBar(d);
-    b.el.classList.add("is-shown");
-    d.body.appendChild(b.el);
+    const b = wireBar(d.querySelector(".vit-bar"));
     bars.push(b);
     speaker.addEventListener("pagehide", () => bars.splice(bars.indexOf(b), 1));
 
@@ -1076,7 +988,7 @@
       get index() { return cur; },
       get total() { return n; },
       get step() { return at(cur); }, set step(k) { stepTo(slides[cur], k); },
-      get steps() { return stepsOf(slides[cur]).n; },
+      get steps() { return stepCount(slides[cur]); },
       get speed() { return speed; }, set speed(v) { setSpeed(v); },
       get version() { return deck.dataset.version || null; },
       /* "desk" (where it opens), "present" or "overview" — what the toolbar and Esc / Enter / o switch between */
@@ -1096,12 +1008,14 @@
     n = slides.length;
     if (!n) return;
     settings();
+    /* a preview only presents: the chrome belongs to the window driving it */
+    if (mirror) for (const el of document.querySelectorAll(".vit-bar, .vit-pane, .vit-help, .vit-laser, template.vit-speaker-body")) el.remove();
     buildModel();
-    buildCaptions();
-    buildToolbar();
-    buildPane();
-    buildLaser();
-    buildHelp();
+    readDots();
+    findToolbar();
+    findPane();
+    findLaser();
+    findHelp();
     initTheme();
     initSpeaker();
     initInput();

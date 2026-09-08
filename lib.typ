@@ -70,6 +70,14 @@
 // Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as _tween
 #import "packages/tween/lib.typ" as _tween
 
+// The player's own markup: a toolbar, the desk, the help, the speaker view.
+#import "chrome/bar.typ": bar as _bar
+#import "chrome/dots.typ": cap as _cap, dots as _dots
+#import "chrome/help.typ": help as _help
+#import "chrome/laser.typ": laser as _laser
+#import "chrome/pane.typ": pane as _pane
+#import "chrome/speaker.typ": speaker as _speaker
+
 
 #let transitions = ("fade", "slide", "rise", "zoom", "wipe-left", "wipe-right", "wipe-up", "wipe-down", "none")
 
@@ -373,6 +381,28 @@
   [#meta#box(body)#lbl]
 }
 
+/// Which page and which frame we are up to. A page needs to find its own
+/// frames among the document's, and its own number for the caption.
+#let _pages = counter("vit-pages")
+#let _frames = counter("vit-frames")
+
+/// How many steps every frame of the document has, in document order. A step
+/// is one press: the drawings on a frame step together, so the frame's count
+/// is the longest of them; a drawing that plays itself is not stepped, and one
+/// inside another's states is a node, not a drawing. Said out here because a
+/// frame's insides are an `html.frame`, which nothing but a label leaves.
+#let _steps() = {
+  let out = ()
+  for m in query(selector.or(<vit-frame>, <tween-steps>)) {
+    if str(m.label) == "vit-frame" {
+      out.push(0)
+    } else if out.len() > 0 and not m.value.plays and not m.value.nested {
+      out.at(out.len() - 1) = calc.max(out.at(out.len() - 1), m.value.states - 1)
+    }
+  }
+  out
+}
+
 /// What the marks declared about themselves, by key: `(transition:)` for
 /// now. Written into the HTML as a table for the runtime, which looks up and
 /// never decides. Every occurrence of a key must say the same.
@@ -510,10 +540,17 @@
           "data-easing": easing.map(str).join(" "),
           "data-theme": if theme == auto { "auto" } else { theme },
           "data-version": str(version),
-          "data-pdf": if pdf == auto { "auto" } else if pdf == none { "none" } else { pdf },
         ),
         body,
       )
+      // The player, outside .vit-deck so that a page transition never drags
+      // it along. A preview (an iframe named vit-mirror) throws it away.
+      let href = if pdf == none { none } else if pdf == auto { auto } else { pdf }
+      _bar(pdf: href)
+      _pane()
+      _laser()
+      _help(version: version)
+      _speaker(pdf: href)
       html.elem("script", "const vitMarks = " + json.encode(marks.table) + ";")
       // what the drawings declared about themselves, carried back out of the
       // frames they were written in: the deck emits them, and never reads them
@@ -675,21 +712,29 @@
   if bodies.len() == 0 { bodies = ([],) }
   let own = _pair(transition)
   let section = (class: "vit-slide")
+  _pages.step()
   context {
     let fx = if own == none { _fx.get() } else { own }
+    // this page's frames among the document's, and how many steps each has
+    let base = _frames.get().first()
+    let all = _steps()
+    let steps = range(bodies.len()).map(i => all.at(base + i, default: 0))
     // every frame carries the types of the transition into it: the first frame of the
     // page the page's (none: no transition), the others the frame-to-frame one
-    let attrs(i) = if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
-      section + ("data-transition": _types(fx))
-    }
+    let attrs(i) = (
+      if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
+        section + ("data-transition": _types(fx))
+      }
+    ) + ("data-steps": str(steps.at(i)))
     if target() == "html" {
       html.elem(
         "div",
         attrs: (class: "vit-group"),
         {
-          // title and notes are hidden inside the group (CSS display:none); the runtime reads
-          // textContent / innerHTML, letting the browser flatten content to text
-          if title != none { html.elem("div", attrs: (class: "vit-title"), title) }
+          // the caption is in the group's flow, above the thumbnail, and is
+          // also where the runtime reads the page's title from: the browser
+          // flattens whatever content it was given to text
+          _cap(_pages.get().first(), title)
           // a transition this page set itself brings the rules its settings need
           if own != none and _sets(own) != "" { html.elem("style", _sets(own)) }
           bodies
@@ -697,14 +742,22 @@
             .map(((i, body)) => html.elem(
               "section",
               attrs: attrs(i),
-              html.elem(
-                "div",
-                attrs: (class: "vit-page"),
-                html.frame(block(width: page.width, height: page.height, inset: 60pt, body)),
-              ),
+              {
+                // where this frame begins, for the query above; invisible
+                _frames.step()
+                [#metadata(none)<vit-frame>]
+                html.elem(
+                  "div",
+                  attrs: (class: "vit-page"),
+                  html.frame(block(width: page.width, height: page.height, inset: 60pt, body)),
+                )
+              },
             ))
             .join()
+          // notes are hidden inside the group (CSS display:none); the runtime
+          // reads innerHTML
           if note != none { html.elem("aside", attrs: (class: "vit-note"), note) }
+          _dots(steps)
         },
       )
     } else {
