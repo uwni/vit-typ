@@ -569,17 +569,14 @@
 /// `meet` is where the layers meet: the corner the arriving layer does not
 /// push — `bottom + right` for a picture that grows up and to the left,
 /// `top + left` for one that grows down and to the right, and for growth on two
-/// sides at once the corner opposite both. It has to be said, because it cannot
-/// be worked out here. Lining the layers up by the point they share needs that
-/// point's *position* in each, and HTML export does not give positions: sizes
-/// are there (`measure` and `layout` both answer inside a frame) but every
-/// position reads as zero, alike for two elements 60pt apart. That is Typst's
-/// own line — "Introspection (except for concrete positions)", the HTML export
-/// tracking issue, typst#5512 — and the PDF target reports them properly. When
-/// it lifts, this can be derived and `meet` becomes optional. Until then, if no
-/// corner holds (growth on opposite sides, by different amounts) nothing can
-/// hold the layers together: keep the layout still with `reveal` instead and
-/// let nothing move.
+/// sides at once the corner opposite both. It has to be said, because lining the
+/// layers up by the point they share needs that point's *position* in each, and
+/// inside an `html.frame` every position reads as zero, alike for two elements
+/// 60pt apart (sizes are there: `measure` answers). TEMPORARY (typst#8832,
+/// against typst#8828): when that lands the corner can be derived and `meet`
+/// becomes optional. Until then, if no corner holds — growth on opposite sides,
+/// by different amounts — nothing can hold the layers together: keep the layout
+/// still with `reveal` instead.
 ///
 /// A layer that is a drawing keeps its own picture only if the package lays it
 /// out the same way each time, so a later layer that must reach into an earlier

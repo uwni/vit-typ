@@ -49,6 +49,46 @@
       return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
    };
 
+   /* ── TEMPORARY (typst#8832) ──────────────────────────────────────────
+      waapi declares an animation where the thing it moves is written, but
+      inside a frame it cannot start it: keyframes are CSS, and an element
+      inside an `<svg>` is not a CSS box — `backgroundColor`, `borderRadius`,
+      `boxShadow` and `width` compute there and paint nothing, percentages and
+      the transform origin resolve against the viewBox, and the element's own
+      transform is its placement, which a `transform` keyframe would replace.
+      So `<waapi-anim data-at data-spec>` names its target by the ordinal in
+      that target's label and waits; lifting is what makes it a box.
+
+      Measured and placed with the marks — moving one first would measure the
+      rest against a box given in percentages — then started on the box it was
+      given, with the page as what a followed path is measured from: the host is
+      an `<svg>`, which has no offsetParent.
+
+      All of this goes when the Typst side can place these regions itself: the
+      function, and its two call sites below. */
+   const declared = (page, toRoot) => {
+      const found = [...document.querySelectorAll("waapi-anim[data-at]")]
+         .map(d => ({
+            el: document.querySelector(`[data-typst-label="waapi-anim@${d.dataset.at}"]`),
+            spec: d.dataset.spec,
+         }))
+         .filter(d => d.el && page.contains(d.el));
+      const plan = [];
+      for (const { el, spec } of found) {
+         const box = bbox(el, toRoot);
+         if (box && box[2] > box[0] && box[3] > box[1]) plan.push({ key: null, node: el, box, mat: toRoot(el.parentNode), spec });
+      }
+      return {
+         plan,
+         start: () => {
+            for (const { node, spec } of plan) {
+               const host = node.closest(".vit-mark");
+               if (host) { try { window.waapi?.start(host, JSON.parse(spec), page); } catch { } }
+            }
+         },
+      };
+   };
+
    /* vit-key on the <g> becomes data-vit-key on the host; what the mark declares
       about itself is in vitMarks, by key. True only when it did the work. */
    window.vitLift = slide => {
@@ -104,7 +144,8 @@
             in percentages, and follow the window size. One label instance is one
             region — the same key several times on a page is allowed, and the
             runtime names them by occurrence. */
-         const plan = [];
+         const anims = declared(page, toRoot);                      // TEMPORARY
+         const plan = [...anims.plan];
          for (const [key, nodes] of byKey) {
             for (const node of nodes) {
                const box = bbox(node, toRoot);
@@ -133,7 +174,7 @@
             host.style.top = `${((y - vb.y) / vb.height) * 100}%`;
             host.style.width = `${(w / vb.width) * 100}%`;
             host.style.height = `${(h / vb.height) * 100}%`;
-            host.dataset.vitKey = key;
+            if (key != null) host.dataset.vitKey = key;
 
             const wrap = document.createElementNS(NS, "g");
             wrap.setAttribute("transform", `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].join(" ")})`);
@@ -141,6 +182,7 @@
             host.appendChild(wrap);
             page.appendChild(host);
          }
+         anims.start();                                             // TEMPORARY
       } finally {
          states.forEach((g, i) => restore(g, stateWas[i]));
          restore(slide, was[0]);

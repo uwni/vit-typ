@@ -66,14 +66,13 @@ window.waapi ??= (() => {
       reduced: () => reduced.matches,
 
       /* Whatever the Typst side declared for one element: its keyframes and its
-         options, or a path to run along. */
-      start(el, o) {
+         options, or a path to run along. `el` has to be a CSS box — keyframes
+         are CSS, and half of them mean something else or nothing at all on an
+         element inside an `<svg>`. `origin` is what a followed path is measured
+         from, for a caller that knows better than the box's containing block. */
+      start(el, o, origin) {
          if (el.dataset.waapiOn) return null;
          el.dataset.waapiOn = "1";
-         /* An SVG element resolves percentages and the transform origin against
-            the viewBox, so translateY(420%) would be 420% of the page and a
-            rotation would orbit its centre. The author means the element. */
-         if (el instanceof SVGElement) el.style.transformBox = "fill-box";
          const role = o.name ? `waapi:${o.name}` : "waapi";
          let a;
          if (o.follow) {
@@ -82,7 +81,7 @@ window.waapi ??= (() => {
                console.info(`[waapi] no track named ${o.follow} on this page, or it has no path`);
                return null;
             }
-            const run = api.follow(el, track, { ...o, role }, null);
+            const run = api.follow(el, track, { ...o, role }, origin);
             fits.push(run.fit);
             run.fit();
             a = run.anim;
@@ -105,11 +104,19 @@ window.waapi ??= (() => {
          this.run();
       }
       run() {
+         /* Written where an element could be, this element is the box and it
+            starts itself. The other form names its target by the ordinal in
+            that target's label, and the target is inside a frame — an SVG
+            element, not a box. Only a host knows when it can give it one, so
+            the host reads this and calls start(); here it is inert.
+
+            TEMPORARY (typst#8832): a host that can place a frame puts the
+            declaration on an element of its own, and this branch goes with the
+            pointer form itself. */
+         if (this.dataset.at != null) return;
          let o;
          try { o = JSON.parse(this.dataset.spec); } catch { return; }
-         const { at } = this.dataset;
-         const el = at == null ? this : document.querySelector(`[data-typst-label="waapi-anim@${at}"]`);
-         if (el) api.start(el, o);
+         api.start(this, o);
       }
    });
 
