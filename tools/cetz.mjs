@@ -1,6 +1,6 @@
 /* the cetz layer against several CeTZ versions.
 
-   packages/tween/compat/cetz-test.typ is two pages per case: the canvas drawn with plain
+   tools/cetz.typ is two pages per case: the canvas drawn with plain
    CeTZ, then the same canvas drawn with states. The claim is that the pair is
    pixel-identical, so the test is a compare with no fuzz at all — an element
    that lands a hair off shows up here as a few hundred pixels.
@@ -17,8 +17,8 @@ import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const PKG = join(ROOT, 'packages', 'tween', 'compat');
-const TEST = join(PKG, 'cetz-test.typ');
+const PKG = join(ROOT, 'packages', 'tween', 'compat');   // where `tested` is declared
+const TEST = join(HERE, 'cetz.typ');
 const src = readFileSync(TEST, 'utf8');
 
 /* the cases, by the comment that heads each one, so the output reads like the file */
@@ -49,7 +49,7 @@ let bad = 0;
 for (const version of versions) {
   /* the import has to be rewritten in place: test.typ imports lib.typ beside it,
      so the copy under test has to live in the package too */
-  const copy = join(PKG, `.test-${version}.typ`);
+  const copy = join(HERE, `.cetz-${version}.typ`);
   const pdf = join(tmp, `${version}.pdf`);
   try {
     writeFileSync(copy, src.replace(/@preview\/cetz:\d+\.\d+\.\d+/g, `@preview/cetz:${version}`));

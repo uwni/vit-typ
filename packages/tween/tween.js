@@ -1,139 +1,110 @@
 /* ── tween · the engine ─────────────────────────────────────────────────
-   N states of one drawing, each an SVG subtree of the same shape, and the
-   browser moved between two of them. Nothing here knows about pages, slides
-   or navigation: it is handed the states and returns the animations.
+   N states of one drawing, each an SVG subtree of the same shape. The states
+   are that drawing under different numbers, so the subtrees are walked node by
+   node and every attribute that differs becomes a keyframe. What has no
+   in-between cross-fades. Nothing here knows about pages or navigation: it is
+   handed the states and gives back animations. */
 
-   The states are the same drawing under different numbers — same structure,
-   only the values differ — so the two subtrees are walked node by node and
-   every attribute that differs becomes a keyframe: the path's d, the transform,
-   colours, stroke width, opacity, x/y/width/height. What has no in-between
-   cross-fades. Playing them is waapi's job, not this file's. */
-
-window.tween = (function () {
+window.tween = (() => {
    "use strict";
 
-   /* The attributes compared node by node. Whether one changed is decided on the
-      attribute string — the states come from the same code, equal string means
-      unchanged. The table maps SVG attribute name → the same property's name in
-      the CSSOM / in keyframes (keyframes only accept the IDL name;
-      "stroke-width" is silently dropped). */
-   var PROPS = {
+   /* SVG attribute → its name in the CSSOM. Keyframes take only the IDL name:
+      "stroke-width" is silently dropped. Whether one changed is decided on the
+      attribute string — same code, equal string means unchanged. */
+   const PROPS = {
       d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
       "stroke-dasharray": "strokeDasharray", "stroke-dashoffset": "strokeDashoffset",
       opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
-      x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry"
+      x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry",
    };
-   var noted = {};
-
+   const noted = new Set();
 
    /* What differs across the nodes in list (same position in each state):
       `props`, the attributes in PROPS that are not all equal, and `other`, true
       if anything else differs (a glyph's href, say) — something that cannot be
       interpolated and is cross-faded instead. */
-   function changed(list) {
-      var first = list[0], props = [], other = false, a, k, attr;
-      for (a in PROPS) {
-         var v = first.getAttribute(a);
-         for (k = 1; k < list.length; k++) if (list[k].getAttribute(a) !== v) { props.push(a); break; }
+   const changed = list => {
+      const [first, ...rest] = list;
+      const props = Object.keys(PROPS).filter(a => {
+         const v = first.getAttribute(a);
+         return rest.some(el => el.getAttribute(a) !== v);
+      });
+      const other = rest.some(el =>
+         el.attributes.length !== first.attributes.length ||
+         [...el.attributes].some(({ name, value }) =>
+            !PROPS[name] && name !== "style" && first.getAttribute(name) !== value));
+      return { props, other };
+   };
+
+   /* The transform attribute as the SVG DOM parsed it, multiplied left to
+      right — the value a CSS transform on the element replaces. */
+   const transformOf = el => {
+      const list = el.transform.baseVal, m = new DOMMatrix();
+      for (let i = 0; i < list.numberOfItems; i++) m.multiplySelf(list.getItem(i).matrix);
+      return m.toString();
+   };
+
+   /* Current values, in keyframe form. Never parsed by hand: getComputedStyle
+      has already turned the presentation attributes into CSS syntax. transform
+      is the exception — Blink resolves it to none for an element without a box
+      and WebKit does not map the attribute in at all — so it comes from the SVG
+      DOM. Read fresh, so every caller must read at rest. A property the browser
+      does not have (d in Safari before 27) is left out and switches instead. */
+   const values = (el, attrs) => {
+      let cs = null;
+      const kf = {};
+      for (const a of attrs) {
+         const v = a === "transform" ? transformOf(el) : (cs ??= getComputedStyle(el))[PROPS[a]];
+         if (typeof v === "string" && v !== "") kf[PROPS[a]] = v;
       }
-      for (k = 1; k < list.length && !other; k++) {
-         var el = list[k];
-         if (el.attributes.length !== first.attributes.length) { other = true; break; }
-         for (var q = 0; q < el.attributes.length; q++) {
-            attr = el.attributes[q];
-            if (PROPS[attr.name] || attr.name === "style") continue;
-            if (first.getAttribute(attr.name) !== attr.value) { other = true; break; }
+      return kf;
+   };
+
+   /* Two states made the same kind of value, each keeping its own picture.
+      false when a path could not be aligned; that node cross-fades. */
+   const settle = frames => {
+      /* `none` against a colour is a discrete switch; `transparent` paints the
+         same nothing and interpolates premultiplied, so no black midpoint. */
+      for (const k of ["fill", "stroke"]) {
+         if (k in frames[0] && frames.some(f => f[k] !== "none")) {
+            for (const f of frames) if (f[k] === "none") f[k] = "transparent";
          }
       }
-      return { props: props, other: other };
-   }
-
-   /* Current values of these attributes on node el, in keyframe form. Values
-      are never parsed by hand: the browser has already turned the presentation
-      attributes into CSS properties, and getComputedStyle gives CSS syntax — d
-      as path(), x with px, defaults filled in, fill inherited. transform is the
-      exception: the computed value is not the attribute (Blink resolves it to
-      none for an element without a box, WebKit does not map the attribute into
-      it at all), so it is read from the SVG DOM, see transformOf. Read fresh
-      every time — a computed value is what the node shows now, so every caller
-      reads at rest: the host halts what is running first, and a drawing played
-      continuously is never stepped. A property the browser does not have (d in
-      Safari before 27) is left out; that one then switches instead of
-      interpolating. */
-   function values(el, attrs, kf) {
-      var cs = null;
-      attrs.forEach(function (a) {
-         var p = PROPS[a], v;
-         if (a === "transform") v = transformOf(el);
-         else { cs = cs || getComputedStyle(el); v = cs[p]; }
-         if (typeof v === "string" && v !== "") kf[p] = v;
-      });
-      return kf;
-   }
-
-   /* The element's own transform — the transform attribute as the SVG DOM
-      parsed it, the list multiplied left to right, which is the value a CSS
-      transform on the element replaces. tools/ui.mjs checks it against the
-      browser's own composition (getCTM). */
-   function transformOf(el) {
-      var list = el.transform.baseVal, m = new DOMMatrix();
-      for (var i = 0; i < list.numberOfItems; i++) m.multiplySelf(list.getItem(i).matrix);
-      return m.toString();
-   }
-
-   /* Every rewrite here keeps the picture of each state and only changes how it
-      is written, so that two states become the same kind of value. Returns
-      false when a path could not be aligned; that node is cross-faded. */
-   function settle(frames) {
-      /* fill / stroke: `none` against a colour is a discrete switch. `transparent`
-         paints the same nothing, and colours interpolate premultiplied, so the
-         paint fades in without passing through black. */
-      ["fill", "stroke"].forEach(function (k) {
-         if (!(k in frames[0])) return;
-         var some = frames.some(function (f) { return f[k] !== "none"; });
-         if (some) frames.forEach(function (f) { if (f[k] === "none") f[k] = "transparent"; });
-      });
       /* d: two states whose paths are not the same list of commands are reconciled by paths.js */
       if (!("d" in frames[0])) return true;
-      var ds = tweenPaths.align(frames.map(function (f) { return f.d; }));
+      const ds = tweenPaths.align(frames.map(f => f.d));
       if (!ds) return false;
-      frames.forEach(function (f, k) { f.d = ds[k]; });
+      frames.forEach((f, k) => { f.d = ds[k]; });
       return true;
-   }
+   };
 
-   /* The label grammar is read here and nowhere else; everything downstream
-      sees attributes. `tween` (or `tween:name`) is a container → data-tween
-      holds the name, `tween@i` is one of its states → data-tween-at holds the
-      index. */
-   function tag(root) {
-      (root || document).querySelectorAll("[data-typst-label]").forEach(function (g) {
-         var l = g.getAttribute("data-typst-label");
-         if (l.slice(0, 6) === "tween@") g.dataset.tweenAt = l.slice(6);
+   /* The label grammar, read here and nowhere else; everything downstream sees
+      attributes. */
+   const tag = root => {
+      for (const g of (root ?? document).querySelectorAll("[data-typst-label]")) {
+         const l = g.getAttribute("data-typst-label");
+         if (l.startsWith("tween@")) g.dataset.tweenAt = l.slice(6);
          else if (l === "tween") g.dataset.tween = "";
-         else if (l.slice(0, 6) === "tween:") g.dataset.tween = l.slice(6);
-      });
-   }
-   if (document.readyState === "loading") addEventListener("DOMContentLoaded", function () { tag(); });
+         else if (l.startsWith("tween:")) g.dataset.tween = l.slice(6);
+      }
+   };
+   if (document.readyState === "loading") addEventListener("DOMContentLoaded", () => tag());
    else tag();
 
-   var api = {
-      tag: tag,
+   const api = {
+      tag,
 
-      /* The containers in a subtree, outermost only: a drawing whose states
-         hold drawings of their own is one drawing here, and the inner states
-         are ordinary nodes. */
-      boxes: function (root) {
-         return Array.prototype.filter.call(root.querySelectorAll("[data-tween]"), function (c) {
-            return !c.parentNode.closest("[data-tween]");
-         });
-      },
+      /* The containers in a subtree, outermost only: a drawing inside a state
+         is an ordinary node. */
+      boxes: root => [...root.querySelectorAll("[data-tween]")]
+         .filter(c => !c.parentNode.closest("[data-tween]")),
 
       /* The states of one container, by index. */
-      states: function (box) {
-         var out = [];
-         box.querySelectorAll("[data-tween-at]").forEach(function (g) {
+      states(box) {
+         const out = [];
+         for (const g of box.querySelectorAll("[data-tween-at]")) {
             if (g.closest("[data-tween]") === box) out[+g.dataset.tweenAt] = g;
-         });
+         }
          return out.filter(Boolean);
       },
 
@@ -141,106 +112,109 @@ window.tween = (function () {
          not the same drawing after all — a different node count or a different
          tag in the same place, which has no node-to-node reading and is
          cross-faded whole. */
-      nodes: function (states, label) {
-         var all = function (g) { return Array.prototype.slice.call(g.querySelectorAll("*")); };
-         var lists = states.map(all);
-         var ok = lists.every(function (list) {
-            return list.length === lists[0].length &&
-               list.every(function (el, q) { return el.tagName === lists[0][q].tagName; });
-         });
+      nodes(states, label) {
+         const lists = states.map(g => [...g.querySelectorAll("*")]);
+         const ok = lists.every(l =>
+            l.length === lists[0].length && l.every((el, q) => el.tagName === lists[0][q].tagName));
          if (ok) return lists;
-         console.info("[tween] the states of " + label + " differ in structure (node count or types); they cross-fade instead of morphing");
+         console.info(`[tween] the states of ${label} differ in structure (node count or types); they cross-fade instead of morphing`);
          return null;
       },
 
       /* One node across the states: the keyframes to animate it with, and
          whether something about it has to cross-fade instead. `frames` is null
          when nothing in PROPS differs — that node simply stays as it is. */
-      frames: function (column, label) {
-         var diff = changed(column), fade = diff.other;
-         if (!diff.props.length) return { frames: null, fade: fade };
-         var frames = column.map(function (el) { return values(el, diff.props, {}); });
+      frames(column, label) {
+         const { props, other } = changed(column);
+         let fade = other;
+         if (!props.length) return { frames: null, fade };
+         const frames = column.map(el => values(el, props));
          if (!settle(frames)) {
             fade = true;
-            frames.forEach(function (f) { delete f.d; });
-            if (!noted[label]) { noted[label] = true; console.info("[tween] " + label + ": a path cannot be interpolated and cross-fades instead."); }
+            for (const f of frames) delete f.d;
+            if (!noted.has(label)) {
+               noted.add(label);
+               console.info(`[tween] ${label}: a path cannot be interpolated and cross-fades instead.`);
+            }
          }
-         if (!Object.keys(frames[0]).length) return { frames: null, fade: fade };
-         return { frames: frames, fade: fade };
+         return { frames: Object.keys(frames[0]).length ? frames : null, fade };
       },
 
       /* Whether this drawing plays its states rather than leaving them to be
-         stepped — it said so itself, in the one place a declaration can be
-         written. A host that steps drawings asks; it does not read labels. */
-      plays: function (box) {
-         return !!box.closest('tween-play,[data-typst-label^="tween-play@"]');
-      },
+         stepped. A host that steps drawings asks; it does not read labels. */
+      plays: box => !!box.closest('tween-play,[data-typst-label^="tween-play@"]'),
 
-      /* These states, played over time instead of stepped: one animation per
-         node, each keyframe that node's values in that state. The nodes that
-         move are the first state's — the one the stylesheet shows — so nothing
-         is displayed that was not already there. What comes back is the
-         browser's animations; whoever asked for them owns them, and pausing,
-         resuming and cancelling are theirs. */
-      play: function (box, o, role) {
-         var lists = api.nodes(api.states(box), box.dataset.tween || "a drawing");
+      /* Played over time instead of stepped: one animation per node, each
+         keyframe that node's values in that state. What moves is the first
+         state, the one the stylesheet shows. The animations come back to
+         whoever asked; pausing and cancelling are theirs. */
+      play(box, o, role) {
+         const label = box.dataset.tween || "a drawing";
+         const lists = api.nodes(api.states(box), label);
          if (!lists) return [];
-         return lists[0].map(function (node, j) {
-            var f = api.frames(lists.map(function (l) { return l[j]; }), box.dataset.tween || "a drawing");
-            return f.frames ? waapi.animate(node, f.frames, o, role) : null;
-         }).filter(Boolean);
+         return lists[0]
+            .map((node, j) => {
+               const { frames } = api.frames(lists.map(l => l[j]), label);
+               return frames ? waapi.animate(node, frames, o, role) : null;
+            })
+            .filter(Boolean);
       },
 
-      /* This drawing, playing what it declared. Once per drawing: a second call
-         finds it already going. */
-      start: function (host, o) {
+      /* Once per drawing: a second call finds it already going. */
+      start(host, o) {
          if (host.dataset.tweenPlayOn) return;
          host.dataset.tweenPlayOn = "1";
          tag(host);
-         api.boxes(host).forEach(function (box) {
-            var as = api.play(box, o, "tween:play");
-            if (waapi.reduced()) as.forEach(function (a) { a.pause(); });
-         });
+         for (const box of api.boxes(host)) {
+            const as = api.play(box, o, "tween:play");
+            if (waapi.reduced()) as.forEach(a => a.pause());
+         }
       },
 
-      /* For what has no in-between: a glyph that changes, a path that cannot be
-         aligned, states of a different structure altogether. The old is kept on
-         stage and fades out while the new fades in, with plus-lighter inside an
-         isolated host so a pixel both draw alike stays exactly as it is instead
-         of dimming halfway. `olds` are nodes of the old state that stay visible
-         while the rest of it is hidden; without them the whole old state fades.
-         The caller keeps the animations and calls undo when they are over. */
-      crossfade: function (host, oldG, newG, olds, news, timing) {
-         var cleanup = [], anims = [];
-         var set = function (el, prop, v) { var was = el.style[prop]; el.style[prop] = v; cleanup.push(function () { el.style[prop] = was; }); };
+      /* For what has no in-between. The old fades out while the new fades in,
+         with plus-lighter inside an isolated host so a pixel both draw alike
+         does not dim halfway. `olds` are nodes of the old state to keep visible
+         while the rest of it is hidden. The caller calls undo when they end. */
+      crossfade(host, oldG, newG, olds, news, timing) {
+         let cleanup = [];
+         const set = (el, prop, v) => {
+            const was = el.style[prop];
+            el.style[prop] = v;
+            cleanup.push(() => { el.style[prop] = was; });
+         };
          set(host, "isolation", "isolate");
          set(oldG, "display", "inline");
          set(oldG, "mixBlendMode", "plus-lighter");
          set(newG, "mixBlendMode", "plus-lighter");
-         var out = olds || [oldG], inn = news || [newG];
-         if (olds) { set(oldG, "visibility", "hidden"); olds.forEach(function (el) { set(el, "visibility", "visible"); }); }
-         out.forEach(function (el) { anims.push(waapi.animate(el, [{ opacity: 1 }, { opacity: 0 }], timing)); });
-         inn.forEach(function (el) { anims.push(waapi.animate(el, [{ opacity: 0 }, { opacity: 1 }], timing)); });
-         return { anims: anims, undo: function () { cleanup.forEach(function (f) { f(); }); cleanup = []; } };
-      }
+         if (olds) {
+            set(oldG, "visibility", "hidden");
+            for (const el of olds) set(el, "visibility", "visible");
+         }
+         const anims = [
+            ...(olds ?? [oldG]).map(el => waapi.animate(el, [{ opacity: 1 }, { opacity: 0 }], timing)),
+            ...(news ?? [newG]).map(el => waapi.animate(el, [{ opacity: 0 }, { opacity: 1 }], timing)),
+         ];
+         return { anims, undo: () => { cleanup.forEach(f => f()); cleanup = []; } };
+      },
    };
 
-   /* The declaration is an element and the browser says when it is in the
-      document. Around the drawing where an element could be written; outside
-      the frames, pointing at the ordinal in a label, where none could. */
+   /* Around the drawing where an element could be written; outside the frames,
+      pointing at the ordinal in a label, where none could. */
    customElements.define("tween-play", class extends HTMLElement {
       connectedCallback() {
-         /* Upgraded while the document is still parsing, this element's own
-            children are not there yet and neither is what it points at, so the
-            work waits for the document to be whole. */
-         if (document.readyState === "loading") { addEventListener("DOMContentLoaded", this.run.bind(this), { once: true }); return; }
+         /* Upgraded mid-parse, its children are not there yet and neither is
+            what it points at. */
+         if (document.readyState === "loading") {
+            addEventListener("DOMContentLoaded", () => this.run(), { once: true });
+            return;
+         }
          this.run();
       }
       run() {
-         var o;
-         try { o = JSON.parse(this.dataset.spec); } catch (e) { return; }
-         var at = this.dataset.at;
-         var el = at == null ? this : document.querySelector('[data-typst-label="tween-play@' + at + '"]');
+         let o;
+         try { o = JSON.parse(this.dataset.spec); } catch { return; }
+         const { at } = this.dataset;
+         const el = at == null ? this : document.querySelector(`[data-typst-label="tween-play@${at}"]`);
          if (el) api.start(el, o);
       }
    });

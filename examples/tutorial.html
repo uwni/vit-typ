@@ -1161,48 +1161,70 @@ body.vit-black > * {
    assignment, no tolerance, no mask. Two marks whose boxes overlap are still
    two subtrees.
 
-   Tagging reads the labels for the whole deck at once. Lifting has to lay a
-   frame out to measure it, so it happens one frame at a time, when the runtime
-   asks: `window.vitLift(slide)`. An unlifted frame draws the same picture and
+   Lifting has to lay a frame out to measure it, so it happens one frame at a
+   time, when the runtime asks. An unlifted frame draws the same picture and
    cannot morph. */
 
-(function () {
+(() => {
    "use strict";
 
-   var NS = "http://www.w3.org/2000/svg";
-   var PREFIX = "vit-";
+   const NS = "http://www.w3.org/2000/svg";
+   const PREFIX = "vit-";
 
-   /* The label grammar for a mark is read here and nowhere else: vit-key on the
-      <g> becomes data-vit-key on the host. What a mark declares about itself is
-      not in the label — the Typst side writes it into vitMarks, by key. The
-      states inside it are tween's, with a grammar of their own. */
+   const unstep = el => {
+      const was = [el.style.getPropertyValue("display"), el.style.getPropertyPriority("display")];
+      el.style.removeProperty("display");
+      return was;
+   };
+   const show = (el, how) => {
+      const was = unstep(el);
+      el.style.setProperty("display", how, "important");
+      el.style.setProperty("content-visibility", "visible", "important");
+      return was;
+   };
+   const restore = (el, [value, priority]) => {
+      el.style.removeProperty("content-visibility");
+      if (value) el.style.setProperty("display", value, priority);
+      else el.style.removeProperty("display");
+   };
 
-   /* True only when it did the work, so the caller knows to name the hosts. */
-   window.vitLift = function (slide) {
+   const pageNo = group => [...document.querySelectorAll(".vit-group")].indexOf(group) + 1;
+
+   const bbox = (el, toRoot) => {
+      let b;
+      try { b = el.getBBox(); } catch { return null; }
+      const m = toRoot(el);
+      const corners = [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]
+         .map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
+      const xs = corners.map(p => p[0]), ys = corners.map(p => p[1]);
+      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+   };
+
+   /* vit-key on the <g> becomes data-vit-key on the host; what the mark declares
+      about itself is in vitMarks, by key. True only when it did the work. */
+   window.vitLift = slide => {
       if (!slide || slide.dataset.vitLifted) return false;
-      var page = slide.querySelector(":scope > .vit-page");
-      var root = page && page.querySelector("svg");
+      const page = slide.querySelector(":scope > .vit-page");
+      const root = page?.querySelector("svg");
       if (!root) { slide.dataset.vitLifted = "1"; return false; }
 
       /* getBBox returns nothing that is not rendered, so the frame is laid out
-         for the measurement and put back in the same task, unpainted. Beating
-         the stylesheet with `!important` is the point: on the desk and in the
-         overview, which is where a deck idles, it hides frames and skips
-         thumbnails that way. The states go back to what the stylesheet says —
-         the first one, and no other — so that a mark's box does not depend on
-         the step the runtime happens to have stepped this frame to. */
-      var group = slide.closest(".vit-group");
-      var states = [].slice.call(page.querySelectorAll("[data-tween-at]"));
-      var was = [show(slide, "block"), group ? show(group, "block") : null];
-      var stateWas = states.map(unstep);
+         and put back in the same task, unpainted — with `!important`, which is
+         how the desk and the overview hide frames. The states go back to what
+         the stylesheet says, so a mark's box does not depend on which step this
+         frame happens to be on. */
+      const group = slide.closest(".vit-group");
+      const states = [...page.querySelectorAll("[data-tween-at]")];
+      const was = [show(slide, "block"), group ? show(group, "block") : null];
+      const stateWas = states.map(unstep);
 
       try {
-         /* A document with no box measures every mark empty, and the flag
-            above would make that permanent: leave it for the next caller. */
+         /* A document with no box measures every mark empty, and the flag would
+            make that permanent. */
          if (!root.getBoundingClientRect().width) return false;
          slide.dataset.vitLifted = "1";
 
-         var vb = root.viewBox.baseVal;
+         const vb = root.viewBox.baseVal;
 
          /* getCTM's target space differs between browsers: Chrome includes the
             viewBox→viewport scale (root.getCTM() is 1.5× in a 1920px window), Safari
@@ -1212,238 +1234,179 @@ body.vit-black > * {
             whatever the convention.
 
             Invisible at 1280×720, where the scale happens to be 1; at any other
-            window size every hoisted element drifts down-right proportionally.
-            The tests only ran at 1280×720 — exactly where the bug hides. */
-         var inv = root.getScreenCTM().inverse();
-         var toRoot = function (el) { return inv.multiply(el.getScreenCTM()); };
+            window size every hoisted element drifts down-right proportionally. */
+         const inv = root.getScreenCTM().inverse();
+         const toRoot = el => inv.multiply(el.getScreenCTM());
 
-         var byKey = {};
-         page.querySelectorAll("[data-typst-label]").forEach(function (g) {
-            var l = g.getAttribute("data-typst-label");
-            if (l.slice(0, PREFIX.length) !== PREFIX) return;
+         const byKey = new Map();
+         for (const g of page.querySelectorAll("[data-typst-label]")) {
+            const l = g.getAttribute("data-typst-label");
+            if (!l.startsWith(PREFIX)) continue;
             /* A mark inside the states of an element animation stays put: the
                engine pairs the nodes of the states one by one, and one moved away
                would no longer line up. */
-            if (g.parentNode.closest("[data-tween-at]")) return;
-            var k = l.slice(PREFIX.length);
-            (byKey[k] = byKey[k] || []).push(g);
-         });
+            if (g.parentNode.closest("[data-tween-at]")) continue;
+            const k = l.slice(PREFIX.length);
+            byKey.set(k, [...(byKey.get(k) ?? []), g]);
+         }
 
-         /* Measure everything first, then move. Moving changes the screen position
-            of nodes not yet measured — once an outer mark sits in its own host, an
-            inner mark nested in it is measured inside the new host, whose size is a
-            percentage, and the inner result starts following the window size. Two
-            passes: the first only reads, the second touches the DOM. */
-         var plan = [];
-         Object.keys(byKey).forEach(function (key) {
-            /* One label instance = one <g> = one region. The same key several times
-               on a page is **allowed** — each is its own region; the runtime names
-               them by occurrence and pairs them by count (one-to-many = split,
-               many-to-one = merge). */
-            byKey[key].forEach(function (n) {
-               var box = bbox(n, toRoot);
+         /* Measure everything first, then move: once an outer mark sits in its
+            own host, a mark nested in it would be measured against a box given
+            in percentages, and follow the window size. One label instance is one
+            region — the same key several times on a page is allowed, and the
+            runtime names them by occurrence. */
+         const plan = [];
+         for (const [key, nodes] of byKey) {
+            for (const node of nodes) {
+               const box = bbox(node, toRoot);
                if (!box || box[2] <= box[0] || box[3] <= box[1]) {
-                  console.warn("[vit] mark " + key + " on page " + pageNo(group) + " has no box and is not hoisted: it neither morphs nor enters on its own");
-                  return;
+                  console.warn(`[vit] mark ${key} on page ${pageNo(group)} has no box and is not hoisted: it neither morphs nor enters on its own`);
+                  continue;
                }
-               /* record the **parent's** CTM — the node's own transform attribute travels
-                  with it, so using its own CTM would apply it twice */
-               plan.push({ key: key, node: n, box: box, mat: toRoot(n.parentNode) });
-            });
-         });
+               /* the parent's CTM: the node's own transform travels with it */
+               plan.push({ key, node, box, mat: toRoot(node.parentNode) });
+            }
+         }
 
-         plan.forEach(function (p) {
-            var x = p.box[0], y = p.box[1], w = p.box[2] - x, h = p.box[3] - y, m = p.mat;
+         for (const { key, node, box: [x, y, x2, y2], mat: m } of plan) {
+            const w = x2 - x, h = y2 - y;
 
-            /* The region's own <svg> is an HTML-level element and carries the name
-               itself. (An <svg> nested *inside* the page svg would not do: only
-               elements in the CSS box tree are ever captured.) */
-            var host = document.createElementNS(NS, "svg");
+            /* An HTML-level <svg> carries the name itself; one nested inside the
+               page svg would not, only the CSS box tree is ever captured. */
+            const host = document.createElementNS(NS, "svg");
             host.setAttribute("class", "vit-mark");
-            host.setAttribute("viewBox", x + " " + y + " " + w + " " + h);
-            /* Layout snaps the host's box to 1/64 px, and the default xMidYMid meet
-               then scales uniformly by the smaller of the two ratios — a 1160px wide
-               block of text shrinks by 0.02% and its right end drifts 0.3px, so a whole
-               line's anti-aliasing no longer matches the PDF. Scaling the two axes
-               independently leaves an error of a few ten-thousandths of a px. */
+            host.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+            /* Layout snaps the box to 1/64 px, and xMidYMid meet would then scale
+               both axes by the smaller ratio, drifting a wide line's right end off
+               the PDF's anti-aliasing. */
             host.setAttribute("preserveAspectRatio", "none");
-            host.style.left = ((x - vb.x) / vb.width * 100) + "%";
-            host.style.top = ((y - vb.y) / vb.height * 100) + "%";
-            host.style.width = (w / vb.width * 100) + "%";
-            host.style.height = (h / vb.height * 100) + "%";
-            host.dataset.vitKey = p.key;
+            host.style.left = `${((x - vb.x) / vb.width) * 100}%`;
+            host.style.top = `${((y - vb.y) / vb.height) * 100}%`;
+            host.style.width = `${(w / vb.width) * 100}%`;
+            host.style.height = `${(h / vb.height) * 100}%`;
+            host.dataset.vitKey = key;
 
-            var wrap = document.createElementNS(NS, "g");
-            wrap.setAttribute("transform", "matrix(" + [m.a, m.b, m.c, m.d, m.e, m.f].join(" ") + ")");
-            wrap.appendChild(p.node);                  // detaches it from the page svg
+            const wrap = document.createElementNS(NS, "g");
+            wrap.setAttribute("transform", `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].join(" ")})`);
+            wrap.appendChild(node);                  // detaches it from the page svg
             host.appendChild(wrap);
             page.appendChild(host);
-         });
+         }
       } finally {
-         states.forEach(function (g, i) { restore(g, stateWas[i]); });
+         states.forEach((g, i) => restore(g, stateWas[i]));
          restore(slide, was[0]);
          if (group) restore(group, was[1]);
       }
       return true;
    };
-
-   function show(el, how) {
-      var was = unstep(el);
-      el.style.setProperty("display", how, "important");
-      el.style.setProperty("content-visibility", "visible", "important");
-      return was;
-   }
-   function unstep(el) {
-      var was = [el.style.getPropertyValue("display"), el.style.getPropertyPriority("display")];
-      el.style.removeProperty("display");
-      return was;
-   }
-   function restore(el, was) {
-      el.style.removeProperty("content-visibility");
-      if (was[0]) el.style.setProperty("display", was[0], was[1]);
-      else el.style.removeProperty("display");
-   }
-
-   function pageNo(group) {
-      return [].indexOf.call(document.querySelectorAll(".vit-group"), group) + 1;
-   }
-
-   function bbox(el, toRoot) {
-      var b;
-      try { b = el.getBBox(); } catch (e) { return null; }
-      var m = toRoot(el), out = null;
-      [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height],
-      [b.x + b.width, b.y + b.height]].forEach(function (p) {
-         var X = m.a * p[0] + m.c * p[1] + m.e, Y = m.b * p[0] + m.d * p[1] + m.f;
-         out = out ? [Math.min(out[0], X), Math.min(out[1], Y),
-         Math.max(out[2], X), Math.max(out[3], Y)] : [X, Y, X, Y];
-      });
-      return out;
-   }
-
 })();
 </script><script>/* ── waapi · Web Animations, from Typst ─────────────────────────────────
-   A binding and nothing else: keyframes and options are what the API takes,
-   handed to el.animate() as they are, and what comes back is an Animation —
-   the browser's object, with its own play, pause, cancel, reverse,
-   currentTime, playbackRate and finished.
+   A binding: keyframes and options are the API's own, and what comes back is
+   the browser's Animation. There is no registry — getAnimations({subtree})
+   is one already, and the role an animation plays for its host rides on
+   Animation.id. */
 
-   There is no registry here. The platform already keeps one:
-   el.getAnimations({ subtree: true }) is every animation under an element, and
-   the role each one plays for its host rides on Animation.id, which is a
-   string the spec gives us for exactly this. */
-
-window.waapi = window.waapi || (function () {
+window.waapi ??= (() => {
    "use strict";
 
-   var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 
-   /* A followed path is sampled in the element's own pixels, so it is measured
-      again whenever the layout can have moved. The list is of measurements, not
-      of animations — those the browser keeps. */
-   var fits = [];
-   addEventListener("resize", function () { fits.forEach(function (f) { f(); }); });
+   /* Followed paths are sampled in pixels, so they are measured again whenever
+      the layout can have moved. Measurements, not animations. */
+   const fits = [];
+   addEventListener("resize", () => fits.forEach(f => f()));
 
-   var api = {
-      /* Options as the spec writes them — duration and delay in ms, iterations
-         (null: without end), direction, easing as the four numbers of a cubic
-         Bézier or a name the browser knows. `role` is stamped on the Animation
-         so a host can find its own again. */
-      animate: function (el, frames, o, role) {
-         var a = el.animate(frames, {
-            duration: o.duration, delay: o.delay, direction: o.direction,
-            iterations: o.iterations == null ? Infinity : o.iterations,
-            easing: Array.isArray(o.easing) ? "cubic-bezier(" + o.easing.join(", ") + ")" : o.easing
+   const api = {
+      /* Options as the spec writes them; `iterations: null` is without end, and
+         `easing` may be the four numbers of a cubic Bézier. `role` is stamped
+         on the Animation so a host can find its own again. */
+      animate(el, frames, o, role) {
+         const a = el.animate(frames, {
+            duration: o.duration,
+            delay: o.delay,
+            direction: o.direction,
+            iterations: o.iterations ?? Infinity,
+            easing: Array.isArray(o.easing) ? `cubic-bezier(${o.easing.join(", ")})` : o.easing,
          });
          if (role) a.id = role;
          return a;
       },
 
-      /* What is animating under this element, of this role. A paused animation
-         is still one of them, which is what makes pause and resume a matter of
-         asking the browser rather than keeping a list. */
-      of: function (scope, role) {
-         return scope.getAnimations({ subtree: true }).filter(function (a) {
-            return role == null || a.id === role;
-         });
-      },
+      /* What is animating under this element, of this role — paused ones
+         included, which is what makes pause and resume a question, not a list. */
+      of: (scope, role) =>
+         scope.getAnimations({ subtree: true }).filter(a => role == null || a.id === role),
 
-      /* Run an element along an SVG path. `offset-path` takes a path in the
-         element's containing block, and an SVG path is in its own user space,
-         so it is sampled into a polyline through the screen and back — 240
-         points, which is under a tenth of a pixel on a slide-sized curve.
-         `origin` is the element whose box the coordinates are relative to, its
-         offsetParent unless the host knows better.
+      /* Run an element along an SVG path. `offset-path` wants the path in the
+         element's containing block and an SVG path is in its own user space, so
+         it is sampled into a polyline through the screen and back.
 
-         Chrome resolves path() coordinates against the element's own box, the
-         spec against the containing block, and offset-position cannot fix it.
-         Moving the element to the containing block's origin makes the two
-         readings coincide; it starts at 0% anyway, so its rest position is moot.
-
-         Returns the refit: the sampling is in pixels, so whoever owns the
-         layout calls it again when the box changes. */
-      follow: function (el, path, o, origin) {
+         Chrome resolves those coordinates against the element's own box and the
+         spec against the containing block, and offset-position cannot fix it;
+         moving the element to the origin makes the two readings coincide, and
+         it starts at 0% anyway. Returns the refit for whoever owns the layout. */
+      follow(el, path, o, origin) {
          el.style.offsetRotate = o.orient ? "auto" : "0deg";
          el.style.left = el.style.top = "0";
-         var fit = function () {
-            var m = path.getScreenCTM();
+         const fit = () => {
+            const m = path.getScreenCTM();
             if (!m) { el.style.offsetPath = "none"; return; }
-            var box = (origin || el.offsetParent || document.documentElement).getBoundingClientRect();
-            var L = path.getTotalLength(), N = 240, d = [];
-            for (var i = 0; i <= N; i++) {
-               /* Typst's d starts with "M 0 0 m …": an empty subpath at the origin,
-                  where getPointAtLength(0) would land. Start a hair further in. */
-               var q = path.getPointAtLength(i ? L * i / N : Math.min(L, 0.01)).matrixTransform(m);
-               d.push((i ? "L" : "M") + (q.x - box.left).toFixed(1) + " " + (q.y - box.top).toFixed(1));
-            }
-            el.style.offsetPath = 'path("' + d.join("") + '")';
+            const box = (origin ?? el.offsetParent ?? document.documentElement).getBoundingClientRect();
+            const L = path.getTotalLength(), N = 240;
+            const d = Array.from({ length: N + 1 }, (_, i) => {
+               /* Typst's d opens with an empty subpath at the origin, where
+                  getPointAtLength(0) lands. Start a hair further in. */
+               const q = path.getPointAtLength(i ? (L * i) / N : Math.min(L, 0.01)).matrixTransform(m);
+               return `${i ? "L" : "M"}${(q.x - box.left).toFixed(1)} ${(q.y - box.top).toFixed(1)}`;
+            });
+            el.style.offsetPath = `path("${d.join("")}")`;
          };
-         return { anim: api.animate(el, [{ offsetDistance: "0%" }, { offsetDistance: "100%" }], o, o.role), fit: fit };
+         return { anim: api.animate(el, [{ offsetDistance: "0%" }, { offsetDistance: "100%" }], o, o.role), fit };
       },
 
       /* The browser's own answer to "should anything move at all". */
-      reduced: function () { return reduced.matches; },
+      reduced: () => reduced.matches,
 
       /* Whatever the Typst side declared for one element: its keyframes and its
          options, or a path to run along. */
-      start: function (el, o) {
+      start(el, o) {
          if (el.dataset.waapiOn) return null;
          el.dataset.waapiOn = "1";
-         var role = o.name ? "waapi:" + o.name : "waapi", a;
+         const role = o.name ? `waapi:${o.name}` : "waapi";
+         let a;
          if (o.follow) {
-            var track = document.querySelector('[data-typst-label="waapi-track:' + o.follow + '"] path');
-            if (!track) { console.info("[waapi] no track named " + o.follow + " on this page, or it has no path"); return null; }
-            var run = api.follow(el, track, {
-               duration: o.duration, delay: o.delay, iterations: o.iterations,
-               direction: o.direction, easing: o.easing, orient: o.orient, role: role
-            }, null);
+            const track = document.querySelector(`[data-typst-label="waapi-track:${o.follow}"] path`);
+            if (!track) {
+               console.info(`[waapi] no track named ${o.follow} on this page, or it has no path`);
+               return null;
+            }
+            const run = api.follow(el, track, { ...o, role }, null);
             fits.push(run.fit);
             run.fit();
             a = run.anim;
          } else a = api.animate(el, o.keyframes, o, role);
          if (!o.play || reduced.matches) a.pause();
          return a;
-      }
+      },
    };
 
-   /* The declaration is an element, and the browser says when it is in the
-      document — no sweep, no "already done" pass, and a page that grows more of
-      them later needs no second call. It stands around the thing it moves where
-      an element could be written; outside the frames, pointing at the ordinal
-      in a label, where none could. */
+   /* Around the thing it moves where an element could be written; outside the
+      frames, pointing at the ordinal in a label, where none could. */
    customElements.define("waapi-anim", class extends HTMLElement {
       connectedCallback() {
-         /* Upgraded while the document is still parsing, this element's own
-            children are not there yet and neither is what it points at, so the
-            work waits for the document to be whole. */
-         if (document.readyState === "loading") { addEventListener("DOMContentLoaded", this.run.bind(this), { once: true }); return; }
+         /* Upgraded mid-parse, its children are not there yet and neither is
+            what it points at. */
+         if (document.readyState === "loading") {
+            addEventListener("DOMContentLoaded", () => this.run(), { once: true });
+            return;
+         }
          this.run();
       }
       run() {
-         var o;
-         try { o = JSON.parse(this.dataset.spec); } catch (e) { return; }
-         var at = this.dataset.at;
-         var el = at == null ? this : document.querySelector('[data-typst-label="waapi-anim@' + at + '"]');
+         let o;
+         try { o = JSON.parse(this.dataset.spec); } catch { return; }
+         const { at } = this.dataset;
+         const el = at == null ? this : document.querySelector(`[data-typst-label="waapi-anim@${at}"]`);
          if (el) api.start(el, o);
       }
    });
@@ -1452,127 +1415,93 @@ window.waapi = window.waapi || (function () {
 })();
 
 /* ── tween · path data ────────────────────────────────────────────────
-   Two states whose paths are not the same list of commands. Two path()
-   values interpolate only if they are the same list of commands (CSS
-   Shapes); otherwise the shape snaps at the midpoint while the transform
-   glides (a pendulum rod detaches from its pivot). The same drawing is not
-   always the same list: typst-svg opens every path with "M 0 0" and skips the
-   first move when it is zero, writes h/v for a segment that happens to be
-   axis-aligned, SVG has shorthands (H, V, S, T) that leave a coordinate out,
-   and a state may simply have more segments, or a curve where the other has
-   a line. The SVG 2 API that would canonicalise path data (getPathData) has
-   never shipped, so the lists are reconciled here, on the computed values —
-   a fixed grammar, the browser's serialisation of its segment list: absolute
-   upper-case commands, each with a fixed number of coordinates, single
-   spaces.
+   Two path() values interpolate only if they are the same list of commands;
+   otherwise the shape snaps at the midpoint while the transform glides. The
+   same drawing is not always the same list — typst-svg writes h/v for an
+   axis-aligned segment, SVG shorthands leave a coordinate out, and a state may
+   have more segments, or a curve where the other has a line. getPathData never
+   shipped, so the lists are reconciled here, on the computed values: absolute
+   upper-case commands, fixed arity, single spaces.
 
-   Nothing is rewritten for its own sake: the lists are walked side by side
-   and a command is written differently only where the two sides differ, in
-   the way that keeps the picture:
-   · the same letter on both sides is copied — H against H, S against S
-     interpolate as they are;
-   · two spellings of the same kind of segment (H or V against L, S against
-     C, T against Q) are both written in full: a line as L, a cubic with its
-     reflected control point written out. Exact, in geometry and — measured
-     — on screen;
-   · a line against a curve is written as the curve it is (a quadratic with
-     its control point at the middle, a cubic with control points at a third
-     and two thirds), a quadratic against a cubic is elevated. Exact in
-     geometry; the stroker draws lines and curves through different code and
-     a few edge pixels may differ, which is why this is done only here and
-     not everywhere;
-   · a moveto directly followed by another moveto — an empty subpath,
-     neither stroked nor filled — is dropped where the other side has none;
-   · where one side has a drawing command at a place where the other has
-     finished its subpath (Z, the next M, or the end), a zero-length copy at
-     the other's current point is inserted. A zero-length segment draws
-     nothing (measured: not a pixel, filled or stroked, with any cap and
-     join), and the extra segments then grow out of the end of the subpath —
-     a line extends, a polygon grows from its last vertex. Where new
-     vertices should come from is the author's choice, made by drawing the
-     states with the same points (the Liu Hui page); this is what happens
-     otherwise.
-   What is left — an arc against anything else, a different number of
-   subpaths — is not a matter of spelling and is cross-faded. A value
-   outside the grammar is not read at all and goes to the browser as it is.
+   A command is rewritten only where the two sides differ, and only into the
+   same geometry — a shorthand written out, a line as the curve it is, a
+   quadratic elevated. Where one side has finished its subpath, a zero-length
+   segment at the other's current point is inserted, so the extra segments grow
+   out of the end. An arc against anything else, or a different number of
+   subpaths, is not a matter of spelling: align() gives up and the caller
+   cross-fades.
 
-   Pure functions of strings, no DOM: tools/paths.mjs runs them under Node
-   against a table of cases. */
+   Pure functions of strings, no DOM; tools/paths.mjs runs them under Node. */
 
-var tweenPaths = (function () {
+const tweenPaths = (() => {
   "use strict";
 
-  var ARITY = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 };
-  var KIND = { L: "L", H: "L", V: "L", Q: "Q", T: "Q", C: "C", S: "C" };   // drawing commands, by the curve they draw
-  var RANK = { L: 1, Q: 2, C: 3 };
+  const ARITY = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 };
+  const KIND = { L: "L", H: "L", V: "L", Q: "Q", T: "Q", C: "C", S: "C" };   // drawing commands, by the curve they draw
+  const RANK = { L: 1, Q: 2, C: 3 };
 
-  /* The tokens of a computed d (letter, coordinates, letter, …): the string
-     argument of path(), split on the single spaces of the browser's
-     serialisation, checked against the grammar; null for none or a value
-     outside it. Coordinates stay the strings the browser wrote. Memoised by
-     the string, with its letters — a pure function of the value. */
-  var memo = new Map();
-  function parse(v) {
-    var m = memo.get(v), t;
-    if (!m) { t = tokens(v); memo.set(v, m = { tok: t, sig: t ? letters(t) : "" }); }
+  /* The tokens of a computed d, and its letters; null for a value outside the
+     grammar. Coordinates stay the strings the browser wrote. */
+  const memo = new Map();
+  const parse = v => {
+    let m = memo.get(v);
+    if (!m) { const t = tokens(v); memo.set(v, m = { tok: t, sig: t ? letters(t) : "" }); }
     return m;
-  }
-  function tokens(v) {
-    var a = v.indexOf('"'), z = v.lastIndexOf('"');
-    if (v.slice(0, 5) !== "path(" || a < 0 || z <= a) return null;
-    var t = v.slice(a + 1, z).split(" ");
-    for (var i = 0; i < t.length; i += 1 + k) {
-      var k = ARITY[t[i]];
+  };
+  const tokens = v => {
+    const a = v.indexOf('"'), z = v.lastIndexOf('"');
+    if (!v.startsWith("path(") || a < 0 || z <= a) return null;
+    const t = v.slice(a + 1, z).split(" ");
+    for (let i = 0; i < t.length;) {
+      const k = ARITY[t[i]];
       if (k == null) return null;
+      i += 1 + k;
     }
     return t;
-  }
-  function letters(t) {
-    var s = "";
-    for (var i = 0; i < t.length; i += 1 + ARITY[t[i]]) s += t[i];
+  };
+  const letters = t => {
+    let s = "";
+    for (let i = 0; i < t.length; i += 1 + ARITY[t[i]]) s += t[i];
     return s;
-  }
-  function serialize(t) { return 'path("' + t.join(" ") + '")'; }
+  };
+  const serialize = t => `path("${t.join(" ")}")`;
 
-  /* A cursor over one token list: the command under it, and the current
-     point, subpath start and last control points before it — what writing
-     the command in another spelling needs. */
-  function cursor(t) {
-    return { t: t, i: 0, x: "0", y: "0", sx: "0", sy: "0", cx: "0", cy: "0", qx: "0", qy: "0", prev: "" };
-  }
-  function letter(c) { return c.t[c.i]; }
-  function empty(c) { return c.t[c.i] === "M" && c.t[c.i + 3] === "M"; }   // a moveto no drawing follows
+  /* A cursor over one token list: the command under it, and the point, subpath
+     start and control points before it, which another spelling needs. */
+  const cursor = t => ({ t, i: 0, x: "0", y: "0", sx: "0", sy: "0", cx: "0", cy: "0", qx: "0", qy: "0", prev: "" });
+  const letter = c => c.t[c.i];
+  const empty = c => c.t[c.i] === "M" && c.t[c.i + 3] === "M";   // a moveto no drawing follows
   /* control points the command under c leaves implicit */
-  function reflectC(c) { return c.prev === "C" || c.prev === "S" ? [2 * c.x - c.cx, 2 * c.y - c.cy] : [c.x, c.y]; }
-  function reflectQ(c) { return c.prev === "Q" || c.prev === "T" ? [2 * c.x - c.qx, 2 * c.y - c.qy] : [c.x, c.y]; }
-  /* Push the command under c onto out, spelled `as`: its own letter (copied),
-     the full letter of its kind, or a higher kind. */
-  function emit(out, c, as) {
-    var t = c.t, i = c.i, l = t[i], arity = ARITY[l], k, x1, y1, p, q;
-    if (as === l) { for (k = 0; k <= arity; k++) out.push(t[i + k]); return; }
-    x1 = l === "H" ? t[i + 1] : l === "V" ? c.x : t[i + arity - 1];
-    y1 = l === "H" ? c.y : l === "V" ? t[i + 1] : t[i + arity];
+  const reflectC = c => (c.prev === "C" || c.prev === "S" ? [2 * c.x - c.cx, 2 * c.y - c.cy] : [c.x, c.y]);
+  const reflectQ = c => (c.prev === "Q" || c.prev === "T" ? [2 * c.x - c.qx, 2 * c.y - c.qy] : [c.x, c.y]);
+
+  /* The command under c, pushed onto out spelled `as`. */
+  const emit = (out, c, as) => {
+    const { t, i } = c, l = t[i], arity = ARITY[l];
+    if (as === l) { out.push(...t.slice(i, i + arity + 1)); return; }
+    const x1 = l === "H" ? t[i + 1] : l === "V" ? c.x : t[i + arity - 1];
+    const y1 = l === "H" ? c.y : l === "V" ? t[i + 1] : t[i + arity];
     if (as === "L") out.push("L", x1, y1);
     else if (KIND[l] === "L") {                       // a line as a curve
       if (as === "Q") out.push("Q", (+c.x + +x1) / 2, (+c.y + +y1) / 2, x1, y1);
       else out.push("C", +c.x + (x1 - c.x) / 3, +c.y + (y1 - c.y) / 3, +c.x + 2 * (x1 - c.x) / 3, +c.y + 2 * (y1 - c.y) / 3, x1, y1);
     } else if (KIND[l] === "Q") {                     // a quadratic in full, or elevated
-      p = l === "T" ? reflectQ(c) : [t[i + 1], t[i + 2]];
-      if (as === "Q") out.push("Q", p[0], p[1], x1, y1);
-      else out.push("C", +c.x + 2 * (p[0] - c.x) / 3, +c.y + 2 * (p[1] - c.y) / 3, +x1 + 2 * (p[0] - x1) / 3, +y1 + 2 * (p[1] - y1) / 3, x1, y1);
+      const [px, py] = l === "T" ? reflectQ(c) : [t[i + 1], t[i + 2]];
+      if (as === "Q") out.push("Q", px, py, x1, y1);
+      else out.push("C", +c.x + 2 * (px - c.x) / 3, +c.y + 2 * (py - c.y) / 3, +x1 + 2 * (px - x1) / 3, +y1 + 2 * (py - y1) / 3, x1, y1);
     } else {                                          // S in full
-      q = reflectC(c);
-      out.push("C", q[0], q[1], t[i + 1], t[i + 2], x1, y1);
+      const [qx, qy] = reflectC(c);
+      out.push("C", qx, qy, t[i + 1], t[i + 2], x1, y1);
     }
-  }
+  };
   /* a zero-length segment of kind `as` at x, y */
-  function rest(out, as, x, y) {
+  const rest = (out, as, x, y) => {
     out.push(as);
-    for (var k = 0; k < ARITY[as]; k += 2) out.push(x, y);
-  }
-  /* advance c past the command under it, keeping its point state */
-  function advance(c) {
-    var t = c.t, i = c.i, l = t[i], arity = ARITY[l], p;
+    for (let k = 0; k < ARITY[as]; k += 2) out.push(x, y);
+  };
+  /* past the command under c, keeping the point state it leaves */
+  const advance = c => {
+    const { t, i } = c, l = t[i], arity = ARITY[l];
     switch (l) {
       case "M": c.x = c.sx = t[i + 1]; c.y = c.sy = t[i + 2]; break;
       case "Z": c.x = c.sx; c.y = c.sy; break;
@@ -1581,196 +1510,165 @@ var tweenPaths = (function () {
       case "C": c.cx = t[i + 3]; c.cy = t[i + 4]; c.x = t[i + 5]; c.y = t[i + 6]; break;
       case "S": c.cx = t[i + 1]; c.cy = t[i + 2]; c.x = t[i + 3]; c.y = t[i + 4]; break;
       case "Q": c.qx = t[i + 1]; c.qy = t[i + 2]; c.x = t[i + 3]; c.y = t[i + 4]; break;
-      case "T": p = reflectQ(c); c.qx = p[0]; c.qy = p[1]; c.x = t[i + 1]; c.y = t[i + 2]; break;
+      case "T": [c.qx, c.qy] = reflectQ(c); c.x = t[i + 1]; c.y = t[i + 2]; break;
       default: c.x = t[i + arity - 1]; c.y = t[i + arity];      // L, A
     }
     c.prev = l;
     c.i += 1 + arity;
-  }
+  };
+
   /* Reconcile two token lists; [a', b'] with equal letters, or null. */
-  function merge(a, b) {
-    var A = cursor(a), B = cursor(b), outA = [], outB = [], la, lb, ka, kb, as;
+  const merge = (a, b) => {
+    const A = cursor(a), B = cursor(b), outA = [], outB = [];
     while (A.i < a.length || B.i < b.length) {
       if (empty(A) && !empty(B)) { A.i += 3; continue; }
       if (empty(B) && !empty(A)) { B.i += 3; continue; }
-      la = letter(A); lb = letter(B); ka = KIND[la]; kb = KIND[lb];
+      const la = letter(A), lb = letter(B), ka = KIND[la], kb = KIND[lb];
       if (la === lb && !ka) { emit(outA, A, la); emit(outB, B, lb); advance(A); advance(B); }
       else if (ka && kb) {
-        as = la === lb ? la : RANK[ka] >= RANK[kb] ? ka : kb;
+        const as = la === lb ? la : RANK[ka] >= RANK[kb] ? ka : kb;
         emit(outA, A, as); emit(outB, B, as); advance(A); advance(B);
       } else if (kb && (la == null || la === "Z" || la === "M")) { rest(outA, kb, A.x, A.y); emit(outB, B, kb); advance(B); }
       else if (ka && (lb == null || lb === "Z" || lb === "M")) { emit(outA, A, ka); rest(outB, ka, B.x, B.y); advance(A); }
       else return null;
     }
     return [outA, outB];
-  }
+  };
 
-  /* Bring several computed d values to one command list: the first list
-     absorbs every other (padding and promotion accumulate), then each is
-     aligned to the result. The values in the same order, rewritten where
-     they had to be; null if some pair cannot be aligned. A value outside the
-     grammar leaves all of them as they are, for the browser to try. */
-  function align(ds) {
-    var ms = ds.map(parse), k, r, out = ds.slice();
-    if (ms.some(function (m) { return !m.tok; })) return out;
+  /* Several computed d values brought to one command list: the first absorbs
+     every other, then each is aligned to the result. null if a pair cannot be;
+     a value outside the grammar leaves them all as they are. */
+  const align = ds => {
+    const ms = ds.map(parse), out = [...ds];
+    if (ms.some(m => !m.tok)) return out;
     /* the common case, decided on the letters: nothing to do */
-    for (k = 1; k < ms.length; k++) if (ms[k].sig !== ms[0].sig) break;
-    if (k === ms.length) return out;
-    var ref = ms[0].tok, sig = ms[0].sig;
-    for (k = 1; k < ms.length; k++) {
-      if (ms[k].sig === sig) continue;
-      r = merge(ref, ms[k].tok);
+    if (ms.every(m => m.sig === ms[0].sig)) return out;
+    let ref = ms[0].tok, sig = ms[0].sig;
+    for (const m of ms.slice(1)) {
+      if (m.sig === sig) continue;
+      const r = merge(ref, m.tok);
       if (!r) return null;
-      ref = r[0]; sig = letters(ref);
+      [ref] = r; sig = letters(ref);
     }
-    for (k = 0; k < ms.length; k++) {
-      if (ms[k].sig === sig) continue;
-      r = merge(ref, ms[k].tok);
+    for (const [k, m] of ms.entries()) {
+      if (m.sig === sig) continue;
+      const r = merge(ref, m.tok);
       if (!r) return null;
       out[k] = serialize(r[1]);
     }
     return out;
-  }
+  };
 
-  return { tokens: tokens, letters: letters, serialize: serialize, merge: merge, align: align };
+  return { tokens, letters, serialize, merge, align };
 })();
 
 /* ── tween · the engine ─────────────────────────────────────────────────
-   N states of one drawing, each an SVG subtree of the same shape, and the
-   browser moved between two of them. Nothing here knows about pages, slides
-   or navigation: it is handed the states and returns the animations.
+   N states of one drawing, each an SVG subtree of the same shape. The states
+   are that drawing under different numbers, so the subtrees are walked node by
+   node and every attribute that differs becomes a keyframe. What has no
+   in-between cross-fades. Nothing here knows about pages or navigation: it is
+   handed the states and gives back animations. */
 
-   The states are the same drawing under different numbers — same structure,
-   only the values differ — so the two subtrees are walked node by node and
-   every attribute that differs becomes a keyframe: the path's d, the transform,
-   colours, stroke width, opacity, x/y/width/height. What has no in-between
-   cross-fades. Playing them is waapi's job, not this file's. */
-
-window.tween = (function () {
+window.tween = (() => {
    "use strict";
 
-   /* The attributes compared node by node. Whether one changed is decided on the
-      attribute string — the states come from the same code, equal string means
-      unchanged. The table maps SVG attribute name → the same property's name in
-      the CSSOM / in keyframes (keyframes only accept the IDL name;
-      "stroke-width" is silently dropped). */
-   var PROPS = {
+   /* SVG attribute → its name in the CSSOM. Keyframes take only the IDL name:
+      "stroke-width" is silently dropped. Whether one changed is decided on the
+      attribute string — same code, equal string means unchanged. */
+   const PROPS = {
       d: "d", transform: "transform", fill: "fill", stroke: "stroke", "stroke-width": "strokeWidth",
       "stroke-dasharray": "strokeDasharray", "stroke-dashoffset": "strokeDashoffset",
       opacity: "opacity", "fill-opacity": "fillOpacity", "stroke-opacity": "strokeOpacity",
-      x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry"
+      x: "x", y: "y", width: "width", height: "height", r: "r", cx: "cx", cy: "cy", rx: "rx", ry: "ry",
    };
-   var noted = {};
-
+   const noted = new Set();
 
    /* What differs across the nodes in list (same position in each state):
       `props`, the attributes in PROPS that are not all equal, and `other`, true
       if anything else differs (a glyph's href, say) — something that cannot be
       interpolated and is cross-faded instead. */
-   function changed(list) {
-      var first = list[0], props = [], other = false, a, k, attr;
-      for (a in PROPS) {
-         var v = first.getAttribute(a);
-         for (k = 1; k < list.length; k++) if (list[k].getAttribute(a) !== v) { props.push(a); break; }
+   const changed = list => {
+      const [first, ...rest] = list;
+      const props = Object.keys(PROPS).filter(a => {
+         const v = first.getAttribute(a);
+         return rest.some(el => el.getAttribute(a) !== v);
+      });
+      const other = rest.some(el =>
+         el.attributes.length !== first.attributes.length ||
+         [...el.attributes].some(({ name, value }) =>
+            !PROPS[name] && name !== "style" && first.getAttribute(name) !== value));
+      return { props, other };
+   };
+
+   /* The transform attribute as the SVG DOM parsed it, multiplied left to
+      right — the value a CSS transform on the element replaces. */
+   const transformOf = el => {
+      const list = el.transform.baseVal, m = new DOMMatrix();
+      for (let i = 0; i < list.numberOfItems; i++) m.multiplySelf(list.getItem(i).matrix);
+      return m.toString();
+   };
+
+   /* Current values, in keyframe form. Never parsed by hand: getComputedStyle
+      has already turned the presentation attributes into CSS syntax. transform
+      is the exception — Blink resolves it to none for an element without a box
+      and WebKit does not map the attribute in at all — so it comes from the SVG
+      DOM. Read fresh, so every caller must read at rest. A property the browser
+      does not have (d in Safari before 27) is left out and switches instead. */
+   const values = (el, attrs) => {
+      let cs = null;
+      const kf = {};
+      for (const a of attrs) {
+         const v = a === "transform" ? transformOf(el) : (cs ??= getComputedStyle(el))[PROPS[a]];
+         if (typeof v === "string" && v !== "") kf[PROPS[a]] = v;
       }
-      for (k = 1; k < list.length && !other; k++) {
-         var el = list[k];
-         if (el.attributes.length !== first.attributes.length) { other = true; break; }
-         for (var q = 0; q < el.attributes.length; q++) {
-            attr = el.attributes[q];
-            if (PROPS[attr.name] || attr.name === "style") continue;
-            if (first.getAttribute(attr.name) !== attr.value) { other = true; break; }
+      return kf;
+   };
+
+   /* Two states made the same kind of value, each keeping its own picture.
+      false when a path could not be aligned; that node cross-fades. */
+   const settle = frames => {
+      /* `none` against a colour is a discrete switch; `transparent` paints the
+         same nothing and interpolates premultiplied, so no black midpoint. */
+      for (const k of ["fill", "stroke"]) {
+         if (k in frames[0] && frames.some(f => f[k] !== "none")) {
+            for (const f of frames) if (f[k] === "none") f[k] = "transparent";
          }
       }
-      return { props: props, other: other };
-   }
-
-   /* Current values of these attributes on node el, in keyframe form. Values
-      are never parsed by hand: the browser has already turned the presentation
-      attributes into CSS properties, and getComputedStyle gives CSS syntax — d
-      as path(), x with px, defaults filled in, fill inherited. transform is the
-      exception: the computed value is not the attribute (Blink resolves it to
-      none for an element without a box, WebKit does not map the attribute into
-      it at all), so it is read from the SVG DOM, see transformOf. Read fresh
-      every time — a computed value is what the node shows now, so every caller
-      reads at rest: the host halts what is running first, and a drawing played
-      continuously is never stepped. A property the browser does not have (d in
-      Safari before 27) is left out; that one then switches instead of
-      interpolating. */
-   function values(el, attrs, kf) {
-      var cs = null;
-      attrs.forEach(function (a) {
-         var p = PROPS[a], v;
-         if (a === "transform") v = transformOf(el);
-         else { cs = cs || getComputedStyle(el); v = cs[p]; }
-         if (typeof v === "string" && v !== "") kf[p] = v;
-      });
-      return kf;
-   }
-
-   /* The element's own transform — the transform attribute as the SVG DOM
-      parsed it, the list multiplied left to right, which is the value a CSS
-      transform on the element replaces. tools/ui.mjs checks it against the
-      browser's own composition (getCTM). */
-   function transformOf(el) {
-      var list = el.transform.baseVal, m = new DOMMatrix();
-      for (var i = 0; i < list.numberOfItems; i++) m.multiplySelf(list.getItem(i).matrix);
-      return m.toString();
-   }
-
-   /* Every rewrite here keeps the picture of each state and only changes how it
-      is written, so that two states become the same kind of value. Returns
-      false when a path could not be aligned; that node is cross-faded. */
-   function settle(frames) {
-      /* fill / stroke: `none` against a colour is a discrete switch. `transparent`
-         paints the same nothing, and colours interpolate premultiplied, so the
-         paint fades in without passing through black. */
-      ["fill", "stroke"].forEach(function (k) {
-         if (!(k in frames[0])) return;
-         var some = frames.some(function (f) { return f[k] !== "none"; });
-         if (some) frames.forEach(function (f) { if (f[k] === "none") f[k] = "transparent"; });
-      });
       /* d: two states whose paths are not the same list of commands are reconciled by paths.js */
       if (!("d" in frames[0])) return true;
-      var ds = tweenPaths.align(frames.map(function (f) { return f.d; }));
+      const ds = tweenPaths.align(frames.map(f => f.d));
       if (!ds) return false;
-      frames.forEach(function (f, k) { f.d = ds[k]; });
+      frames.forEach((f, k) => { f.d = ds[k]; });
       return true;
-   }
+   };
 
-   /* The label grammar is read here and nowhere else; everything downstream
-      sees attributes. `tween` (or `tween:name`) is a container → data-tween
-      holds the name, `tween@i` is one of its states → data-tween-at holds the
-      index. */
-   function tag(root) {
-      (root || document).querySelectorAll("[data-typst-label]").forEach(function (g) {
-         var l = g.getAttribute("data-typst-label");
-         if (l.slice(0, 6) === "tween@") g.dataset.tweenAt = l.slice(6);
+   /* The label grammar, read here and nowhere else; everything downstream sees
+      attributes. */
+   const tag = root => {
+      for (const g of (root ?? document).querySelectorAll("[data-typst-label]")) {
+         const l = g.getAttribute("data-typst-label");
+         if (l.startsWith("tween@")) g.dataset.tweenAt = l.slice(6);
          else if (l === "tween") g.dataset.tween = "";
-         else if (l.slice(0, 6) === "tween:") g.dataset.tween = l.slice(6);
-      });
-   }
-   if (document.readyState === "loading") addEventListener("DOMContentLoaded", function () { tag(); });
+         else if (l.startsWith("tween:")) g.dataset.tween = l.slice(6);
+      }
+   };
+   if (document.readyState === "loading") addEventListener("DOMContentLoaded", () => tag());
    else tag();
 
-   var api = {
-      tag: tag,
+   const api = {
+      tag,
 
-      /* The containers in a subtree, outermost only: a drawing whose states
-         hold drawings of their own is one drawing here, and the inner states
-         are ordinary nodes. */
-      boxes: function (root) {
-         return Array.prototype.filter.call(root.querySelectorAll("[data-tween]"), function (c) {
-            return !c.parentNode.closest("[data-tween]");
-         });
-      },
+      /* The containers in a subtree, outermost only: a drawing inside a state
+         is an ordinary node. */
+      boxes: root => [...root.querySelectorAll("[data-tween]")]
+         .filter(c => !c.parentNode.closest("[data-tween]")),
 
       /* The states of one container, by index. */
-      states: function (box) {
-         var out = [];
-         box.querySelectorAll("[data-tween-at]").forEach(function (g) {
+      states(box) {
+         const out = [];
+         for (const g of box.querySelectorAll("[data-tween-at]")) {
             if (g.closest("[data-tween]") === box) out[+g.dataset.tweenAt] = g;
-         });
+         }
          return out.filter(Boolean);
       },
 
@@ -1778,106 +1676,109 @@ window.tween = (function () {
          not the same drawing after all — a different node count or a different
          tag in the same place, which has no node-to-node reading and is
          cross-faded whole. */
-      nodes: function (states, label) {
-         var all = function (g) { return Array.prototype.slice.call(g.querySelectorAll("*")); };
-         var lists = states.map(all);
-         var ok = lists.every(function (list) {
-            return list.length === lists[0].length &&
-               list.every(function (el, q) { return el.tagName === lists[0][q].tagName; });
-         });
+      nodes(states, label) {
+         const lists = states.map(g => [...g.querySelectorAll("*")]);
+         const ok = lists.every(l =>
+            l.length === lists[0].length && l.every((el, q) => el.tagName === lists[0][q].tagName));
          if (ok) return lists;
-         console.info("[tween] the states of " + label + " differ in structure (node count or types); they cross-fade instead of morphing");
+         console.info(`[tween] the states of ${label} differ in structure (node count or types); they cross-fade instead of morphing`);
          return null;
       },
 
       /* One node across the states: the keyframes to animate it with, and
          whether something about it has to cross-fade instead. `frames` is null
          when nothing in PROPS differs — that node simply stays as it is. */
-      frames: function (column, label) {
-         var diff = changed(column), fade = diff.other;
-         if (!diff.props.length) return { frames: null, fade: fade };
-         var frames = column.map(function (el) { return values(el, diff.props, {}); });
+      frames(column, label) {
+         const { props, other } = changed(column);
+         let fade = other;
+         if (!props.length) return { frames: null, fade };
+         const frames = column.map(el => values(el, props));
          if (!settle(frames)) {
             fade = true;
-            frames.forEach(function (f) { delete f.d; });
-            if (!noted[label]) { noted[label] = true; console.info("[tween] " + label + ": a path cannot be interpolated and cross-fades instead."); }
+            for (const f of frames) delete f.d;
+            if (!noted.has(label)) {
+               noted.add(label);
+               console.info(`[tween] ${label}: a path cannot be interpolated and cross-fades instead.`);
+            }
          }
-         if (!Object.keys(frames[0]).length) return { frames: null, fade: fade };
-         return { frames: frames, fade: fade };
+         return { frames: Object.keys(frames[0]).length ? frames : null, fade };
       },
 
       /* Whether this drawing plays its states rather than leaving them to be
-         stepped — it said so itself, in the one place a declaration can be
-         written. A host that steps drawings asks; it does not read labels. */
-      plays: function (box) {
-         return !!box.closest('tween-play,[data-typst-label^="tween-play@"]');
-      },
+         stepped. A host that steps drawings asks; it does not read labels. */
+      plays: box => !!box.closest('tween-play,[data-typst-label^="tween-play@"]'),
 
-      /* These states, played over time instead of stepped: one animation per
-         node, each keyframe that node's values in that state. The nodes that
-         move are the first state's — the one the stylesheet shows — so nothing
-         is displayed that was not already there. What comes back is the
-         browser's animations; whoever asked for them owns them, and pausing,
-         resuming and cancelling are theirs. */
-      play: function (box, o, role) {
-         var lists = api.nodes(api.states(box), box.dataset.tween || "a drawing");
+      /* Played over time instead of stepped: one animation per node, each
+         keyframe that node's values in that state. What moves is the first
+         state, the one the stylesheet shows. The animations come back to
+         whoever asked; pausing and cancelling are theirs. */
+      play(box, o, role) {
+         const label = box.dataset.tween || "a drawing";
+         const lists = api.nodes(api.states(box), label);
          if (!lists) return [];
-         return lists[0].map(function (node, j) {
-            var f = api.frames(lists.map(function (l) { return l[j]; }), box.dataset.tween || "a drawing");
-            return f.frames ? waapi.animate(node, f.frames, o, role) : null;
-         }).filter(Boolean);
+         return lists[0]
+            .map((node, j) => {
+               const { frames } = api.frames(lists.map(l => l[j]), label);
+               return frames ? waapi.animate(node, frames, o, role) : null;
+            })
+            .filter(Boolean);
       },
 
-      /* This drawing, playing what it declared. Once per drawing: a second call
-         finds it already going. */
-      start: function (host, o) {
+      /* Once per drawing: a second call finds it already going. */
+      start(host, o) {
          if (host.dataset.tweenPlayOn) return;
          host.dataset.tweenPlayOn = "1";
          tag(host);
-         api.boxes(host).forEach(function (box) {
-            var as = api.play(box, o, "tween:play");
-            if (waapi.reduced()) as.forEach(function (a) { a.pause(); });
-         });
+         for (const box of api.boxes(host)) {
+            const as = api.play(box, o, "tween:play");
+            if (waapi.reduced()) as.forEach(a => a.pause());
+         }
       },
 
-      /* For what has no in-between: a glyph that changes, a path that cannot be
-         aligned, states of a different structure altogether. The old is kept on
-         stage and fades out while the new fades in, with plus-lighter inside an
-         isolated host so a pixel both draw alike stays exactly as it is instead
-         of dimming halfway. `olds` are nodes of the old state that stay visible
-         while the rest of it is hidden; without them the whole old state fades.
-         The caller keeps the animations and calls undo when they are over. */
-      crossfade: function (host, oldG, newG, olds, news, timing) {
-         var cleanup = [], anims = [];
-         var set = function (el, prop, v) { var was = el.style[prop]; el.style[prop] = v; cleanup.push(function () { el.style[prop] = was; }); };
+      /* For what has no in-between. The old fades out while the new fades in,
+         with plus-lighter inside an isolated host so a pixel both draw alike
+         does not dim halfway. `olds` are nodes of the old state to keep visible
+         while the rest of it is hidden. The caller calls undo when they end. */
+      crossfade(host, oldG, newG, olds, news, timing) {
+         let cleanup = [];
+         const set = (el, prop, v) => {
+            const was = el.style[prop];
+            el.style[prop] = v;
+            cleanup.push(() => { el.style[prop] = was; });
+         };
          set(host, "isolation", "isolate");
          set(oldG, "display", "inline");
          set(oldG, "mixBlendMode", "plus-lighter");
          set(newG, "mixBlendMode", "plus-lighter");
-         var out = olds || [oldG], inn = news || [newG];
-         if (olds) { set(oldG, "visibility", "hidden"); olds.forEach(function (el) { set(el, "visibility", "visible"); }); }
-         out.forEach(function (el) { anims.push(waapi.animate(el, [{ opacity: 1 }, { opacity: 0 }], timing)); });
-         inn.forEach(function (el) { anims.push(waapi.animate(el, [{ opacity: 0 }, { opacity: 1 }], timing)); });
-         return { anims: anims, undo: function () { cleanup.forEach(function (f) { f(); }); cleanup = []; } };
-      }
+         if (olds) {
+            set(oldG, "visibility", "hidden");
+            for (const el of olds) set(el, "visibility", "visible");
+         }
+         const anims = [
+            ...(olds ?? [oldG]).map(el => waapi.animate(el, [{ opacity: 1 }, { opacity: 0 }], timing)),
+            ...(news ?? [newG]).map(el => waapi.animate(el, [{ opacity: 0 }, { opacity: 1 }], timing)),
+         ];
+         return { anims, undo: () => { cleanup.forEach(f => f()); cleanup = []; } };
+      },
    };
 
-   /* The declaration is an element and the browser says when it is in the
-      document. Around the drawing where an element could be written; outside
-      the frames, pointing at the ordinal in a label, where none could. */
+   /* Around the drawing where an element could be written; outside the frames,
+      pointing at the ordinal in a label, where none could. */
    customElements.define("tween-play", class extends HTMLElement {
       connectedCallback() {
-         /* Upgraded while the document is still parsing, this element's own
-            children are not there yet and neither is what it points at, so the
-            work waits for the document to be whole. */
-         if (document.readyState === "loading") { addEventListener("DOMContentLoaded", this.run.bind(this), { once: true }); return; }
+         /* Upgraded mid-parse, its children are not there yet and neither is
+            what it points at. */
+         if (document.readyState === "loading") {
+            addEventListener("DOMContentLoaded", () => this.run(), { once: true });
+            return;
+         }
          this.run();
       }
       run() {
-         var o;
-         try { o = JSON.parse(this.dataset.spec); } catch (e) { return; }
-         var at = this.dataset.at;
-         var el = at == null ? this : document.querySelector('[data-typst-label="tween-play@' + at + '"]');
+         let o;
+         try { o = JSON.parse(this.dataset.spec); } catch { return; }
+         const { at } = this.dataset;
+         const el = at == null ? this : document.querySelector(`[data-typst-label="tween-play@${at}"]`);
          if (el) api.start(el, o);
       }
    });
@@ -1886,201 +1787,187 @@ window.tween = (function () {
 })();
 </script><script>/* ── vit · runtime ─────────────────────────────────────────────────
    The player. Three jobs:
-   · Transitions — a page/frame change starts one View Transition with the
-     types the Typst side wrote on the frame plus the direction; everything
-     visual lives in deck.css under :active-view-transition-type(). Adding an
-     effect is a CSS-only change.
-   · Element animation — the states of mark(key, s0, s1, …) are stepped through
-     with the keys and interpolated node by node with Web Animations;
-     mark(anim:) plays an object (or its states) continuously.
+   · Transitions — a page or frame change starts one View Transition with the
+     types the Typst side wrote on the frame; everything visual is in deck.css
+     under :active-view-transition-type(), so an effect is a CSS-only change.
+   · Stepping — the arrow keys walk the states of the drawings on a frame,
+     which tween interpolates. What plays by itself the deck only pauses.
    · Chrome — overview, toolbar, laser pointer, speaker view.
    No dependencies; opens straight from file://.                            */
 
-(function () {
+(() => {
   "use strict";
 
   /* The file only defines; init() at the end runs, in one place and in order. */
 
-  var root = document.documentElement;
-  var deck, slides, n;
+  const root = document.documentElement;
+  let deck, slides, n;
 
   /* ── group = one page, frame = one layout state of that page ────────
      Navigation walks frames, the overview shows groups. The title is a hidden
      .vit-title inside the group; the browser flattens it to plain text. */
-  var groups = [];      // { el, title, from, to, pos }  `to` exclusive
-  var gOf = [];      // frame index → group index
-  var gn = 0;
+  const groups = [];      // { el, title, from, to, pos }  `to` exclusive
+  const gOf = [];         // frame index → group index
+  let gn = 0;
 
   /* deck(duration:), deck(easing:) — the Typst side decides every default, this side only reads */
-  var defaultMs, EASING;
+  let defaultMs, EASING;
 
-  /* Speed multiplier adjustable while presenting: `-` slower, `=` faster, `0`
-     reset. Remembered in localStorage. deck(duration:) and a transition's own
-     duration: are the baselines, written into the stylesheet by the Typst side;
-     this is the presenter's live knob, and every duration in deck.css is divided
-     by it, so one number here scales them all — including the element
-     animations, which are timed here. */
-  var speed = 1;
-  function durMs(ms) { return Math.round(ms / speed); }
-  function setSpeed(v) {
+  /* The presenter's live knob: every duration in deck.css is divided by it, and
+     so are the step animations, which are timed here. Kept in localStorage. */
+  let speed = 1;
+  const durMs = ms => Math.round(ms / speed);
+  const setSpeed = v => {
     speed = Math.min(4, Math.max(0.25, Math.round(v * 100) / 100));
-    try { localStorage.setItem("vit-speed", speed); } catch (e) { }
+    try { localStorage.setItem("vit-speed", speed); } catch { }
     root.style.setProperty("--vit-speed", speed);
-    flash(speed + "×");
-  }
+    flash(`${speed}×`);
+  };
 
-  var cur = -1;       /* the frame on stage */
-  var want = -1;       /* the accepted target. stage() runs only after the old
-                           snapshot is captured (100ms+ the first time); a next()
-                           arriving meanwhile must count from the target, or two
-                           clicks both become "go to the same page". Written only
-                           where a target is accepted — stage() must not touch it:
-                           the update callback of a skipped transition runs late
-                           and would set the target back. */
+  let cur = -1;       /* the frame on stage */
+  let want = -1;      /* the accepted target: stage() runs only once the old
+                         snapshot is captured, and a next() arriving meanwhile
+                         has to count from here. Written only where a target is
+                         accepted — a skipped transition's update callback runs
+                         late and would set it back. */
 
-  var reduced, prefersLight, canvit;
-  var mirror = window.name === "vit-mirror";   // a preview inside the desk or the speaker view: it presents, and builds no chrome
+  let reduced, prefersLight, canvit;
+  const mirror = window.name === "vit-mirror";   // a preview inside the desk or the speaker view: it presents, and builds no chrome
 
-  function clamp(i) { return i < 0 ? 0 : i > n - 1 ? n - 1 : i; }
-  function at(i) { return slides[i].vitAt || 0; }
-  function over() { return deck.classList.contains("vit-all"); }
-  function atDesk() { return deck.classList.contains("vit-desk"); }
+  const clamp = i => (i < 0 ? 0 : i > n - 1 ? n - 1 : i);
+  const at = i => slides[i].vitAt || 0;
+  const over = () => deck.classList.contains("vit-all");
+  const atDesk = () => deck.classList.contains("vit-desk");
 
   /* ── positions = frames × steps, flattened into one sequence ───────────
-     To the audience a page only has "press once, advance one notch": a frame
-     (transition, View Transitions) and a step of an element animation (WAAPI)
-     look the same, only the browser API differs. So the dots, the counter, the
-     progress bar, the hash and the speaker view's "next" all use this sequence
-     and never distinguish frames from steps.
-     POS holds every position of the deck as { i, at, n }; g.pos those of one
-     page; abs[i] is the index of frame i at step 0, head[i] its index within
-     the page. */
-  var POS = [], head = [], abs = [];
+     To the audience a frame and a step are the same thing, "one more press", so
+     the dots, the counter, the progress bar, the hash and the speaker view's
+     "next" all read this sequence and never tell them apart. POS is every
+     position as { i, at, n }, g.pos those of one page; abs[i] is where frame i
+     starts, head[i] where it starts within its page. */
+  const POS = [], head = [], abs = [];
 
   /* deck(…) parameters, the presenter's speed, what this browser can do */
-  function settings() {
+  const settings = () => {
     defaultMs = parseInt(deck.dataset.duration, 10);
     EASING = deck.dataset.easing.split(" ").map(Number);   // the four numbers of a cubic Bézier
-    try { speed = parseFloat(localStorage.getItem("vit-speed")) || 1; } catch (e) { }
-    reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    prefersLight = window.matchMedia("(prefers-color-scheme: light)");
+    try { speed = parseFloat(localStorage.getItem("vit-speed")) || 1; } catch { }
+    reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    prefersLight = matchMedia("(prefers-color-scheme: light)");
     canvit = typeof document.startViewTransition === "function";
-  }
+  };
 
   /* pages, frames and steps into the position sequence */
-  function buildModel() {
-    Array.prototype.forEach.call(deck.querySelectorAll(".vit-group"), function (el) {
-      var t = el.querySelector(".vit-title");
-      var g = { el: el, title: t ? t.textContent.trim() : "", from: gOf.length, to: gOf.length };
-      Array.prototype.forEach.call(el.querySelectorAll(".vit-slide"), function () { gOf.push(groups.length); g.to++; });
+  const buildModel = () => {
+    for (const el of deck.querySelectorAll(".vit-group")) {
+      const t = el.querySelector(".vit-title");
+      const g = { el, title: t ? t.textContent.trim() : "", from: gOf.length, to: gOf.length };
+      for (const _ of el.querySelectorAll(".vit-slide")) { gOf.push(groups.length); g.to++; }
       groups.push(g);
-    });
+    }
     gn = groups.length;
-    groups.forEach(function (g) {
+    for (const g of groups) {
       g.pos = [];
-      for (var i = g.from; i < g.to; i++) {
+      for (let i = g.from; i < g.to; i++) {
         head[i] = g.pos.length;
         abs[i] = POS.length;
-        for (var k = 0; k <= stepsOf(slides[i]).n; k++) {
-          var q = { i: i, at: k, n: POS.length };
+        for (let k = 0; k <= stepsOf(slides[i]).n; k++) {
+          const q = { i, at: k, n: POS.length };
           g.pos.push(q);
           POS.push(q);
         }
       }
-    });
-  }
+    }
+  };
 
   /* index of frame i at step k; without k, at the frame's current step */
-  function idx(i, k) { return abs[i] + (k == null ? at(i) : k); }
-  function progress(i) { return (POS.length < 2 ? 100 : idx(i) / (POS.length - 1) * 100) + "%"; }
+  const idx = (i, k) => abs[i] + (k ?? at(i));
+  const progress = i => `${POS.length < 2 ? 100 : (idx(i) / (POS.length - 1)) * 100}%`;
 
   /* "3" or "3.2" — only a page with more than one position gets the dot */
-  function label(i, k) {
-    var g = groups[gOf[i]];
-    return (gOf[i] + 1) + (g.pos.length > 1 ? "." + (head[i] + (k == null ? at(i) : k) + 1) : "");
-  }
+  const label = (i, k) => {
+    const g = groups[gOf[i]];
+    return (gOf[i] + 1) + (g.pos.length > 1 ? `.${head[i] + (k ?? at(i)) + 1}` : "");
+  };
 
   /* the page's speaker notes, as the layout carries them */
-  function noteOf(i) {
-    var a = groups[gOf[i]].el.querySelector(".vit-note");
-    return a ? a.innerHTML : "";
-  }
+  const noteOf = i => groups[gOf[i]].el.querySelector(".vit-note")?.innerHTML ?? "";
 
   /* The update half of a view transition, and the only way onto the stage:
      what it leaves is the state the browser captures — hence the lift. */
-  function stage(i) {
+  const stage = i => {
     lift(slides[i]);
     cur = i;
-    slides.forEach(function (s, k) {
+    slides.forEach((s, k) => {
       s.classList.toggle("is-active", k === i);
       if (k !== i) { still(s); halt(s); }
     });
     announce();
-  }
+  };
 
   /* Thumbnails, counter, address bar and speaker view all learn where we are
      from here — fired on every page change and every step. */
-  function announce() {
+  const announce = () => {
     syncThumbs();
-    try { history.replaceState(null, "", "#" + label(cur)); } catch (e) { }
+    try { history.replaceState(null, "", `#${label(cur)}`); } catch { }
     deck.dispatchEvent(new CustomEvent("vit:move-ready", { detail: { index: cur, step: at(cur) } }));
-  }
+  };
 
   /* One for one with `vit:move-ready`, including moves with nothing to animate
      and moves cut short by the next. Opening the overview announces neither. */
-  function moveDone(i) {
+  const moveDone = i =>
     deck.dispatchEvent(new CustomEvent("vit:move-done", { detail: { index: i, step: at(i) } }));
-  }
 
   /* Hover preview: temporarily show frame f at step k in its group's
      thumbnail; null restores. The step is the frame's own state, so it is
      moved for the preview and moved back on leave; syncThumbs shows it. */
-  var peeked = null;
-  function peek(f, k) {
+  let peeked = null;
+  const unpeek = () => {
+    if (peeked) stepTo(slides[peeked.i], peeked.was, true);
+    peeked = null;
+  };
+  const peek = (f, k) => {
     unpeek();
     if (f != null) { peeked = { i: f, was: at(f), at: k }; stepTo(slides[f], k, true); }
     syncThumbs();
-  }
-  function unpeek() {
-    if (peeked) stepTo(slides[peeked.i], peeked.was, true);
-    peeked = null;
-  }
+  };
 
   /* Which frame a thumbnail shows: the one being previewed, else the current
      frame while we are on that page, otherwise the last frame at its last
      step (the finished page, like a handout). The only writer of is-thumb
      and the dots' state. */
-  function syncThumbs() {
-    var now = idx(cur);
-    groups.forEach(function (g, k) {
-      var here = gOf[cur] === k, peekHere = peeked && gOf[peeked.i] === k;
-      var shown = peekHere ? peeked.i : here ? cur : g.to - 1;
+  const syncThumbs = () => {
+    const now = idx(cur);
+    groups.forEach((g, k) => {
+      const here = gOf[cur] === k, peekHere = peeked && gOf[peeked.i] === k;
+      const shown = peekHere ? peeked.i : here ? cur : g.to - 1;
       /* Judge by `want`, not `cur`: the page we are entering (transition not yet
          settled) has already been positioned — don't move it back. The moment
          the overview zoom starts, the browser stops hit-testing the real DOM and
          the dots receive pointerleave first. */
       if (!here && !peekHere && gOf[want] !== k) stepTo(slides[shown], stepsOf(slides[shown]).n, true);
-      for (var i = g.from; i < g.to; i++) slides[i].classList.toggle("is-thumb", i === shown);
+      for (let i = g.from; i < g.to; i++) slides[i].classList.toggle("is-thumb", i === shown);
       g.el.classList.toggle("is-here", here);
       if (here && atDesk()) g.el.scrollIntoView({ block: "nearest" });
       /* Dots show progress, not position: everything passed is solid, the current
          one a notch brighter. Same rule for every page — pages behind us fully
          solid, pages ahead fully hollow. */
-      if (g.dots) g.pos.forEach(function (q, d) {
-        g.dots[d].classList.toggle("is-on", q.n <= now);
-        g.dots[d].classList.toggle("is-now", q.n === now);
-        g.dots[d].classList.toggle("is-peek", !!peekHere && q.i === peeked.i && q.at === peeked.at);
+      g.dots?.forEach((dot, d) => {
+        const q = g.pos[d];
+        dot.classList.toggle("is-on", q.n <= now);
+        dot.classList.toggle("is-now", q.n === now);
+        dot.classList.toggle("is-peek", !!peekHere && q.i === peeked.i && q.at === peeked.at);
       });
     });
-  }
+  };
 
   /* Thumbnail caption and position dots. Built by the runtime, like the
      toolbar — the layout must not contain player parts. They are children of
      the group, not of a slide, so the overview zoom (named on the group) does
      not blow the caption up to full screen. */
-  function buildCaptions() {
-    groups.forEach(function (g, k) {
-      var cap = document.createElement("div");
+  const buildCaptions = () => {
+    groups.forEach((g, k) => {
+      const cap = document.createElement("div");
       cap.className = "vit-cap";
       cap.innerHTML = "<b></b><span></span>";
       cap.firstChild.textContent = k + 1;
@@ -2089,365 +1976,335 @@ window.tween = (function () {
       g.el.insertBefore(cap, g.el.firstChild);
 
       if (g.pos.length < 2) return;
-      var dots = document.createElement("div");
+      const dots = document.createElement("div");
       dots.className = "vit-dots";
-      g.dots = g.pos.map(function (q, d) {
-        var el = document.createElement("i");
+      g.dots = g.pos.map((q, d) => {
+        const el = document.createElement("i");
         el.dataset.frame = q.i;
         el.dataset.at = q.at;
-        el.title = "Step " + (d + 1);
+        el.title = `Step ${d + 1}`;
         /* hovering swaps the thumbnail to that step — no need to open the page to
            see which step is which */
-        el.addEventListener("pointerenter", function () { peek(+this.dataset.frame, +this.dataset.at); });
+        el.addEventListener("pointerenter", () => peek(q.i, q.at));
         dots.appendChild(el);
         return el;
       });
-      dots.addEventListener("pointerleave", function () { peek(null); });
+      dots.addEventListener("pointerleave", () => peek(null));
       g.el.appendChild(dots);
     });
-  }
+  };
 
   /* ── the same key several times on one page ─────────────────────────
-     View Transitions pairs one name with exactly one counterpart, so "one
-     becomes three" cannot be expressed directly. The trick is to **clone on
-     the smaller side**: copy the single one twice in place, give the three a
-     name each, and now three groups each have an old and a new — three copies
-     leave the same spot for three destinations, which reads as a split. The
-     reverse is a merge. Clones are removed and renamed elements restored once
-     the transition ends.
+     A name pairs with exactly one counterpart, so "one becomes three" has to
+     be cloned on the smaller side: copy the single one twice in place and name
+     all three, and three copies leaving one spot for three destinations reads
+     as a split. The reverse is a merge. What is cloned is the hoisted <svg>,
+     whose <use> references resolve against the document's own <defs>. */
 
-     What is cloned is the hoisted region <svg>, which only contains
-     <use xlink:href="#g…">; the glyph <symbol>s stay in the base image's
-     <defs> and resolve document-wide, so a clone carries no ids and no glyph
-     data. */
-
-  function marksOf(slide) {
-    var by = {};
-    Array.prototype.forEach.call(slide.querySelectorAll(".vit-mark[data-vit-key]"), function (m) {
-      (by[m.dataset.vitKey] = by[m.dataset.vitKey] || []).push(m);
-    });
+  const marksOf = slide => {
+    const by = new Map();
+    for (const m of slide.querySelectorAll(".vit-mark[data-vit-key]")) {
+      by.set(m.dataset.vitKey, [...(by.get(m.dataset.vitKey) ?? []), m]);
+    }
     return by;
-  }
+  };
 
   /* ── names ──────────────────────────────────────────────────────────
      m-<key>-<n>, n the occurrence of the key on its frame (hoist.js leaves
      data-vit-key; the key's characters are the Typst side's assertion).
      Given once, at load; spread() renames for one transition and restores. */
-  function nameOf(key, i) { return "m-" + key + "-" + (i + 1); }
+  const nameOf = (key, i) => `m-${key}-${i + 1}`;
   /* A name each, and whatever its object declared: the pair of effects and the
      names of its settings, as the Typst side wrote them into vitMarks. A mark
      that morphs carries them too — the effects then match no animation rule
      (those want the side, vit-only-new or vit-only-old, which soloize puts in
      front of vit-mo), while the settings still reach its images. */
-  function name(s) {
-    var by = marksOf(s);
-    Object.keys(by).forEach(function (k) {
-      var own = vitMarks[k];
-      by[k].forEach(function (m, i) {
+  const name = s => {
+    for (const [k, marks] of marksOf(s)) {
+      const own = vitMarks[k];
+      marks.forEach((m, i) => {
         m.style.viewTransitionName = nameOf(k, i);
-        if (own && own.transition) m.style.viewTransitionClass = "vit-mo " + own.transition;
+        if (own?.transition) m.style.viewTransitionClass = `vit-mo ${own.transition}`;
       });
-    });
-  }
+    }
+  };
 
   /* An unlifted frame cannot morph, so both sides of a transition are lifted
      before it starts; the sweep below only saves the wait. */
-  function lift(s) { if (s && window.vitLift(s)) name(s); }
+  const lift = s => { if (s && window.vitLift(s)) name(s); };
 
-  function unlifted() {
-    for (var d = 0; d < n; d++) {
-      var a = slides[cur + d], b = slides[cur - d];
+  const unlifted = () => {
+    for (let d = 0; d < n; d++) {
+      const a = slides[cur + d], b = slides[cur - d];
       if (a && !a.dataset.vitLifted) return a;
       if (b && !b.dataset.vitLifted) return b;
     }
     return null;
-  }
+  };
 
   /* One frame per idle slice, nearest the one on stage first — read afresh, so
      walking or jumping re-aims it with no queue. Not while a transition runs
      (the work is layout); it starts again when that ends, and on every move.
      Without an idle callback nothing is swept and frames wait until needed. */
-  var sweeping = false;
-  function sweep() {
+  let sweeping = false;
+  const sweep = () => {
     if (sweeping || mirror || pendingUndo || !window.requestIdleCallback) return;
     sweeping = true;
-    requestIdleCallback(function () {
+    requestIdleCallback(() => {
       sweeping = false;
       if (pendingUndo) return;
-      var s = unlifted();
+      const s = unlifted();
       if (!s) return;
       lift(s);
       sweep();
     });
-  }
+  };
 
   /* Spread els over K names: name i takes source floor(i*k/K); a source taken
      a second time is cloned in place. Everything touched is recorded and
      restored after the transition. */
-  function spread(els, K, key, undo) {
-    var k = els.length, used = {};
-    for (var i = 0; i < K; i++) {
-      var si = Math.floor((i * k) / K), el;
-      if (used[si]) {
+  const spread = (els, K, key, undo) => {
+    const k = els.length, used = new Set();
+    for (let i = 0; i < K; i++) {
+      const si = Math.floor((i * k) / K);
+      let el;
+      if (used.has(si)) {
         el = els[si].cloneNode(true);
         els[si].parentNode.insertBefore(el, els[si].nextSibling);
-        undo.push(function (el) { el.remove(); }.bind(null, el));
+        undo.push(() => el.remove());
       } else {
         el = els[si];
-        used[si] = 1;
-        undo.push(function (el, was) { el.style.viewTransitionName = was; }.bind(null, el, el.style.viewTransitionName));
+        used.add(si);
+        const was = el.style.viewTransitionName;
+        undo.push(() => { el.style.viewTransitionName = was; });
       }
       el.style.viewTransitionName = nameOf(key, i);
     }
-  }
+  };
 
-  function balance(from, to, undo) {
-    var A = marksOf(from), B = marksOf(to);
-    Object.keys(A).forEach(function (k) {
-      if (!B[k] || A[k].length === B[k].length) return;     // one-sided keys enter/leave; equal counts need nothing
-      var K = Math.max(A[k].length, B[k].length);
-      spread(A[k], K, k, undo);
-      spread(B[k], K, k, undo);
-    });
-  }
+  const balance = (from, to, undo) => {
+    const A = marksOf(from), B = marksOf(to);
+    for (const [k, a] of A) {
+      const b = B.get(k);
+      if (!b || a.length === b.length) continue;     // one-sided keys enter/leave; equal counts need nothing
+      const K = Math.max(a.length, b.length);
+      spread(a, K, k, undo);
+      spread(b, K, k, undo);
+    }
+  };
 
-  /* One-sided marks (names unmatched in this transition): one whose object
-     declared a mark(transition:) — the Typst side wrote the pair into
-     vitMarks — gets the pair as its class, behind the side it has
-     (vit-only-old enter-wipe-up leave-fade on the frame being left,
-     vit-only-new … on the frame being entered), and the CSS enters or leaves
-     it that way, by the transition's direction. The side matters: WebKit
-     styles both images of every named element whether or not they exist,
-     and an animation it gives an image that does not exist is never torn
-     down and comes back finished the next time the name is used. One without
-     an effect of its own has its name dropped and folds back into root — it
-     is then part of the whole-page snapshot and pushes, wipes or fades with
-     the page, aligned as one sheet. (Kept as its own group and pushed by
-     its own box it only moves its own width: the background moves and it
-     seems to stay.) Used to rely on :only-child, which Chrome 152 no longer
-     honours on transition pseudo-elements. */
-  function soloize(from, to, undo) {
-    var names = function (s) {
-      var o = {};
-      Array.prototype.forEach.call(s.querySelectorAll(".vit-mark"), function (m) { o[m.style.viewTransitionName] = 1; });
-      return o;
-    };
-    var A = names(from), B = names(to);
-    var tag = function (s, other, side) {
-      Array.prototype.forEach.call(s.querySelectorAll(".vit-mark"), function (m) {
-        if (other[m.style.viewTransitionName]) return;
-        var name = m.style.viewTransitionName, cls = m.style.viewTransitionClass, own = vitMarks[m.dataset.vitKey];
-        if (own && own.transition) m.style.viewTransitionClass = side + " " + own.transition;
+  /* Marks whose name is unmatched in this transition. One that declared an
+     effect gets it as a class behind the side it has (vit-only-old on the frame
+     being left, vit-only-new on the one entered) — the side matters because
+     WebKit styles both images of a named element whether or not they exist, and
+     an animation on an image that does not exist is never torn down. One
+     without an effect has its name dropped and folds back into root, so it
+     moves with the whole page rather than by its own width. */
+  const soloize = (from, to, undo) => {
+    const names = s => new Set([...s.querySelectorAll(".vit-mark")].map(m => m.style.viewTransitionName));
+    const A = names(from), B = names(to);
+    const tag = (s, other, side) => {
+      for (const m of s.querySelectorAll(".vit-mark")) {
+        if (other.has(m.style.viewTransitionName)) continue;
+        const was = m.style.viewTransitionName, cls = m.style.viewTransitionClass;
+        const own = vitMarks[m.dataset.vitKey];
+        if (own?.transition) m.style.viewTransitionClass = `${side} ${own.transition}`;
         else m.style.viewTransitionName = "none";
-        undo.push(function () { m.style.viewTransitionName = name; m.style.viewTransitionClass = cls; });
-      });
+        undo.push(() => { m.style.viewTransitionName = was; m.style.viewTransitionClass = cls; });
+      }
     };
     tag(from, B, "vit-only-old");
     tag(to, A, "vit-only-new");
-  }
+  };
 
-  /* ── element animation (tween(s0, s1, …)) ───────────────────────────
-     The N states of a mark are N boxes stacked in one container, which tween
-     writes as <g data-tween="key"> around <g data-tween-at="i">: the same
-     drawing under different parameters, identical structure, only
-     the numbers differ. Exactly one is shown at any time. One step = show a
-     different one, and animate every node of the new state from the value of
-     the corresponding node in the old state to its own — transform, the path's
-     d, colours, stroke width, opacity are all CSS properties, so Web Animations
-     interpolates the geometry itself. Stepping back plays the same segment in
-     reverse. What has no in-between — a glyph that changes, a path that cannot
-     be aligned, states of a different structure — cross-fades. Several such
-     marks on one frame step together; the step count is the largest one,
-     shorter marks stop at their end. */
+  /* ── stepping ───────────────────────────────────────────────────────
+     One step shows a different state of every drawing on the frame and hands
+     the pair to tween, which animates node by node; stepping back plays the
+     same segment in reverse. The drawings step together, the count is the
+     largest one, and shorter ones stop at their end. */
 
-  function stepsOf(s) {
+  const stepsOf = s => {
     if (s.vitSteps) return s.vitSteps;
     /* One container is one drawing, so the same key twice on a frame stays two
        of them; a drawing inside a state is an ordinary node, not a drawing. */
-    var marks = tween.boxes(s).map(function (box) {
-      return { key: box.dataset.tween || "a drawing", box: box, states: tween.states(box) };
-    });
-    var steps = 0;
-    marks.forEach(function (m) {
+    const marks = tween.boxes(s).map(box => ({
+      key: box.dataset.tween || "a drawing",
+      box,
+      states: tween.states(box),
+    }));
+    let steps = 0;
+    for (const m of marks) {
       m.nodes = tween.nodes(m.states, m.key);
       /* a drawing that plays its states over time is not stepped; whether it
          does is its own business, so we ask rather than look */
       m.anim = tween.plays(m.box);
       if (!m.anim) steps = Math.max(steps, m.states.length - 1);
-    });
-    return (s.vitSteps = { marks: marks, n: steps });
-  }
+    }
+    return (s.vitSteps = { marks, n: steps });
+  };
 
   /* A step's animations are the deck's to cancel when the next one starts; a
      continuous one plays and pauses with the frame. The browser keeps both —
      they are asked for by role — and what it cannot keep stays here: the
      clean-ups a cross-fade owes, and the callbacks that re-measure a track. */
-  var STEP = "vit:step";
+  const STEP = "vit:step";
 
   /* the engine returns the animations and the undo; the frame keeps the undo,
      so that halt() can put back what a cancelled cross-fade changed */
-  function fade(s, host, oldG, newG, olds, news, timing) {
-    var r = tween.crossfade(host, oldG, newG, olds, news, timing);
-    r.anims.forEach(function (a) { a.id = STEP; });
-    (s.vitUndo = s.vitUndo || []).push(r.undo);
-    r.anims[r.anims.length - 1].finished.then(r.undo, r.undo);
+  const fade = (s, host, oldG, newG, olds, news, timing) => {
+    const r = tween.crossfade(host, oldG, newG, olds, news, timing);
+    for (const a of r.anims) a.id = STEP;
+    (s.vitUndo ??= []).push(r.undo);
+    r.anims.at(-1).finished.then(r.undo, r.undo);
     return r.anims;
-  }
+  };
 
-  function stepTo(s, k, instant) {
-    var st = stepsOf(s), from = s.vitAt || 0;
+  const stepTo = (s, k, instant) => {
+    const st = stepsOf(s), from = s.vitAt || 0;
     k = Math.max(0, Math.min(st.n, k));
     if (k === from) return;
     s.vitAt = k;
     halt(s);
-    var mine = [];
-    var live = !instant && !reduced.matches;
-    st.marks.forEach(function (m) {
-      if (m.anim) return;
-      var a = Math.min(from, m.states.length - 1), b = Math.min(k, m.states.length - 1);
-      m.states.forEach(function (g, i) { g.style.display = i === b ? "inline" : "none"; });
-      if (a === b || !live) return;
-      var timing = { duration: durMs(defaultMs), delay: 0, iterations: 1, direction: "normal", easing: EASING }, host = m.states[b].closest(".vit-mark") || s;
-      if (!m.nodes) { mine = mine.concat(fade(s, host, m.states[a], m.states[b], null, null, timing)); return; }
+    let mine = [];
+    const live = !instant && !reduced.matches;
+    for (const m of st.marks) {
+      if (m.anim) continue;
+      const a = Math.min(from, m.states.length - 1), b = Math.min(k, m.states.length - 1);
+      m.states.forEach((g, i) => { g.style.display = i === b ? "inline" : "none"; });
+      if (a === b || !live) continue;
+      const timing = { duration: durMs(defaultMs), delay: 0, iterations: 1, direction: "normal", easing: EASING };
+      const host = m.states[b].closest(".vit-mark") ?? s;
+      if (!m.nodes) { mine = mine.concat(fade(s, host, m.states[a], m.states[b], null, null, timing)); continue; }
       /* Each node of the new state animates from the value of its counterpart in
          the old state to its own; the end is the node's own attribute, so it
          lands there by itself and nothing has to be committed. What has no
          in-between is collected and cross-faded. */
-      var olds = [], news = [];
-      m.nodes[b].forEach(function (el, j) {
-        var old = m.nodes[a][j], f = tween.frames([old, el], m.key);
+      const olds = [], news = [];
+      m.nodes[b].forEach((el, j) => {
+        const old = m.nodes[a][j], f = tween.frames([old, el], m.key);
         if (f.frames) mine.push(waapi.animate(el, f.frames, timing, STEP));
         if (f.fade) { olds.push(old); news.push(el); }
       });
       if (olds.length) mine = mine.concat(fade(s, host, m.states[a], m.states[b], olds, news, timing));
-    });
+    }
     /* instant moves (landing, previews, thumbnails) are not "a step taken", so
        they don't announce; the caller's stage() does */
     if (!instant && s === slides[cur]) {
       announce();
-      var done = mine.map(function (a) { return a.finished.catch(function () { }); });
-      if (done.length) Promise.all(done).then(function () { moveDone(cur); });
+      const done = mine.map(a => a.finished.catch(() => { }));
+      if (done.length) Promise.all(done).then(() => moveDone(cur));
       else moveDone(cur);
     }
-  }
+  };
 
   /* Cut a running step short — the new state already rests on its own
      attributes, so cancelling is jumping to the end. */
-  function halt(s) {
-    waapi.of(s, STEP).forEach(function (a) { a.cancel(); });
-    (s.vitUndo || []).forEach(function (f) { f(); });
+  const halt = s => {
+    for (const a of waapi.of(s, STEP)) a.cancel();
+    for (const f of s.vitUndo ?? []) f();
     s.vitUndo = [];
-  }
+  };
 
   /* ── continuous animation ────────────────────────────────────────────
-     None of it is the deck's. A drawing that plays its states over time, an
-     element with keyframes of its own, one running along a path: each says so
-     where it is written, `tween` and `waapi` start them, and what is left for
-     the deck is the lifecycle — everything under a frame that is not on stage
-     is paused, and the frame that is on stage plays once its transition is
-     over (a snapshot is still, and a playing element would jump at the end).
-     Its own step animations are not that: they are the deck's, and halt()
-     cancels them. */
+     None of it is the deck's: what moves says so where it is written, and tween
+     and waapi start it. What is left here is the lifecycle — everything under a
+     frame that is not on stage is paused, and the frame on stage plays once its
+     transition is over, since a snapshot is still and a playing element would
+     jump at the end. Step animations are the deck's own; halt() cancels those. */
 
-  function loose(s) { return waapi.of(s).filter(function (a) { return a.id !== STEP; }); }
-
-  function still(s) { loose(s).forEach(function (a) { a.pause(); }); }
-  function play() {
-    var s = slides[cur];
+  const loose = s => waapi.of(s).filter(a => a.id !== STEP);
+  const still = s => loose(s).forEach(a => a.pause());
+  const play = () => {
     if (reduced.matches || over() || atDesk()) return;
-    loose(s).forEach(function (a) { a.play(); });
-  }
+    loose(slides[cur]).forEach(a => a.play());
+  };
+
   /* ── transition ──────────────────────────────────────────────────────
-     types are this transition's types (["enter-slide", "leave-fade", "back"],
-     ["overview"]), handed to the API; deck.css selects rules with
-     html:active-view-transition-type(enter-slide).
-     The browser owns their lifetime, so a skipped transition never takes the
-     next one's types with it. A falsy value means no transition: land at once.
-     setup runs before the old snapshot is captured (pairing names, effect
-     classes, temporary names); the clean-ups it pushes into undo run when the
-     transition has finished — a stack, last in first out, so what was
-     changed twice is restored to what it was first. */
-  /* A transition started while another runs skips that one; its clean-ups are
-     run here first, synchronously, so the new setup reads marks at rest —
-     read mid-transition, a name temporarily "none" would be recorded as the
-     value to restore and stay none for good, and the mark would only ever
-     cross-fade from then on. */
-  var pendingUndo = null;
-  function transition(types, update, setup, done) {
+     `types` are handed to the API and deck.css selects on them; falsy means no
+     transition, land at once. `setup` runs before the old snapshot is captured
+     and pushes its clean-ups onto `undo`, a stack, so what was changed twice is
+     restored to what it was first.
+
+     Starting one while another runs skips that one, and its clean-ups run here
+     first, synchronously: read mid-transition, a name temporarily "none" would
+     be recorded as the value to restore and stay that way for good. */
+  let pendingUndo = null;
+  const transition = (types, update, setup, done) => {
     if (pendingUndo) pendingUndo();
-    if (!types) { update(); play(); if (done) done(); return; }
-    var undo = [];
-    if (setup) setup(undo);
-    var vit = document.startViewTransition({ update: update, types: types });
-    var flush = pendingUndo = function () {
+    if (!types) { update(); play(); done?.(); return; }
+    const undo = [];
+    setup?.(undo);
+    const vit = document.startViewTransition({ update, types });
+    const flush = pendingUndo = () => {
       if (pendingUndo === flush) pendingUndo = null;
       while (undo.length) undo.pop()();
     };
-    var clear = function () { var latest = pendingUndo === flush; flush(); if (latest) play(); sweep(); if (done) done(); };
+    const clear = () => {
+      const latest = pendingUndo === flush;
+      flush();
+      if (latest) play();
+      sweep();
+      done?.();
+    };
     vit.finished.then(clear, clear);
-  }
+  };
 
-  function go(i, k) {
+  const go = (i, k) => {
     i = clamp(i);
     if (i === want) return;
-    var dir = i > want ? "fwd" : "back", dest = slides[i];
+    const dir = i > want ? "fwd" : "back", dest = slides[i];
     /* The transition between two frames belongs to the later one: the Typst
        side wrote its types there (data-transition; none: no transition), and
        deck.css replays them in reverse when the direction is back. */
-    var types = slides[Math.max(i, want)].dataset.transition;
+    const types = slides[Math.max(i, want)].dataset.transition;
     want = i;
     lift(dest);               // before the transition: its setup reads both sides' marks
     stepTo(dest, k || 0, true);
     transition(
-      canvit &&
-      !reduced.matches &&
-      !over() &&
-      !atDesk() &&
-      types &&
-      (types + " " + dir).split(" "),
-      function () { stage(i); },
-      function (undo) {
+      canvit && !reduced.matches && !over() && !atDesk() && types && `${types} ${dir}`.split(" "),
+      () => stage(i),
+      undo => {
         balance(slides[cur], dest, undo);
         soloize(slides[cur], dest, undo);
       },
-      function () { moveDone(i); }
+      () => moveDone(i),
     );
-  }
+  };
 
   /* go to a position: within the current frame it is a step (animated), otherwise a page change */
-  function goto(q) { if (q.i === want) stepTo(slides[q.i], q.at); else go(q.i, q.at); }
+  const goto = q => { if (q.i === want) stepTo(slides[q.i], q.at); else go(q.i, q.at); };
   /* one notch forward/back; in the overview walk frames, ignore steps */
-  function step(d) {
-    var q = !over() && POS[idx(want) + d];
+  const step = d => {
+    const q = !over() && POS[idx(want) + d];
     if (q) goto(q); else go(want + d);
-  }
-  var next = function () { step(1); };
-  var prev = function () { step(-1); };
+  };
+  const next = () => step(1);
+  const prev = () => step(-1);
 
   /* ── input ────────────────────────────────────────────────────────── */
 
-  var NEXT = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, Enter: 1, n: 1, j: 1 };
-  var PREV = { ArrowLeft: 1, ArrowUp: 1, PageUp: 1, Backspace: 1, p: 1, k: 1 };
+  const NEXT = new Set(["ArrowRight", "ArrowDown", "PageDown", " ", "Enter", "n", "j"]);
+  const PREV = new Set(["ArrowLeft", "ArrowUp", "PageUp", "Backspace", "p", "k"]);
 
   /* the keys, as the help overlay lists them; README keeps the same table */
-  var KEYS = [
+  const KEYS = [
     ["→ ↓ PageDown Space Enter n j", "Next: step, frame or page"],
     ["← ↑ PageUp Backspace p k", "Previous"],
     ["Home / End", "First / last page"],
     ["1 – 9", "Page"],
     ["o / a", "Overview (Esc closes it)"],
-    ["Esc / Enter", "Desk \u21c4 presenting"],
+    ["Esc / Enter", "Desk ⇄ presenting"],
     ["f", "Full screen"],
     ["l", "Laser pointer"],
     ["s", "Speaker view"],
     ["b / .", "Black screen"],
     ["- / = / 0", "Slower / faster / normal speed"],
-    ["?", "This help"]
+    ["?", "This help"],
   ];
 
-  function onKey(e) {
+  const onKey = e => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    var t = e.target;
+    const t = e.target;
     if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
 
     /* a black screen and the help are modal: only their own keys act */
@@ -2456,8 +2313,8 @@ window.tween = (function () {
 
     if (atDesk() && e.key === "Enter") { e.preventDefault(); present(); return; }   // Enter presents; the other "next" keys walk the deck
 
-    if (NEXT[e.key]) { e.preventDefault(); next(); }
-    else if (PREV[e.key]) { e.preventDefault(); prev(); }
+    if (NEXT.has(e.key)) { e.preventDefault(); next(); }
+    else if (PREV.has(e.key)) { e.preventDefault(); prev(); }
     else if (e.key === "Home") { e.preventDefault(); pick(0); }
     else if (e.key === "End") { e.preventDefault(); pick(groups[gn - 1].from); }
     else if (e.key === "f") { e.preventDefault(); toggleFullscreen(); }
@@ -2474,58 +2331,53 @@ window.tween = (function () {
       e.preventDefault();
       pick(groups[Math.min(parseInt(e.key, 10) - 1, gn - 1)].from);
     }
-  }
+  };
 
-  /* Click = navigate: left third goes back, the rest forward. The deck in the
-     main window and the "current" preview in the speaker view share tap(),
-     only the box differs.
+  /* Click = navigate: left third goes back, the rest forward.
 
-     Bound on document and judged by coordinates rather than on the deck by
-     bubbling target: during a transition the browser no longer hit-tests the
-     real DOM, every event targets <html>, and a listener on the deck hears
-     nothing until the animation is over — that is "click only once it has
-     settled". pointer-events:none on the pseudo-elements does not help (the
-     computed value changes, the target is still html). */
-  function frac(pt, el) {
-    var r = el.getBoundingClientRect();
-    var x = (pt.clientX - r.left) / r.width, y = (pt.clientY - r.top) / r.height;
-    return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x: x, y: y } : null;
-  }
-  function tap(q) { if (q.x < 1 / 3) prev(); else next(); }
+     Bound on document and judged by coordinates, not on the deck by target:
+     during a transition the browser stops hit-testing the real DOM and every
+     event targets <html>, so a listener on the deck would hear nothing until
+     the animation is over. */
+  const frac = (pt, el) => {
+    const r = el.getBoundingClientRect();
+    const x = (pt.clientX - r.left) / r.width, y = (pt.clientY - r.top) / r.height;
+    return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
+  };
+  const tap = q => { if (q.x < 1 / 3) prev(); else next(); };
 
-  function onClick(e) {
+  const onClick = e => {
     if (over() || atDesk()) {
-      var d = e.target.closest(".vit-dots i");
+      const d = e.target.closest(".vit-dots i");
       if (d) { pick(+d.dataset.frame, +d.dataset.at); return; }
-      var g = e.target.closest(".vit-group");
+      const g = e.target.closest(".vit-group");
       if (g) {
-        var f = slides.indexOf(g.querySelector(".vit-slide"));
+        const f = slides.indexOf(g.querySelector(".vit-slide"));
         if (peeked && gOf[peeked.i] === gOf[f]) pick(peeked.i, peeked.at);   // a dot being previewed opens its own position
         else pick(f, 0);
-        return;
       }
       return;
     }
     if (e.target.closest("a, button, input, select, textarea, pre, table")) return;
     if (bar && frac(e, bar)) return;         // a click on the toolbar during a transition is not a page turn
     if (lasing && touching) return;          // pointing by touch is not a page turn
-    var q = frac(e, deck);
+    const q = frac(e, deck);
     if (q) tap(q);
-  }
+  };
 
-  var tx = 0, ty = 0, swiping = false;
-  function onTouchStart(e) {
-    var t = e.changedTouches[0];
+  let tx = 0, ty = 0, swiping = false;
+  const onTouchStart = e => {
+    const t = e.changedTouches[0];
     swiping = !!frac(t, atDesk() ? view : deck);
     tx = t.clientX;
     ty = t.clientY;
-  }
-  function onTouchEnd(e) {
+  };
+  const onTouchEnd = e => {
     if (!swiping || lasing) return;          // no swiping while the laser is on
-    var dx = e.changedTouches[0].clientX - tx;
-    var dy = e.changedTouches[0].clientY - ty;
-    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy)) { dx < 0 ? next() : prev(); }
-  }
+    const dx = e.changedTouches[0].clientX - tx;
+    const dy = e.changedTouches[0].clientY - ty;
+    if (Math.abs(dx) > 44 && Math.abs(dx) > Math.abs(dy)) (dx < 0 ? next : prev)();
+  };
 
   /* Wheel navigation: down is forward, up is back. A mouse wheel notch is
      deltaY≈100, one notch one position; a trackpad gesture is a burst of small
@@ -2533,100 +2385,100 @@ window.tween = (function () {
      300ms so the gesture's inertia mostly lands in the cool-down. In the
      overview the wheel scrolls the grid. The main deck and the speaker
      preview share wheel(). */
-  var wheelAcc = 0, wheelAt = 0;
-  function wheel(e) {
-    var now = Date.now();
+  let wheelAcc = 0, wheelAt = 0;
+  const wheel = e => {
+    const now = Date.now();
     if (now - wheelAt < 300) { wheelAcc = 0; return; }
     wheelAcc += e.deltaY;
     if (Math.abs(wheelAcc) < 40) return;
     wheelAt = now;
     if (wheelAcc > 0) next(); else prev();
     wheelAcc = 0;
-  }
-  function onWheel(e) { if (!over() && frac(e, atDesk() ? view : deck)) wheel(e); }
+  };
+  const onWheel = e => { if (!over() && frac(e, atDesk() ? view : deck)) wheel(e); };
 
   /* "#3" = page 3, first position; "#3.4" = page 3, fourth position (frames and steps flattened) */
-  function fromHash() {
-    var m = /^#(\d+)(?:\.(\d+))?$/.exec(location.hash);
+  const fromHash = () => {
+    const m = /^#(\d+)(?:\.(\d+))?$/.exec(location.hash);
     if (!m) return POS[0];
-    var g = groups[Math.min(Math.max(parseInt(m[1], 10) - 1, 0), gn - 1)];
+    const g = groups[Math.min(Math.max(parseInt(m[1], 10) - 1, 0), gn - 1)];
     return g.pos[Math.min(Math.max(m[2] ? parseInt(m[2], 10) - 1 : 0, 0), g.pos.length - 1)];
-  }
+  };
 
-  function initInput() {
+  const initInput = () => {
     document.addEventListener("keydown", onKey);
     document.addEventListener("click", onClick);
     document.addEventListener("touchstart", onTouchStart, { passive: true });
     document.addEventListener("touchend", onTouchEnd, { passive: true });
     document.addEventListener("wheel", onWheel, { passive: true });
-    document.addEventListener("pointermove", function (e) { showBar(); route(e); });
+    document.addEventListener("pointermove", e => { showBar(); route(e); });
     document.addEventListener("pointerdown", route);
-    document.addEventListener("pointerup", function () { if (touching) laser.classList.remove("is-on"); });
-    document.addEventListener("pointercancel", function () { laser.classList.remove("is-on"); });
+    document.addEventListener("pointerup", () => { if (touching) laser.classList.remove("is-on"); });
+    document.addEventListener("pointercancel", () => laser.classList.remove("is-on"));
     /* follow the address bar (replaceState does not fire this, so our own writes don't loop back) */
-    window.addEventListener("hashchange", function () { goto(fromHash()); });
-  }
+    addEventListener("hashchange", () => goto(fromHash()));
+  };
 
   /* ── modes ────────────────────────────────────────────────────────── */
 
-  function toggleFullscreen() {
+  const toggleFullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen();
-    else root.requestFullscreen().catch(function () { });
-  }
+    else root.requestFullscreen().catch(() => { });
+  };
 
-  /* Overview ⇄ presenting: a whole-page zoom, no element-level morph.
-     The thumbnail and the shown page are the same .vit-slide; give it a
-     temporary view-transition-name and the browser interpolates its box between
-     the two states — the page zooms into place. The CSS meanwhile overrides
-     every .vit-mark name with !important so the marks fold back into root:
-     otherwise leftovers from the previous page would pair up and fly, which is
-     the "page turn" animation, not "open". */
-  function zoomTo(i, update, done) {
-    var dest = groups[gOf[i]].el;
-    transition(canvit && !reduced.matches && ["overview"], update, function (undo) {
+  /* Overview ⇄ presenting: a whole-page zoom. The thumbnail and the shown page
+     are the same .vit-slide, so a temporary name on it makes the browser
+     interpolate its box. Meanwhile the CSS overrides every .vit-mark name so
+     the marks fold into root — otherwise leftovers from the previous page pair
+     up and fly, which is a page turn, not an opening. */
+  const zoomTo = (i, update, done) => {
+    const dest = groups[gOf[i]].el;
+    transition(canvit && !reduced.matches && ["overview"], update, undo => {
       dest.style.viewTransitionName = "vit-overview";
-      undo.push(function () { dest.style.viewTransitionName = ""; });
+      undo.push(() => { dest.style.viewTransitionName = ""; });
     }, done);
-  }
+  };
 
-  function toggleOverview() {
+  const toggleOverview = () => {
     if (over()) openSlide(cur);
-    else zoomTo(cur, function () { deck.classList.remove("vit-desk"); deck.classList.add("vit-all"); still(slides[cur]); syncTools(); });
-  }
+    else zoomTo(cur, () => {
+      deck.classList.remove("vit-desk");
+      deck.classList.add("vit-all");
+      still(slides[cur]);
+      syncTools();
+    });
+  };
 
   /* Open a page from the overview; without a step, at whatever step the
      thumbnail shows. Clicking the previewed dot means that step — the dots'
      pointerleave on leaving the overview must not move it back. */
-  function openSlide(i, k) {
+  const openSlide = (i, k) => {
     want = i;
     if (peeked && peeked.i !== i) unpeek();   // a preview of another page is put back; this page's is what opens
     peeked = null;
     if (k != null) stepTo(slides[i], k, true);
-    zoomTo(i, function () { deck.classList.remove("vit-all"); stage(i); }, function () { moveDone(i); });
-  }
+    zoomTo(i, () => { deck.classList.remove("vit-all"); stage(i); }, () => moveDone(i));
+  };
 
   /* Choosing a position: from the overview it opens, from the desk or the
      presentation it is where we go. The peek a hovered dot left behind is put
      back first — it already stepped that frame, and a move that finds itself
      where it wanted to be does nothing at all, preview and address bar
      included. */
-  function pick(i, k) {
+  const pick = (i, k) => {
     if (over()) { openSlide(i, k); return; }
     unpeek();
-    goto({ i: i, at: k || 0 });
-  }
+    goto({ i, at: k || 0 });
+  };
 
   /* ── the desk ─────────────────────────────────────────────────────────
-     Where the deck opens, and what Esc comes back to: the deck itself in
-     thumbnails down one side (the overview's thumbnails, in a column), the
-     page they point at beside them, its notes under it. The preview is a copy
-     of this document positioned by #hash — the same mirror the speaker view
-     uses, so there is one renderer and the preview plays the real
-     transitions. Going either way is instant: the layout changes wholesale,
-     and while the desk is up the page is on the screen twice, in the rail and
-     in the preview, which no zoom can be drawn between. */
-  var pane = null, view = null, notes = null;
-  function buildPane() {
+     Where the deck opens and what Esc comes back to: thumbnails down one side,
+     the page they point at beside them, its notes under it. The preview is the
+     same mirror the speaker view uses, so there is one renderer and it plays
+     the real transitions. Going either way is instant — the page is on screen
+     twice while the desk is up, and no zoom can be drawn between. */
+  let pane = null, view = null, notes = null;
+  const buildPane = () => {
     if (mirror) return;
     pane = document.createElement("div");
     pane.className = "vit-pane";
@@ -2635,15 +2487,15 @@ window.tween = (function () {
     notes = pane.querySelector(".vit-notes");
     document.body.appendChild(pane);
     deck.addEventListener("vit:move-ready", syncPane);
-  }
+  };
 
-  function syncPane() {
+  const syncPane = () => {
     if (!atDesk()) return;
     show(view, label(cur));
     notes.innerHTML = noteOf(cur);
-  }
+  };
 
-  function toggleDesk() {
+  const toggleDesk = () => {
     if (atDesk()) { present(); return; }
     deck.classList.remove("vit-all");
     deck.classList.add("vit-desk");
@@ -2652,47 +2504,47 @@ window.tween = (function () {
     syncPane();
     syncTools();
     showBar();
-  }
+  };
 
   /* the selected page, full size: from the overview with its zoom, from the desk at once */
-  function present() {
+  const present = () => {
     if (over()) { openSlide(cur); return; }
     deck.classList.remove("vit-desk");
     play();
     syncTools();
     showBar();
-  }
+  };
 
   /* black screen (b / .): "look at me, not at the screen" — everything in the body is hidden, the keys still work */
-  var black = false;
-  function toggleBlack() {
+  let black = false;
+  const toggleBlack = () => {
     black = !black;
     document.body.classList.toggle("vit-black", black);
-  }
+  };
 
   /* the key table, on ? */
-  var help = null;
-  function buildHelp() {
+  let help = null;
+  const toggleHelp = () => { help.hidden = !help.hidden; };
+  const buildHelp = () => {
     help = document.createElement("div");
     help.className = "vit-help";
     help.hidden = true;
-    var table = document.createElement("table");
-    KEYS.forEach(function (row) {
-      var tr = table.insertRow();
-      row.forEach(function (cell, k) {
-        var td = tr.insertCell();
+    const table = document.createElement("table");
+    for (const row of KEYS) {
+      const tr = table.insertRow();
+      row.forEach((cell, k) => {
+        const td = tr.insertCell();
         td.appendChild(k ? document.createTextNode(cell) : Object.assign(document.createElement("kbd"), { textContent: cell }));
       });
-    });
+    }
     help.appendChild(table);
-    var about = document.createElement("div");
+    const about = document.createElement("div");
     about.className = "vit-about";
-    about.textContent = "vit" + (deck.dataset.version ? " " + deck.dataset.version : "");
+    about.textContent = `vit${deck.dataset.version ? ` ${deck.dataset.version}` : ""}`;
     help.appendChild(about);
     help.addEventListener("click", toggleHelp);
     document.body.appendChild(help);
-  }
-  function toggleHelp() { help.hidden = !help.hidden; }
+  };
 
   /* ── toolbar ─────────────────────────────────────────────────────────
      Built by the runtime, so every deck has one. Lives outside .vit-deck with
@@ -2701,7 +2553,7 @@ window.tween = (function () {
      (auto-hiding), one in the speaker view (always shown, bottom right).
      Buttons call the same functions; syncTools() refreshes them together. */
 
-  var ICON = {
+  const ICON = {
     desk: "M4 5h16v14H4zM10 5v14",
     play: "M8 5l11 7-11 7z",
     grid: "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
@@ -2709,39 +2561,34 @@ window.tween = (function () {
     down: "M12 4v10M8 12l4 4 4-4M5 20h14",
     notes: "M5 4h14v16H5zM8.5 9h7M8.5 13h7M8.5 17h4",
     full: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5",
-    unfull: "M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"
+    unfull: "M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5",
   };
 
-  function svg(d, extra) {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + d + '"/>' + (extra || "") + "</svg>";
-  }
+  const svg = (d, extra = "") => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/>${extra}</svg>`;
 
-  /* PDF download. The PDF from the same .typ sits next to the HTML, so
-     "is there a handout?" needs no digging. data-pdf="auto" (default) = the
-     .pdf with this page's name; "none" = no button. download + target=_blank
-     work together: where downloading works the page stays; where the download
-     attribute is ignored (cross-origin, some file:// cases) it merely opens a
-     new tab. */
-  var pdfHref = "";
-  function pdfLink() {
-    var v = deck.dataset.pdf, m;
+  /* PDF download. data-pdf="auto" is the .pdf with this page's name, "none" no
+     button. download + target=_blank together: where the download attribute is
+     ignored it merely opens a tab. */
+  let pdfHref = "";
+  const pdfLink = () => {
+    const v = deck.dataset.pdf;
     if (v === "none") return "";
     if (v !== "auto") return v;
-    m = /^([^?#]*)\.x?html?$/i.exec(location.href);
-    return m ? m[1] + ".pdf" : "";
-  }
+    const m = /^([^?#]*)\.x?html?$/i.exec(location.href);
+    return m ? `${m[1]}.pdf` : "";
+  };
 
-  function buildBar(doc) {
-    function button(title, markup, action) {
-      var el = doc.createElement("button");
+  const buildBar = doc => {
+    const button = (title, markup, action) => {
+      const el = doc.createElement("button");
       el.type = "button";
       el.title = title;
       el.setAttribute("aria-label", title);
       el.innerHTML = markup;
-      el.addEventListener("click", function (e) { e.stopPropagation(); action(); });
+      el.addEventListener("click", e => { e.stopPropagation(); action(); });
       return el;
-    }
-    var b = { el: doc.createElement("div"), count: doc.createElement("div") };
+    };
+    const b = { el: doc.createElement("div"), count: doc.createElement("div") };
     b.el.className = "vit-bar";
     b.count.className = "vit-count";
     b.el.appendChild(b.count);
@@ -2755,7 +2602,7 @@ window.tween = (function () {
     b.el.appendChild(button("Speaker view (s)", svg(ICON.notes), openSpeaker));
 
     if (pdfHref) {
-      var a = doc.createElement("a");
+      const a = doc.createElement("a");
       a.className = "vit-dl";
       a.href = pdfHref;
       a.download = "";
@@ -2764,91 +2611,86 @@ window.tween = (function () {
       a.title = "Download PDF";
       a.setAttribute("aria-label", "Download PDF");
       a.innerHTML = svg(ICON.down);
-      a.addEventListener("click", function (e) { e.stopPropagation(); });
+      a.addEventListener("click", e => e.stopPropagation());
       b.el.appendChild(a);
     }
 
     b.full = button("Full screen (f)", svg(ICON.full), toggleFullscreen);
     b.el.appendChild(b.full);
     return b;
-  }
+  };
 
   /* The two previews in the speaker view are copies of this very HTML
      (iframe name="vit-mirror"): they only display, no toolbar. */
-  var bars = [];
-  var bar = null;
-  function buildToolbar() {
+  const bars = [];
+  let bar = null;
+  const buildToolbar = () => {
     pdfHref = pdfLink();
     document.addEventListener("fullscreenchange", syncTools);
     deck.addEventListener("vit:move-ready", syncTools);
     if (mirror) return;
-    var mainBar = buildBar(document);
+    const mainBar = buildBar(document);
     bars.push(mainBar);
     bar = mainBar.el;
     document.body.appendChild(bar);
     bar.addEventListener("pointerenter", showBar);
     bar.addEventListener("pointerleave", showBar);
-  }
+  };
 
   /* auto-hide: the bar is chrome, not content. Shown on every activity and
      hidden 2.4 s after the last, unless the pointer or the focus is on it. */
-  var barTimer = null;
-  function showBar() {
+  let barTimer = null;
+  const hideBar = () => {
+    if (bar.matches(":hover") || bar.contains(document.activeElement)) { barTimer = setTimeout(hideBar, 2400); return; }
+    bar.classList.remove("is-shown");
+  };
+  const showBar = () => {
     if (!bar) return;
     bar.classList.add("is-shown");
     clearTimeout(barTimer);
     if (!atDesk()) barTimer = setTimeout(hideBar, 2400);   // at the desk the toolbar is part of the furniture
-  }
-  function hideBar() {
-    if (bar.matches(":hover") || bar.contains(document.activeElement)) { barTimer = setTimeout(hideBar, 2400); return; }
-    bar.classList.remove("is-shown");
-  }
+  };
 
   /* ── laser pointer ───────────────────────────────────────────────────
-     The mouse gets a CSS cursor image (zero latency, in deck.css); touch and
-     pen have no cursor to restyle and get a DOM dot instead. Routed by each
-     event's own pointerType, so a machine with both gets the right one per
-     input. Pointing from the speaker view's preview also uses the DOM dot (the
-     main window has no mouse there).
+     The mouse gets a CSS cursor image, in deck.css; touch and pen have no
+     cursor to restyle and get a DOM dot, routed by each event's own
+     pointerType. `lasing` is presentation state: the overview only tucks the
+     cursor or dot away, and it comes back on leaving. */
 
-     `lasing` is presentation state and untouched by the overview — there the
-     cursor/dot is merely tucked away (the cursor by CSS, the dot by route()),
-     and comes back on leaving the overview. */
-
-  var lasing = false;
-  var touching = false;   // whether the latest input was non-mouse
-  var laser = null;
-  function buildLaser() {
+  let lasing = false;
+  let touching = false;   // whether the latest input was non-mouse
+  let laser = null;
+  const buildLaser = () => {
     laser = document.createElement("div");
     laser.className = "vit-laser";
     document.body.appendChild(laser);
-  }
+  };
 
-  function route(e) {
-    var mouse = e.pointerType === "mouse" || e.pointerType === "";
+  const dot = (x, y) => {
+    laser.style.transform = `translate(${x}px,${y}px)`;
+    laser.classList.add("is-on");
+  };
+
+  const route = e => {
+    const mouse = e.pointerType === "mouse" || e.pointerType === "";
     touching = !mouse;
     document.body.classList.toggle("vit-nomouse", touching);
     if (!lasing || mouse || over() || atDesk()) { laser.classList.remove("is-on"); return; }
     dot(e.clientX, e.clientY);
-  }
+  };
 
-  function dot(x, y) {
-    laser.style.transform = "translate(" + x + "px," + y + "px)";
-    laser.classList.add("is-on");
-  }
-
-  function toggleLaser() {
+  const toggleLaser = () => {
     lasing = !lasing;
     document.body.classList.toggle("vit-lasing", lasing);
     if (!lasing) laser.classList.remove("is-on");
     syncTools();
     showBar();
-  }
+  };
 
-  function syncTools() {
-    var text = label(cur) + " / " + gn + (speed === 1 ? "" : " · " + speed + "×");   // a multiplier survives reloads: keep it in sight
-    var fs = !!document.fullscreenElement;
-    bars.forEach(function (b) {
+  const syncTools = () => {
+    const text = `${label(cur)} / ${gn}${speed === 1 ? "" : ` · ${speed}×`}`;   // a multiplier survives reloads: keep it in sight
+    const fs = !!document.fullscreenElement;
+    for (const b of bars) {
       b.el.ownerDocument.body.classList.toggle("vit-lasing", lasing);   // the speaker window's cursor follows too
       b.count.textContent = text;
       b.desk.innerHTML = svg(atDesk() ? ICON.play : ICON.desk);
@@ -2859,54 +2701,56 @@ window.tween = (function () {
       b.full.innerHTML = svg(fs ? ICON.unfull : ICON.full);
       b.full.title = fs ? "Exit full screen (f)" : "Full screen (f)";
       b.full.setAttribute("aria-label", b.full.title);
-    });
-  }
+    }
+  };
 
   /* flash something (the speed multiplier, say) where the counter is; syncTools writes the page number back after 900ms */
-  var flashTimer = null;
-  function flash(text) {
-    bars.forEach(function (b) { b.count.textContent = text; });
+  let flashTimer = null;
+  const flash = text => {
+    for (const b of bars) b.count.textContent = text;
     clearTimeout(flashTimer);
     flashTimer = setTimeout(syncTools, 900);
     showBar();
-  }
+  };
 
   /* Chrome theme: deck(theme:) fixes it, auto follows the system. Only the
      verdict lands on <html data-theme>; every colour is a token in deck.css,
      and the speaker window copies the same tokens. */
-  var speaker = null, spk = null, spkFrom = 0;
-  function applyTheme() {
-    var t = deck.dataset.theme;
+  let speaker = null, spk = null, spkFrom = 0;
+  const applyTheme = () => {
+    const t = deck.dataset.theme;
     root.dataset.theme = t === "auto" ? (prefersLight.matches ? "light" : "dark") : t;
     if (speaker && !speaker.closed) speaker.document.documentElement.dataset.theme = root.dataset.theme;
-  }
-  function initTheme() {
+  };
+  const initTheme = () => {
     prefersLight.addEventListener("change", applyTheme);
     applyTheme();
-  }
+  };
 
   /* ── speaker view ────────────────────────────────────────────────────
-     A separate window that can be dragged to another screen. "Current" and
-     "next" are two iframes loading this very HTML, positioned by #hash — the
-     deck already navigates by hash, so no second renderer, and transitions and
-     element animations play there as well. The window is about:blank and
-     same-origin with the main window, so its DOM is built directly; the copies
-     inside the iframes are never touched (under file:// every file is its own
-     origin), only their src changes. Sync comes from the vit:move-ready events that
-     announce() fires, no polling. The notes are the page's
-     <aside class="vit-note"> inside .vit-group, moved over as is. */
+     A separate window for another screen. "Current" and "next" are two iframes
+     loading this very HTML, positioned by #hash, so there is no second renderer
+     and the real transitions play there too. The window is about:blank and
+     same-origin, so its own DOM is built directly; the iframes are never
+     touched, only their src changes. Sync is the vit:move-ready events. */
 
-  function openSpeaker() {
+  const tick = () => {
+    const s = Math.round((Date.now() - spkFrom) / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    spk.clock.textContent = `${h ? `${h}:` : ""}${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`;
+  };
+
+  const openSpeaker = () => {
     if (speaker && !speaker.closed) { speaker.focus(); return; }
-    speaker = window.open("", "vit-speaker", "popup,width=1040,height=640");
+    speaker = open("", "vit-speaker", "popup,width=1040,height=640");
     if (!speaker) { console.warn("[vit] the speaker view was blocked by the browser; allow pop-ups for this page."); return; }
 
     /* the same stylesheet as this document's, as it is (its speaker rules are under .vit-speaker, the layout's size, background and easing open it), the same theme */
-    var d = speaker.document;
-    d.head.innerHTML = "<style>" + document.getElementById("vit-style").textContent + "</style>";
+    const d = speaker.document;
+    d.head.innerHTML = `<style>${document.getElementById("vit-style").textContent}</style>`;
     d.documentElement.className = "vit-speaker";
     d.documentElement.dataset.theme = root.dataset.theme;
-    d.title = "Speaker view · " + document.title;
+    d.title = `Speaker view · ${document.title}`;
     d.body.innerHTML =
       "<div class='prog'><i></i></div>" +
       "<header><b></b><span></span><time title='Click to reset'>00:00</time></header>" +
@@ -2916,25 +2760,25 @@ window.tween = (function () {
       page: d.querySelector("header b"), title: d.querySelector("header span"),
       clock: d.querySelector("time"), note: d.querySelector(".vit-notes"),
       now: d.querySelector("main iframe"), next: d.querySelector("aside iframe"),
-      nextCap: d.querySelector("aside small"), prog: d.querySelector(".prog i")
+      nextCap: d.querySelector("aside small"), prog: d.querySelector(".prog i"),
     };
     /* timer: counts from opening, click to reset */
     spkFrom = Date.now();
-    spk.clock.addEventListener("click", function () { spkFrom = Date.now(); tick(); });
-    var timer = setInterval(function () {
+    spk.clock.addEventListener("click", () => { spkFrom = Date.now(); tick(); });
+    const timer = setInterval(() => {
       if (speaker.closed) { clearInterval(timer); return; }
       tick();
     }, 1000);
 
     /* its own toolbar, always shown bottom right; buttons and state are the main window's */
-    var b = buildBar(d);
+    const b = buildBar(d);
     b.el.classList.add("is-shown");
     d.body.appendChild(b.el);
     bars.push(b);
-    speaker.addEventListener("pagehide", function () { bars.splice(bars.indexOf(b), 1); });
+    speaker.addEventListener("pagehide", () => bars.splice(bars.indexOf(b), 1));
 
     /* a key pressed in this window is a key pressed in the main window, so it doubles as a remote */
-    d.addEventListener("keydown", function (e) {
+    d.addEventListener("keydown", e => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       e.preventDefault();
       document.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, cancelable: true }));
@@ -2945,47 +2789,41 @@ window.tween = (function () {
        points on the main window. That window has no mouse whose cursor could
        change, so it gets the DOM dot; coordinates map preview box → main deck
        box proportionally. */
-    d.addEventListener("click", function (e) {
+    d.addEventListener("click", e => {
       if (e.target.closest("a, button")) return;
-      var q = frac(e, spk.now);
+      const q = frac(e, spk.now);
       if (q) tap(q);
     });
-    d.addEventListener("wheel", function (e) { if (frac(e, spk.now)) wheel(e); }, { passive: true });
-    d.addEventListener("pointermove", function (e) {
+    d.addEventListener("wheel", e => { if (frac(e, spk.now)) wheel(e); }, { passive: true });
+    d.addEventListener("pointermove", e => {
       if (!lasing || over()) return;
-      var q = frac(e, spk.now);
+      const q = frac(e, spk.now);
       if (!q) { laser.classList.remove("is-on"); return; }
-      var m = deck.getBoundingClientRect();
+      const m = deck.getBoundingClientRect();
       dot(m.left + q.x * m.width, m.top + q.y * m.height);
     });
-    d.documentElement.addEventListener("pointerleave", function () { laser.classList.remove("is-on"); });
+    d.documentElement.addEventListener("pointerleave", () => laser.classList.remove("is-on"));
 
     syncSpeaker();
     syncTools();
-  }
-
-  function tick() {
-    var s = Math.round((Date.now() - spkFrom) / 1000);
-    var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
-    spk.clock.textContent = (h ? h + ":" : "") + (m < 10 ? "0" : "") + m + ":" + (x < 10 ? "0" : "") + x;
-  }
+  };
 
   /* Only the src changes: a navigation that differs from the current URL by
      the fragment alone does not reload, the deck inside gets hashchange and
      follows. */
-  function show(frame, hash) {
-    var u = new URL(location.href);
+  const show = (frame, hash) => {
+    const u = new URL(location.href);
     u.hash = hash;
     if (frame.getAttribute("src") !== u.href) frame.src = u.href;
-  }
+  };
 
   /* The "next" preview shows what the audience will see next: still within
      this page (next frame, or next step of an element animation) it is the
      next step; only past the page is it the next page. */
-  function syncSpeaker() {
+  const syncSpeaker = () => {
     if (!spk || speaker.closed) return;
-    var g = groups[gOf[cur]], nx = POS[idx(cur) + 1];
-    spk.page.textContent = label(cur) + " / " + gn;
+    const g = groups[gOf[cur]], nx = POS[idx(cur) + 1];
+    spk.page.textContent = `${label(cur)} / ${gn}`;
     spk.prog.style.width = progress(cur);
     spk.title.textContent = g.title;
     show(spk.now, label(cur));
@@ -2993,39 +2831,21 @@ window.tween = (function () {
     spk.nextCap.textContent = !nx ? "Last page" : gOf[nx.i] === gOf[cur] ? "Next step" : "Next page";
     if (nx) show(spk.next, label(nx.i, nx.at));
     spk.note.innerHTML = noteOf(cur);
-  }
+  };
 
-  function initSpeaker() {
+  const initSpeaker = () => {
     deck.addEventListener("vit:move-ready", syncSpeaker);
     /* close it when the main window goes, so no window is left out of sync */
-    window.addEventListener("pagehide", function () { if (speaker && !speaker.closed) speaker.close(); });
-  }
+    addEventListener("pagehide", () => { if (speaker && !speaker.closed) speaker.close(); });
+  };
 
   /* ── init ─────────────────────────────────────────────────────────── */
 
-  function init() {
-    deck = document.querySelector(".vit-deck");
-    slides = deck ? Array.prototype.slice.call(deck.querySelectorAll(".vit-slide")) : [];
-    n = slides.length;
-    if (!n) return;
-    settings();
-    buildModel();
-    buildCaptions();
-    buildToolbar();
-    buildPane();
-    buildLaser();
-    buildHelp();
-    initTheme();
-    initSpeaker();
-    initInput();
-    land();
-  }
-
   /* the frame the address bar names goes on stage; from here on the deck is live */
-  function land() {
+  const land = () => {
     deck.setAttribute("data-ready", "");
     root.style.setProperty("--vit-speed", speed);
-    var h0 = fromHash();
+    const h0 = fromHash();
     stepTo(slides[h0.i], h0.at, true);
     if (!mirror) deck.classList.add("vit-desk");   // the deck opens on the desk; a preview opens on its page
     stage(want = h0.i);
@@ -3035,7 +2855,7 @@ window.tween = (function () {
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
     window.vit = {
-      go: go, next: next, prev: prev,
+      go, next, prev,
       get index() { return cur; },
       get total() { return n; },
       get step() { return at(cur); }, set step(k) { stepTo(slides[cur], k); },
@@ -3049,9 +2869,27 @@ window.tween = (function () {
         else if (m === "desk") { if (!atDesk()) toggleDesk(); }
         else present();
       },
-      deck: deck
+      deck,
     };
-  }
+  };
+
+  const init = () => {
+    deck = document.querySelector(".vit-deck");
+    slides = deck ? [...deck.querySelectorAll(".vit-slide")] : [];
+    n = slides.length;
+    if (!n) return;
+    settings();
+    buildModel();
+    buildCaptions();
+    buildToolbar();
+    buildPane();
+    buildLaser();
+    buildHelp();
+    initTheme();
+    initSpeaker();
+    initInput();
+    land();
+  };
 
   /* Lifting forces layout, so wait for the browser's own first pass: forcing
      one while the parser is still filling the document lays the whole deck out

@@ -10,48 +10,70 @@
    assignment, no tolerance, no mask. Two marks whose boxes overlap are still
    two subtrees.
 
-   Tagging reads the labels for the whole deck at once. Lifting has to lay a
-   frame out to measure it, so it happens one frame at a time, when the runtime
-   asks: `window.vitLift(slide)`. An unlifted frame draws the same picture and
+   Lifting has to lay a frame out to measure it, so it happens one frame at a
+   time, when the runtime asks. An unlifted frame draws the same picture and
    cannot morph. */
 
-(function () {
+(() => {
    "use strict";
 
-   var NS = "http://www.w3.org/2000/svg";
-   var PREFIX = "vit-";
+   const NS = "http://www.w3.org/2000/svg";
+   const PREFIX = "vit-";
 
-   /* The label grammar for a mark is read here and nowhere else: vit-key on the
-      <g> becomes data-vit-key on the host. What a mark declares about itself is
-      not in the label — the Typst side writes it into vitMarks, by key. The
-      states inside it are tween's, with a grammar of their own. */
+   const unstep = el => {
+      const was = [el.style.getPropertyValue("display"), el.style.getPropertyPriority("display")];
+      el.style.removeProperty("display");
+      return was;
+   };
+   const show = (el, how) => {
+      const was = unstep(el);
+      el.style.setProperty("display", how, "important");
+      el.style.setProperty("content-visibility", "visible", "important");
+      return was;
+   };
+   const restore = (el, [value, priority]) => {
+      el.style.removeProperty("content-visibility");
+      if (value) el.style.setProperty("display", value, priority);
+      else el.style.removeProperty("display");
+   };
 
-   /* True only when it did the work, so the caller knows to name the hosts. */
-   window.vitLift = function (slide) {
+   const pageNo = group => [...document.querySelectorAll(".vit-group")].indexOf(group) + 1;
+
+   const bbox = (el, toRoot) => {
+      let b;
+      try { b = el.getBBox(); } catch { return null; }
+      const m = toRoot(el);
+      const corners = [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height], [b.x + b.width, b.y + b.height]]
+         .map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
+      const xs = corners.map(p => p[0]), ys = corners.map(p => p[1]);
+      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+   };
+
+   /* vit-key on the <g> becomes data-vit-key on the host; what the mark declares
+      about itself is in vitMarks, by key. True only when it did the work. */
+   window.vitLift = slide => {
       if (!slide || slide.dataset.vitLifted) return false;
-      var page = slide.querySelector(":scope > .vit-page");
-      var root = page && page.querySelector("svg");
+      const page = slide.querySelector(":scope > .vit-page");
+      const root = page?.querySelector("svg");
       if (!root) { slide.dataset.vitLifted = "1"; return false; }
 
       /* getBBox returns nothing that is not rendered, so the frame is laid out
-         for the measurement and put back in the same task, unpainted. Beating
-         the stylesheet with `!important` is the point: on the desk and in the
-         overview, which is where a deck idles, it hides frames and skips
-         thumbnails that way. The states go back to what the stylesheet says —
-         the first one, and no other — so that a mark's box does not depend on
-         the step the runtime happens to have stepped this frame to. */
-      var group = slide.closest(".vit-group");
-      var states = [].slice.call(page.querySelectorAll("[data-tween-at]"));
-      var was = [show(slide, "block"), group ? show(group, "block") : null];
-      var stateWas = states.map(unstep);
+         and put back in the same task, unpainted — with `!important`, which is
+         how the desk and the overview hide frames. The states go back to what
+         the stylesheet says, so a mark's box does not depend on which step this
+         frame happens to be on. */
+      const group = slide.closest(".vit-group");
+      const states = [...page.querySelectorAll("[data-tween-at]")];
+      const was = [show(slide, "block"), group ? show(group, "block") : null];
+      const stateWas = states.map(unstep);
 
       try {
-         /* A document with no box measures every mark empty, and the flag
-            above would make that permanent: leave it for the next caller. */
+         /* A document with no box measures every mark empty, and the flag would
+            make that permanent. */
          if (!root.getBoundingClientRect().width) return false;
          slide.dataset.vitLifted = "1";
 
-         var vb = root.viewBox.baseVal;
+         const vb = root.viewBox.baseVal;
 
          /* getCTM's target space differs between browsers: Chrome includes the
             viewBox→viewport scale (root.getCTM() is 1.5× in a 1920px window), Safari
@@ -61,113 +83,69 @@
             whatever the convention.
 
             Invisible at 1280×720, where the scale happens to be 1; at any other
-            window size every hoisted element drifts down-right proportionally.
-            The tests only ran at 1280×720 — exactly where the bug hides. */
-         var inv = root.getScreenCTM().inverse();
-         var toRoot = function (el) { return inv.multiply(el.getScreenCTM()); };
+            window size every hoisted element drifts down-right proportionally. */
+         const inv = root.getScreenCTM().inverse();
+         const toRoot = el => inv.multiply(el.getScreenCTM());
 
-         var byKey = {};
-         page.querySelectorAll("[data-typst-label]").forEach(function (g) {
-            var l = g.getAttribute("data-typst-label");
-            if (l.slice(0, PREFIX.length) !== PREFIX) return;
+         const byKey = new Map();
+         for (const g of page.querySelectorAll("[data-typst-label]")) {
+            const l = g.getAttribute("data-typst-label");
+            if (!l.startsWith(PREFIX)) continue;
             /* A mark inside the states of an element animation stays put: the
                engine pairs the nodes of the states one by one, and one moved away
                would no longer line up. */
-            if (g.parentNode.closest("[data-tween-at]")) return;
-            var k = l.slice(PREFIX.length);
-            (byKey[k] = byKey[k] || []).push(g);
-         });
+            if (g.parentNode.closest("[data-tween-at]")) continue;
+            const k = l.slice(PREFIX.length);
+            byKey.set(k, [...(byKey.get(k) ?? []), g]);
+         }
 
-         /* Measure everything first, then move. Moving changes the screen position
-            of nodes not yet measured — once an outer mark sits in its own host, an
-            inner mark nested in it is measured inside the new host, whose size is a
-            percentage, and the inner result starts following the window size. Two
-            passes: the first only reads, the second touches the DOM. */
-         var plan = [];
-         Object.keys(byKey).forEach(function (key) {
-            /* One label instance = one <g> = one region. The same key several times
-               on a page is **allowed** — each is its own region; the runtime names
-               them by occurrence and pairs them by count (one-to-many = split,
-               many-to-one = merge). */
-            byKey[key].forEach(function (n) {
-               var box = bbox(n, toRoot);
+         /* Measure everything first, then move: once an outer mark sits in its
+            own host, a mark nested in it would be measured against a box given
+            in percentages, and follow the window size. One label instance is one
+            region — the same key several times on a page is allowed, and the
+            runtime names them by occurrence. */
+         const plan = [];
+         for (const [key, nodes] of byKey) {
+            for (const node of nodes) {
+               const box = bbox(node, toRoot);
                if (!box || box[2] <= box[0] || box[3] <= box[1]) {
-                  console.warn("[vit] mark " + key + " on page " + pageNo(group) + " has no box and is not hoisted: it neither morphs nor enters on its own");
-                  return;
+                  console.warn(`[vit] mark ${key} on page ${pageNo(group)} has no box and is not hoisted: it neither morphs nor enters on its own`);
+                  continue;
                }
-               /* record the **parent's** CTM — the node's own transform attribute travels
-                  with it, so using its own CTM would apply it twice */
-               plan.push({ key: key, node: n, box: box, mat: toRoot(n.parentNode) });
-            });
-         });
+               /* the parent's CTM: the node's own transform travels with it */
+               plan.push({ key, node, box, mat: toRoot(node.parentNode) });
+            }
+         }
 
-         plan.forEach(function (p) {
-            var x = p.box[0], y = p.box[1], w = p.box[2] - x, h = p.box[3] - y, m = p.mat;
+         for (const { key, node, box: [x, y, x2, y2], mat: m } of plan) {
+            const w = x2 - x, h = y2 - y;
 
-            /* The region's own <svg> is an HTML-level element and carries the name
-               itself. (An <svg> nested *inside* the page svg would not do: only
-               elements in the CSS box tree are ever captured.) */
-            var host = document.createElementNS(NS, "svg");
+            /* An HTML-level <svg> carries the name itself; one nested inside the
+               page svg would not, only the CSS box tree is ever captured. */
+            const host = document.createElementNS(NS, "svg");
             host.setAttribute("class", "vit-mark");
-            host.setAttribute("viewBox", x + " " + y + " " + w + " " + h);
-            /* Layout snaps the host's box to 1/64 px, and the default xMidYMid meet
-               then scales uniformly by the smaller of the two ratios — a 1160px wide
-               block of text shrinks by 0.02% and its right end drifts 0.3px, so a whole
-               line's anti-aliasing no longer matches the PDF. Scaling the two axes
-               independently leaves an error of a few ten-thousandths of a px. */
+            host.setAttribute("viewBox", `${x} ${y} ${w} ${h}`);
+            /* Layout snaps the box to 1/64 px, and xMidYMid meet would then scale
+               both axes by the smaller ratio, drifting a wide line's right end off
+               the PDF's anti-aliasing. */
             host.setAttribute("preserveAspectRatio", "none");
-            host.style.left = ((x - vb.x) / vb.width * 100) + "%";
-            host.style.top = ((y - vb.y) / vb.height * 100) + "%";
-            host.style.width = (w / vb.width * 100) + "%";
-            host.style.height = (h / vb.height * 100) + "%";
-            host.dataset.vitKey = p.key;
+            host.style.left = `${((x - vb.x) / vb.width) * 100}%`;
+            host.style.top = `${((y - vb.y) / vb.height) * 100}%`;
+            host.style.width = `${(w / vb.width) * 100}%`;
+            host.style.height = `${(h / vb.height) * 100}%`;
+            host.dataset.vitKey = key;
 
-            var wrap = document.createElementNS(NS, "g");
-            wrap.setAttribute("transform", "matrix(" + [m.a, m.b, m.c, m.d, m.e, m.f].join(" ") + ")");
-            wrap.appendChild(p.node);                  // detaches it from the page svg
+            const wrap = document.createElementNS(NS, "g");
+            wrap.setAttribute("transform", `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].join(" ")})`);
+            wrap.appendChild(node);                  // detaches it from the page svg
             host.appendChild(wrap);
             page.appendChild(host);
-         });
+         }
       } finally {
-         states.forEach(function (g, i) { restore(g, stateWas[i]); });
+         states.forEach((g, i) => restore(g, stateWas[i]));
          restore(slide, was[0]);
          if (group) restore(group, was[1]);
       }
       return true;
    };
-
-   function show(el, how) {
-      var was = unstep(el);
-      el.style.setProperty("display", how, "important");
-      el.style.setProperty("content-visibility", "visible", "important");
-      return was;
-   }
-   function unstep(el) {
-      var was = [el.style.getPropertyValue("display"), el.style.getPropertyPriority("display")];
-      el.style.removeProperty("display");
-      return was;
-   }
-   function restore(el, was) {
-      el.style.removeProperty("content-visibility");
-      if (was[0]) el.style.setProperty("display", was[0], was[1]);
-      else el.style.removeProperty("display");
-   }
-
-   function pageNo(group) {
-      return [].indexOf.call(document.querySelectorAll(".vit-group"), group) + 1;
-   }
-
-   function bbox(el, toRoot) {
-      var b;
-      try { b = el.getBBox(); } catch (e) { return null; }
-      var m = toRoot(el), out = null;
-      [[b.x, b.y], [b.x + b.width, b.y], [b.x, b.y + b.height],
-      [b.x + b.width, b.y + b.height]].forEach(function (p) {
-         var X = m.a * p[0] + m.c * p[1] + m.e, Y = m.b * p[0] + m.d * p[1] + m.f;
-         out = out ? [Math.min(out[0], X), Math.min(out[1], Y),
-         Math.max(out[2], X), Math.max(out[3], Y)] : [X, Y, X, Y];
-      });
-      return out;
-   }
-
 })();

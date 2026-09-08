@@ -347,7 +347,7 @@ over, so a CeTZ that has moved on names what went missing instead of drawing
 something a hair off. Nothing else is hard-wired either: the surface is
 `dictionary(cetz.draw)`, wrapped whole, so a CeTZ that adds a shape keeps it,
 and the drawing context is copied whole rather than field by field. `tested`
-names the versions `packages/tween/compat/cetz-test.typ` has actually been through, and
+names the versions `tools/cetz.typ` has actually been through, and
 `node tools/cetz.mjs` puts it through them again — six canvases, each drawn with
 states and without, page pair by page pair, no fuzz.
 
@@ -448,13 +448,14 @@ tools/knobs.typ     a three-page deck whose transitions set duration, easing and
 tools/gencss.py     writes the transition block of deck.css from a table of effects (`python3 tools/gencss.py`)
 tools/clef.py       derives the tutorial's clef from a font glyph: skeleton, Eulerian trail, offset outline
 tools/cetz.mjs      the CeTZ layer against several CeTZ versions, page pair by page pair
-packages/tween/lib.typ      N states of one drawing, and the browser between them (a package of its own)
+tools/cetz.typ      one canvas drawn twice, with states and without: the pages must match, compiled by cetz.mjs
+packages/tween/lib.typ      the front door: everything a document imports comes through it
+packages/tween/states.typ   the states themselves, so the layers under compat/ can build on them
+packages/tween/waapi.typ    Web Animations from Typst, and the channel a declaration crosses a frame on
 packages/tween/tween.js     the engine: the label grammar, the states, the keyframes each node needs
 packages/tween/waapi.js     Web Animations from Typst, and an element run along a path
 packages/tween/paths.js     path data: two states whose paths are not the same list of commands, reconciled
-packages/tween/states.typ         the states themselves, so the layers under compat/ can build on them
 packages/tween/compat/cetz.typ    cetz.draw with the states of a drawing on every element
-packages/tween/compat/cetz-test.typ  one canvas drawn twice, with states and without: the pages must match
 ```
 
 `tools/` need `playwright` (`paths.mjs` only Node); `verify.mjs` and `cetz.mjs`
