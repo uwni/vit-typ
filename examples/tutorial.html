@@ -1200,6 +1200,46 @@ body.vit-black > * {
       return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
    };
 
+   /* ── TEMPORARY (typst#8832) ──────────────────────────────────────────
+      waapi declares an animation where the thing it moves is written, but
+      inside a frame it cannot start it: keyframes are CSS, and an element
+      inside an `<svg>` is not a CSS box — `backgroundColor`, `borderRadius`,
+      `boxShadow` and `width` compute there and paint nothing, percentages and
+      the transform origin resolve against the viewBox, and the element's own
+      transform is its placement, which a `transform` keyframe would replace.
+      So `<waapi-anim data-at data-spec>` names its target by the ordinal in
+      that target's label and waits; lifting is what makes it a box.
+
+      Measured and placed with the marks — moving one first would measure the
+      rest against a box given in percentages — then started on the box it was
+      given, with the page as what a followed path is measured from: the host is
+      an `<svg>`, which has no offsetParent.
+
+      All of this goes when the Typst side can place these regions itself: the
+      function, and its two call sites below. */
+   const declared = (page, toRoot) => {
+      const found = [...document.querySelectorAll("waapi-anim[data-at]")]
+         .map(d => ({
+            el: document.querySelector(`[data-typst-label="waapi-anim@${d.dataset.at}"]`),
+            spec: d.dataset.spec,
+         }))
+         .filter(d => d.el && page.contains(d.el));
+      const plan = [];
+      for (const { el, spec } of found) {
+         const box = bbox(el, toRoot);
+         if (box && box[2] > box[0] && box[3] > box[1]) plan.push({ key: null, node: el, box, mat: toRoot(el.parentNode), spec });
+      }
+      return {
+         plan,
+         start: () => {
+            for (const { node, spec } of plan) {
+               const host = node.closest(".vit-mark");
+               if (host) { try { window.waapi?.start(host, JSON.parse(spec), page); } catch { } }
+            }
+         },
+      };
+   };
+
    /* vit-key on the <g> becomes data-vit-key on the host; what the mark declares
       about itself is in vitMarks, by key. True only when it did the work. */
    window.vitLift = slide => {
@@ -1255,7 +1295,8 @@ body.vit-black > * {
             in percentages, and follow the window size. One label instance is one
             region — the same key several times on a page is allowed, and the
             runtime names them by occurrence. */
-         const plan = [];
+         const anims = declared(page, toRoot);                      // TEMPORARY
+         const plan = [...anims.plan];
          for (const [key, nodes] of byKey) {
             for (const node of nodes) {
                const box = bbox(node, toRoot);
@@ -1284,7 +1325,7 @@ body.vit-black > * {
             host.style.top = `${((y - vb.y) / vb.height) * 100}%`;
             host.style.width = `${(w / vb.width) * 100}%`;
             host.style.height = `${(h / vb.height) * 100}%`;
-            host.dataset.vitKey = key;
+            if (key != null) host.dataset.vitKey = key;
 
             const wrap = document.createElementNS(NS, "g");
             wrap.setAttribute("transform", `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].join(" ")})`);
@@ -1292,6 +1333,7 @@ body.vit-black > * {
             host.appendChild(wrap);
             page.appendChild(host);
          }
+         anims.start();                                             // TEMPORARY
       } finally {
          states.forEach((g, i) => restore(g, stateWas[i]));
          restore(slide, was[0]);
@@ -1367,9 +1409,18 @@ window.waapi ??= (() => {
       /* The browser's own answer to "should anything move at all". */
       reduced: () => reduced.matches,
 
+      /* A followed path is `offset-path: path(…)`, a static string of pixels,
+         so it is measured again whenever the layout has moved. A window resize
+         is caught above; a host whose own boxes change size — a thumbnail shown
+         full — has to say so. */
+      refit: () => fits.forEach(f => f()),
+
       /* Whatever the Typst side declared for one element: its keyframes and its
-         options, or a path to run along. */
-      start(el, o) {
+         options, or a path to run along. `el` has to be a CSS box — keyframes
+         are CSS, and half of them mean something else or nothing at all on an
+         element inside an `<svg>`. `origin` is what a followed path is measured
+         from, for a caller that knows better than the box's containing block. */
+      start(el, o, origin) {
          if (el.dataset.waapiOn) return null;
          el.dataset.waapiOn = "1";
          const role = o.name ? `waapi:${o.name}` : "waapi";
@@ -1380,7 +1431,7 @@ window.waapi ??= (() => {
                console.info(`[waapi] no track named ${o.follow} on this page, or it has no path`);
                return null;
             }
-            const run = api.follow(el, track, { ...o, role }, null);
+            const run = api.follow(el, track, { ...o, role }, origin);
             fits.push(run.fit);
             run.fit();
             a = run.anim;
@@ -1403,11 +1454,19 @@ window.waapi ??= (() => {
          this.run();
       }
       run() {
+         /* Written where an element could be, this element is the box and it
+            starts itself. The other form names its target by the ordinal in
+            that target's label, and the target is inside a frame — an SVG
+            element, not a box. Only a host knows when it can give it one, so
+            the host reads this and calls start(); here it is inert.
+
+            TEMPORARY (typst#8832): a host that can place a frame puts the
+            declaration on an element of its own, and this branch goes with the
+            pointer form itself. */
+         if (this.dataset.at != null) return;
          let o;
          try { o = JSON.parse(this.dataset.spec); } catch { return; }
-         const { at } = this.dataset;
-         const el = at == null ? this : document.querySelector(`[data-typst-label="waapi-anim@${at}"]`);
-         if (el) api.start(el, o);
+         api.start(this, o);
       }
    });
 
@@ -1902,6 +1961,7 @@ window.tween = (() => {
       s.classList.toggle("is-active", k === i);
       if (k !== i) { still(s); halt(s); }
     });
+    waapi.refit();   // this frame's box is new, and a followed path is in pixels
     announce();
   };
 
@@ -2855,6 +2915,8 @@ window.tween = (() => {
     showBar();
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
+    /* the deck's box changes without a window resize: desk ⇄ presenting */
+    new ResizeObserver(() => waapi.refit()).observe(deck);
     window.vit = {
       go, next, prev,
       get index() { return cur; },

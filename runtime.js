@@ -115,6 +115,7 @@
       s.classList.toggle("is-active", k === i);
       if (k !== i) { still(s); halt(s); }
     });
+    waapi.refit();   // this frame's box is new, and a followed path is in pixels
     announce();
   };
 
@@ -1068,6 +1069,8 @@
     showBar();
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
+    /* the deck's box changes without a window resize: desk ⇄ presenting */
+    new ResizeObserver(() => waapi.refit()).observe(deck);
     window.vit = {
       go, next, prev,
       get index() { return cur; },

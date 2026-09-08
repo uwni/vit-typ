@@ -65,6 +65,12 @@ window.waapi ??= (() => {
       /* The browser's own answer to "should anything move at all". */
       reduced: () => reduced.matches,
 
+      /* A followed path is `offset-path: path(…)`, a static string of pixels,
+         so it is measured again whenever the layout has moved. A window resize
+         is caught above; a host whose own boxes change size — a thumbnail shown
+         full — has to say so. */
+      refit: () => fits.forEach(f => f()),
+
       /* Whatever the Typst side declared for one element: its keyframes and its
          options, or a path to run along. `el` has to be a CSS box — keyframes
          are CSS, and half of them mean something else or nothing at all on an
