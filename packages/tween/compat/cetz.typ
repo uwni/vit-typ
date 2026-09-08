@@ -1,4 +1,4 @@
-/// tween-cetz — `cetz.draw`, with the states of a drawing on every element.
+/// compat/cetz — `cetz.draw`, with the states of a drawing on every element.
 ///
 /// A canvas is one object, and what moves inside it is Web Animations' work,
 /// not the page's: this hands CeTZ's drawing surface back with `over(…)`
@@ -9,9 +9,9 @@
 ///
 /// ```typ
 /// #import "@preview/cetz:0.5.2"
-/// #import "@preview/tween-cetz:0.1.0": tweened
+/// #import "@preview/tween:0.1.0": compat
 ///
-/// #let cz = tweened(cetz)                            // once, per file
+/// #let cz = compat.cetz.tweened(cetz)                            // once, per file
 ///
 /// #cetz.canvas(length: 1cm, {
 ///   let (circle, line, over) = cz                    // in place of cetz.draw
@@ -48,14 +48,7 @@
 /// moved on says which name went missing instead of drawing something subtly
 /// wrong. Versions are not gated: `tested` only names what has actually been
 /// put through `test.typ` beside this file.
-// Once tween is published, replace the next line with #import "@preview/tween:0.1.0" as tween
-#import "../tween/lib.typ" as tween
-
-/// `tween`'s own, passed through so that one import does: the stylesheet and
-/// the runtime as strings, and `host`, which an HTML document says once around
-/// its body — a canvas is laid out as paper, and `target()` cannot report from
-/// in there which document it is.
-#let (css, js, host) = (tween.css, tween.js, tween.host)
+#import "../states.typ" as tween
 
 /// N values of one argument: the element is drawn once per value, and the
 /// results are its states.
@@ -158,7 +151,7 @@
           + repr(cetz.version)
           + " has no "
           + gone.join(" and no ")
-          + ", which is what tween-cetz measures and places an element's states with; it has been tested against 0."
+          + ", which is what tween measures and places an element's states with; it has been tested against 0."
           + tested.map(str).join(", 0.")
       ),
     )
@@ -171,7 +164,7 @@
   let stated(states, play: none, still: -1) = d.get-ctx(ctx => {
     assert(
       "length" in ctx and "transform" in ctx,
-      message: "cetz " + repr(cetz.version) + " sets up a canvas context tween-cetz does not recognise",
+      message: "cetz " + repr(cetz.version) + " sets up a canvas context tween does not recognise",
     )
     // Every state, processed once — the box it draws, in the space the drawables
     // already live in, and the context it leaves behind. Measured, not drawn: a

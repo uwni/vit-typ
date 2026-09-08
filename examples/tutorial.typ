@@ -10,14 +10,11 @@
 // Once published, replace the next line with #import "@preview/vit:0.1.0": *
 #import "../lib.typ": *
 // Element animation — stepped and played alike — is tween's, not the deck's.
-// Once published, replace the next line with #import "@preview/tween:0.1.0": tween, waapi
-#import "../packages/tween/lib.typ": tween, waapi
+// compat.cetz is its layer for CeTZ: cetz.draw with `over(…)` allowed in place
+// of any argument. Once published: #import "@preview/tween:0.1.0": tween, waapi, compat
+#import "../packages/tween/lib.typ": tween, waapi, compat
 #import "@preview/cetz:0.5.2"
-// What moves *inside* a canvas is the element animation's, not the page's: this
-// hands back cetz.draw with `over(…)` allowed in place of any argument. Once
-// published, replace the next line with #import "@preview/tween-cetz:0.1.0": tweened
-#import "../packages/tween-cetz/lib.typ": tweened
-#let cz = tweened(cetz)
+#let cz = compat.cetz.tweened(cetz)
 // Third party packages, unchanged: theorion writes the theorem environments,
 // fletcher draws the commutative diagrams. Both have an HTML branch of their own,
 // and neither of them takes it here — a slide is an html.frame, and inside a frame
@@ -622,8 +619,8 @@
       "Element animation",
       [Several bodies are the states of one drawing: `tween(s0, s1, …)`, or `states(…)` inside a canvas, where only what moves is a state. A drawing needs no `mark` — a mark is identity between pages, and this is motion inside one. `→` moves to the next, `←` back along the same path, and the browser interpolates the SVG nodes.],
       src(```typ
-      #import "@preview/tween-cetz:0.1.0": tweened
-      #let cz = tweened(cetz)          // once, per file
+      #import "@preview/tween:0.1.0": compat
+      #let cz = compat.cetz.tweened(cetz)   // once, per file
 
       #let wave = cetz.canvas({
         import cetz.draw: circle, line, rect, content

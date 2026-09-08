@@ -1,8 +1,19 @@
-# tween-cetz
+# compat
 
-[CeTZ](https://typst.app/universe/package/cetz) for [tween](../tween):
-`cetz.draw` with the states of a drawing on every element, so a part of one
-canvas moves while the rest of it stays put.
+What it takes to make another drawing library's own output N states of one
+drawing — one file per library, and this is where the next one goes. A layer
+here imports no version of anything: you hand it the module your document draws
+with, so it follows that library's releases and not tween's, and a document that
+does not use it pays nothing. It builds on `../states.typ` rather than on
+`../lib.typ`, because `lib.typ` imports these files to hand them out and Typst
+rejects a cyclic import; and it is handed out from there because a published
+package's subfiles cannot be imported at all.
+
+## cetz
+
+[CeTZ](https://typst.app/universe/package/cetz): `cetz.draw` with the states of
+a drawing on every element, so a part of one canvas moves while the rest of it
+stays put.
 
 A canvas is one object. What happens inside it is Web Animations' work — two
 states of the same drawing, interpolated node by node — and that is what this
@@ -12,9 +23,9 @@ it does in a talk.
 
 ```typst
 #import "@preview/cetz:0.5.2"
-#import "@preview/tween-cetz:0.1.0": tweened, host, css, js
+#import "@preview/tween:0.1.0": compat, host, css, js
 
-#let cz = tweened(cetz)                              // once, per file
+#let cz = compat.cetz.tweened(cetz)                              // once, per file
 #show: host                                        // an HTML document says so once
 
 #html.elem("style", css)
@@ -29,7 +40,7 @@ it does in a talk.
 
 |                     |                                                                                                                                                                                                                                                                                                          |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tweened(cetz)`     | Everything `cetz.draw` has, with `over(…)` allowed in place of any argument; everything else passed through untouched. Plus `over`, `states` and CeTZ's own `canvas`.                                                                                                                                    |
+| `compat.cetz.tweened(cetz)`     | Everything `cetz.draw` has, with `over(…)` allowed in place of any argument; everything else passed through untouched. Plus `over`, `states` and CeTZ's own `canvas`.                                                                                                                                    |
 | `over(a, b, …)`     | In place of any argument, anywhere inside it: N states of that element. Every `over` in one call is walked in step, so the states are one drawing under different numbers _by construction_ — same structure, only the numbers differ, which is the condition for interpolating instead of cross-fading. |
 | `states(..bodies, play:)` | The same, when more than one element varies together. `play` hands them to Web Animations and they run over time instead of being stepped.                                                                                                                                                                                                                                                    |
 | `host`, `css`, `js` | `tween`'s own, passed through so that one import does.                                                                                                                                                                                                                                                   |
@@ -42,7 +53,7 @@ a deck's arrow keys.
 
 A compatibility layer that imported a CeTZ of its own would make every canvas in
 the document that CeTZ: the elements it builds carry that version's context, and
-one canvas cannot hold two. So `tweened` takes the module — `tweened(cetz)`, the
+one canvas cannot hold two. So `tweened` takes the module — `compat.cetz.tweened(cetz)`, the
 module itself, not `cetz.draw`.
 
 That is also why the surface is a dictionary opened by destructuring rather than
@@ -69,7 +80,7 @@ As little as it can, and all of it in one place.
 
 ## Checking it
 
-`test.typ` beside this file is six canvases, each drawn twice — with states and
+`cetz-test.typ` beside this file is six canvases, each drawn twice — with states and
 without — as two pages that have to be pixel-identical. It is the whole claim in
 a form a machine can check, including the ones that are easy to get wrong: under
 a rotation and a scale, with several states, with `intersections` reading the
@@ -104,5 +115,5 @@ behave as if this package were not here.
 
 Identity _between_ canvases is a different thing and not this package's. A
 canvas that is one object across a page turn is a canvas inside a
-[vit](../../README.md) `mark` — `mark("fig", cetz.canvas(…))` — and what is
+[vit](../../../README.md) `mark` — `mark("fig", cetz.canvas(…))` — and what is
 inside it goes on moving as it does anywhere else.
