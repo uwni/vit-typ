@@ -551,22 +551,6 @@
   };
   const tap = q => { if (q.x < 1 / 3) prev(); else next(); };
 
-  /* Where in `box` an event landed, or null if it was not the box's to read.
-     Whose it is, is the platform's answer: a modal dialog makes what is behind
-     it inert and takes the event itself, a link or a button in the layout
-     takes its own, and the margin beside the stage is the body's.
-
-     While a transition runs the whole page is a set of snapshots and nothing
-     is hit-tested, so every event targets <html>. That is an answer too — no
-     element could claim it, and the deck is the only thing acting — but it
-     does not tell the toolbar apart, which is drawn over the stage and stays
-     up. Its buttons are as dead as everything else then; the test below is
-     only so that stabbing at one does not turn the page instead. */
-  const ours = (e, box) =>
-    box.contains(e.target) ? frac(e, box)
-      : pendingUndo && e.target === root ? (bar && frac(e, bar) ? null : frac(e, box))
-        : null;
-
   const onClick = e => {
     if (over() || atDesk()) {
       const d = e.target.closest(".vit-dots i");
@@ -581,14 +565,26 @@
     }
     if (e.target.closest("a, button, input, select, textarea, pre, table")) return;
     if (lasing && touching) return;          // pointing by touch is not a page turn
-    const q = ours(e, deck);
+    const q = frac(e, deck);
+    if (q) tap(q);
+  };
+
+  /* While a transition runs the page is a set of snapshots: nothing is
+     hit-tested, every event targets <html>, and the click above never arrives.
+     What is left is where it fell — and the toolbar, drawn over the stage and
+     still up though its buttons are as dead as the rest, has to be stepped
+     around so that stabbing at one does not turn the page instead. */
+  const onBlindClick = e => {
+    if (!pendingUndo || e.target !== root || over() || atDesk()) return;
+    if (bar && frac(e, bar)) return;
+    const q = frac(e, deck);
     if (q) tap(q);
   };
 
   let tx = 0, ty = 0, swiping = false;
   const onTouchStart = e => {
     const t = e.changedTouches[0];
-    swiping = !!ours(t, atDesk() ? view : deck);
+    swiping = !!frac(t, atDesk() ? view : deck);
     tx = t.clientX;
     ty = t.clientY;
   };
@@ -615,7 +611,7 @@
     if (wheelAcc > 0) next(); else prev();
     wheelAcc = 0;
   };
-  const onWheel = e => { if (!over() && ours(e, atDesk() ? view : deck)) wheel(e); };
+  const onWheel = e => { if (!over() && frac(e, atDesk() ? view : deck)) wheel(e); };
 
   /* "#3" = page 3, first position; "#3.4" = page 3, fourth position (frames and steps flattened) */
   const fromHash = () => {
@@ -627,10 +623,14 @@
 
   const initInput = () => {
     document.addEventListener("keydown", onKey);
-    document.addEventListener("click", onClick);
-    document.addEventListener("touchstart", onTouchStart, { passive: true });
-    document.addEventListener("touchend", onTouchEnd, { passive: true });
-    document.addEventListener("wheel", onWheel, { passive: true });
+    /* The deck's clicks come to the deck: the browser routes them, so a
+       dialog's own click, a button on the toolbar and the margin beside the
+       stage never arrive here at all. */
+    deck.addEventListener("click", onClick);
+    document.addEventListener("click", onBlindClick);
+    deck.addEventListener("touchstart", onTouchStart, { passive: true });
+    deck.addEventListener("touchend", onTouchEnd, { passive: true });
+    deck.addEventListener("wheel", onWheel, { passive: true });
     document.addEventListener("pointermove", e => { showBar(); route(e); });
     document.addEventListener("pointerdown", route);
     document.addEventListener("pointerup", () => { if (touching) laser.classList.remove("is-on"); });
