@@ -18,7 +18,7 @@
   ("?", "This help"),
 )
 
-#let help(version: none, compilation-time: none) = html.dialog(
+#let help(version: none, build: none) = html.dialog(
   class: "vit-help",
   {
     html.table(
@@ -36,8 +36,8 @@
       if version != none {
         str(version)
       },
-      if compilation-time != none {
-        "build " + compilation-time.display()
+      if build != none {
+        "build " + build
       },
     ).join(" ")
 

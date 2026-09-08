@@ -550,7 +550,7 @@
       _bar(pdf: href)
       _pane()
       _laser()
-      _help(version: version)
+      _help(version: version, build: datetime.today().display())
       _settings()
       _speaker(pdf: href)
       html.elem("script", "const vitMarks = " + json.encode(marks.table) + ";")
