@@ -2030,14 +2030,12 @@ window.tween = (() => {
     });
   };
 
-  /* Caption and dots pair off with the page's positions in order: the nth dot
-     is the nth position. The tooltip is the caption as the browser flattened it
-     to text. */
+  /* The dots pair off with the page's positions in order: the nth dot is the
+     nth position. A caption too wide for the rail is clipped to an ellipsis and
+     left at that: a tooltip would have to repeat the text the browser laid out,
+     which only the browser knows. */
   const readDots = () => {
     for (const g of groups) {
-      const cap = g.el.querySelector(".vit-cap span");
-      if (cap) cap.title = g.title;
-
       const rail = g.el.querySelector(".vit-dots");
       if (!rail) continue;
       g.dots = [...rail.children];
