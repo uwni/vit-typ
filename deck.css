@@ -45,6 +45,10 @@ html {
   --vit-stage: min(100vw, calc(100svh * var(--vit-w) / var(--vit-h)));
   background: var(--vit-bg);
 }
+/* The window, before the runtime has said which mode we are in and in the one
+   it opens to. `place-items` is not idle here even where the layout is a block:
+   `justify-items` sizes a block-level child to fit its content, so a mode that
+   wants the width says so. */
 body {
   margin: 0;
   min-height: 100svh;
@@ -60,6 +64,7 @@ body {
   position: relative;
   aspect-ratio: var(--vit-w) / var(--vit-h);
   width: var(--vit-stage);
+  margin: auto;
   background: var(--vit-page);
   overflow: hidden;
 }
@@ -117,24 +122,99 @@ body {
   display: none;
 }
 
-/* ── thumbnails: the overview and the desk's rail ─────────────────────
-   Both show every page at once, one frame per group, and differ only in how
-   the thumbnails are arranged: the overview fills the window with a grid,
-   the desk stands them in a column beside the page. */
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group {
+/* ── the three modes ──────────────────────────────────────────────────
+   The deck (one page, live) and the rail (one thumbnail per page) are both in
+   the document at all times, side by side; a mode is which of them is shown
+   and how the rail is laid out. Nothing is ever moved between them, so the
+   frames stay where the model says they are and a thumbnail is never a second
+   rendering of anything — the picture in it is a <use> of the page itself.
+
+   The verdict lands on <html data-mode>, written by the runtime and read
+   nowhere else. */
+body > .vit-rail,
+body > .vit-notes {
+  display: none;
+}
+
+/* The deck's cell. Only at the desk is it a box of its own — the deck has to
+   be sized against what the cell leaves, and only an element can be asked. */
+.vit-pane {
+  display: contents;
+}
+
+/* ── the desk ─────────────────────────────────────────────────────────
+   Where the deck opens, and what Esc comes back to: the pages down the left,
+   the one they point at beside them, its notes underneath. */
+:root[data-mode="desk"] body {
+  display: grid;
+  grid-template-columns: clamp(7rem, 17vw, 14rem) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+  place-items: stretch;
+  gap: 14px;
+  padding: 14px;
+  height: 100svh;
+}
+:root[data-mode="desk"] .vit-rail {
+  display: flex;
+  grid-row: 1 / 3;
+}
+:root[data-mode="desk"] .vit-pane {
   display: block;
+  container-type: size;
+  min-height: 0;
+}
+:root[data-mode="desk"] .vit-deck {
+  /* the layout's shape, in whatever the cell leaves — the same formula the
+     stage uses, in the cell's own units */
+  width: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
+  border-radius: 0.5rem;
+}
+:root[data-mode="desk"] .vit-notes {
+  display: block;
+  /* the toolbar floats over the bottom-right corner: leave it room */
+  padding-bottom: 44px;
+}
+
+/* the overview: every page at once, in a grid down the window */
+:root[data-mode="overview"] body {
+  display: block;
+  place-items: normal;
+}
+:root[data-mode="overview"] .vit-deck {
+  display: none;
+}
+:root[data-mode="overview"] .vit-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  overflow: visible;
+}
+
+/* ── the rail ─────────────────────────────────────────────────────────
+   One thumbnail per page: the caption above it so the group's bottom edge is
+   the picture's, and the dots in the picture's bottom-right corner. Down a
+   column at the desk, across a grid in the overview — the difference is the
+   two rules above and nothing else. */
+.vit-rail {
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.vit-thumb {
   position: relative;
-  inset: auto;
+  flex: none;
   cursor: pointer;
 }
-/* one page = one thumbnail: a group exposes one frame, the others stay out */
-.vit-deck:is(.vit-all, .vit-desk) .vit-slide {
-  display: none !important;
-}
-.vit-deck:is(.vit-all, .vit-desk) .vit-slide.is-thumb {
-  display: block !important;
-  position: relative;
-  inset: auto;
+/* What the page's picture is doing here: a <use> of the very drawing the deck
+   holds, so the page is rendered once and the rail costs no second copy of it.
+   Empty until the runtime points it somewhere. */
+.vit-stand {
+  display: block;
+  width: 100%;
   aspect-ratio: var(--vit-w) / var(--vit-h);
   content-visibility: auto;
   border: 1px solid var(--vit-line);
@@ -142,22 +222,14 @@ body {
   overflow: hidden;
   background: var(--vit-page);
 }
-/* the stand-in is the box in the slot as much as a frame is, so it is bordered
-   on the same terms — see .vit-stand */
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group:hover :is(.vit-slide, .vit-stand).is-thumb {
+.vit-thumb:hover .vit-stand,
+.vit-thumb.is-here .vit-stand {
   border-color: var(--vit-accent);
 }
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group.is-here :is(.vit-slide, .vit-stand).is-thumb {
-  border-color: var(--vit-accent);
+.vit-thumb.is-here .vit-stand {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-accent) 28%, transparent);
 }
-
-/* caption above, thumbnail below, so the group's bottom edge is the thumbnail's and the dots go into the bottom-right corner */
-.vit-cap,
-.vit-dots {
-  display: none;
-}
-:is(.vit-all, .vit-desk) .vit-cap {
+.vit-cap {
   display: flex;
   align-items: baseline;
   gap: 0.45rem;
@@ -167,22 +239,22 @@ body {
     system-ui,
     sans-serif;
 }
-:is(.vit-all, .vit-desk) .vit-cap b {
+.vit-cap b {
   flex: none;
   font-weight: 600;
   color: var(--vit-muted);
   font-variant-numeric: tabular-nums;
 }
-:is(.vit-all, .vit-desk) .is-here .vit-cap b {
+.is-here .vit-cap b {
   color: var(--vit-accent);
 }
-:is(.vit-all, .vit-desk) .vit-cap span {
+.vit-cap span {
   color: var(--vit-fg2);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-:is(.vit-all, .vit-desk) .vit-dots {
+.vit-dots {
   display: flex;
   gap: 6px;
   position: absolute;
@@ -197,7 +269,7 @@ body {
 /* three states, one shape: what is still ahead is an outline, what has been
    passed is filled in the muted colour, the position we are on is filled in the
    accent */
-:is(.vit-all, .vit-desk) .vit-dots i {
+.vit-dots i {
   box-sizing: border-box;
   width: 7px;
   height: 7px;
@@ -205,144 +277,34 @@ body {
   border: 1px solid var(--vit-accent);
   cursor: pointer;
 }
-:is(.vit-all, .vit-desk) .vit-dots i.is-on {
+.vit-dots i.is-on {
   background: var(--vit-muted);
   border-color: var(--vit-muted);
 }
-:is(.vit-all, .vit-desk) .vit-dots i.is-now {
+.vit-dots i.is-now {
   background: var(--vit-accent);
   border-color: var(--vit-accent);
 }
 /* pointing at one says so whatever state it is in, so this comes last */
-:is(.vit-all, .vit-desk) .vit-dots i:hover,
-:is(.vit-all, .vit-desk) .vit-dots i.is-peek {
+.vit-dots i:hover,
+.vit-dots i.is-peek {
   border-color: var(--vit-fg);
 }
-:is(.vit-all, .vit-desk) .vit-dots i.is-peek {
+.vit-dots i.is-peek {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-fg) 35%, transparent);
 }
 
-/* overview: toggled with o / a */
-body:has(.vit-all) {
-  display: block;
-  place-items: start;
-}
-.vit-deck.vit-all {
-  position: static;
-  width: 100%;
-  max-width: none;
-  height: auto;
-  aspect-ratio: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
-  gap: 1rem;
-  padding: 1rem;
-  background: var(--vit-bg);
-  overflow: visible;
-}
-
-/* ── the desk ─────────────────────────────────────────────────────────
-   Where the deck opens, and what Esc comes back to: the pages down the
-   left, the one they point at beside them, its notes underneath. The rail
-   is the deck itself in thumbnails, so a click there is the same click as
-   in the overview; the preview is a copy of this document positioned by
-   #hash — the same mirror the speaker view uses. */
-body:has(.vit-desk) {
-  display: grid;
-  grid-template-columns: clamp(7rem, 17vw, 14rem) minmax(0, 1fr);
-  place-items: stretch;
-  gap: 14px;
-  padding: 14px;
-  box-sizing: border-box;
-  height: 100svh;
-}
-.vit-deck.vit-desk {
-  position: static;
-  width: auto;
-  height: auto;
-  min-height: 0;
-  aspect-ratio: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-right: 4px;
-  background: transparent;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-}
-.vit-deck.vit-desk > .vit-group {
-  flex: none;
-}
-.vit-pane {
-  display: none;
-}
-body:has(.vit-desk) .vit-pane {
-  display: grid;
-  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
-  gap: 14px;
-  min-height: 0;
-}
-/* the preview keeps the layout's shape and takes whatever of the cell that
-   leaves — the same formula as the stage, in the cell's own units */
-.vit-view {
-  container-type: size;
-  display: grid;
-  place-items: center;
-  min-height: 0;
-}
-/* The page itself, moved here out of the rail while the desk is up: sized like
-   the stage, and showing its current frame rather than a thumbnail. */
-.vit-view > .vit-slide {
-  display: block;
-  width: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
-  aspect-ratio: var(--vit-w) / var(--vit-h);
-  position: relative;
-  inset: auto;
-  background: var(--vit-page);
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-/* What stands in for that page back in the rail: two nodes that point at the
-   very same drawing, so the rail looks no different for it having moved. It
-   holds the slot on the same terms as a frame — one box per page — so hovering
-   a dot can put one of the page's other frames there instead. */
-.vit-stand {
-  display: none;
-  width: 100%;
-  aspect-ratio: var(--vit-w) / var(--vit-h);
-  border: 1px solid var(--vit-line);
-  border-radius: 0.5rem;
-  background: var(--vit-page);
-}
-.vit-stand.is-thumb {
-  display: block;
-}
-/* the toolbar floats over the notes' bottom-right corner: leave it room */
-body:has(.vit-desk) .vit-notes {
-  padding-bottom: 44px;
-}
-/* narrow: the rail keeps the numbers only, and the preview takes the width it
-   is given — the notes get the rest of the height, which is what is short here */
+/* narrow: the rail keeps the numbers only, and the deck takes the width it is
+   given — the notes get the rest of the height, which is what is short here */
 @media (max-width: 720px) {
-  body:has(.vit-desk) {
+  :root[data-mode="desk"] body {
     grid-template-columns: 5.5rem minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 8px;
     padding: 8px;
   }
-  body:has(.vit-desk) .vit-cap span {
+  :root[data-mode="desk"] .vit-cap span {
     display: none;
-  }
-  body:has(.vit-desk) .vit-pane {
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 8px;
-  }
-  .vit-view {
-    container-type: normal;
-    display: block;
-  }
-  .vit-view .vit-mirror {
-    width: 100%;
   }
 }
 
@@ -389,287 +351,8 @@ body:has(.vit-desk) .vit-notes {
   animation-duration: calc(var(--vit-duration) / var(--vit-speed));
   animation-timing-function: var(--vit-easing);
 }
-/* ── a transition is a pair of effects ────────────────────────────────
-   deck/slide/mark(transition: (enter:, leave:)): how the new side comes in,
-   how the old side goes out; a string is the same effect both ways. The
-   Typst side writes the pair as the transition's types on every frame
-   (data-transition="enter-slide leave-fade") and as a one-sided mark's
-   view-transition-class (the runtime adds the side the mark has, vit-only-new
-   or vit-only-old); the runtime adds fwd or back. Going back replays the pair in reverse: the new side comes in the
-   way the old would have gone out, run backwards, and the old side goes out
-   the way the new would have come in. So each effect has one rule per role
-   — the enter effect's names the new side forward and the old side back,
-   the leave effect's the old side forward and the new side back — and the
-   value is the same in both directions: where the entering side starts is
-   where the leaving side ends.
-
-   Every side runs one animation, vit-enter from where the variables put it
-   to rest, vit-leave from rest to where they put it: --vit-opacity,
-   --vit-transform, --vit-clip (with --vit-clip-rest, the clip at rest — unset,
-   nothing is clipped; a clip at rest would cut the ink overflow the
-   snapshots carry, so only the wipes set it), --vit-s-away (the
-   magnification away from rest, for the zoom's focus), --vit-timing. A side
-   with nothing set holds. A rule that names root sets the variables on
-   the root's own image, never on html: the marks' images would inherit
-   them. Only an image that exists gets an animation — a one-sided mark's
-   new image if it is entering, its old image if it is leaving: WebKit
-   styles both images of every named element whether or not they exist, and
-   an animation given to one that does not exist is never torn down and
-   comes back finished the next time the name is used. */
-::view-transition-new(root),
-::view-transition-new(.vit-only-new) {
-  animation: vit-enter calc(var(--vit-duration) / var(--vit-speed)) var(--vit-timing, var(--vit-easing)) both;
-}
-::view-transition-old(root),
-::view-transition-old(.vit-only-old) {
-  animation: vit-leave calc(var(--vit-duration) / var(--vit-speed)) var(--vit-timing, var(--vit-easing)) both;
-}
-/* A paired mark morphs: the browser moves its group and cross-fades its two
-   images itself — the old fading out under the new fading in, blended with
-   plus-lighter, so what stays put never dims (the blending rides on the
-   browser's own animation, which an animation of ours would replace). Only
-   the pace is ours. */
-::view-transition-old(.vit-mo),
-::view-transition-new(.vit-mo) {
-  animation-timing-function: var(--vit-easing);
-}
-/* A group interpolates as a box, and each of its two images is drawn into that
-   box — stretched to fill it, which is right for a mark that keeps its shape
-   and wrong for one that grows on one side: an assembly that gains a corner
-   would smear while it grows. fit: "none" draws both images at their own size
-   instead, anchored where the transition asks, so what was already there stays
-   where it was and only the new part appears. The anchor is the corner that
-   does not move. */
-::view-transition-old(.vit-mo),
-::view-transition-new(.vit-mo),
-::view-transition-old(.vit-only-old),
-::view-transition-new(.vit-only-new) {
-  object-fit: var(--vit-fit, fill);
-  object-position: var(--vit-anchor, 50% 50%);
-}
-/* opening or closing the overview: the deck fades into the grid while the page zooms */
-html:active-view-transition-type(overview)::view-transition-new(root) {
-  --vit-opacity: 0;
-}
-/* fade. For root the old page is held beneath the new one fading in: both
-   snapshots are opaque and page-sized, so this is a cross-fade with no dip,
-   the same in both directions, and a frame on which both happen to be fully
-   visible — the last one, when the animations end a frame before the
-   pseudo-elements go — shows the new page, never the old. Paired with
-   another entrance the old page fades out for real. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-fade)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-fade)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-fade),
-html:active-view-transition-type(back)::view-transition-old(.enter-fade),
-html:active-view-transition-type(fwd):active-view-transition-type(leave-fade)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-fade)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-fade),
-html:active-view-transition-type(back)::view-transition-new(.leave-fade) {
-  --vit-opacity: 0;
-}
-html:active-view-transition-type(enter-fade):active-view-transition-type(leave-fade)::view-transition-old(root) {
-  --vit-opacity: 1;
-}
-/* none: at once. The side jumps to its end state on the first frame. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-none)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-none)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-none),
-html:active-view-transition-type(back)::view-transition-old(.enter-none),
-html:active-view-transition-type(fwd):active-view-transition-type(leave-none)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-none)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-none),
-html:active-view-transition-type(back)::view-transition-new(.leave-none) {
-  --vit-opacity: 0;
-  --vit-timing: step-start;
-}
-/* slide / rise: push, by the width / height of the box. Forward the new one
-   comes in from the right / bottom and the old one leaves to the left / top;
-   back, the other way round; a transition can set how far with push (a
-   negative distance sends them the other way). On a mark they also fade, for
-   the reason given where that rule stands. zoom: the new one shrinks into place from
-   three times its size, fading in, the old one grows away, fading out, the
-   same both ways — and the screen is the focal plane. A side at
-   magnification s sits at 1/s of the focal distance, and a lens of aperture
-   A images each of its points as a circle of confusion c = A (s − 1) on the
-   screen. That is what makes a near thing see-through: a stroke thinner
-   than c shades only part of each point's cone of light, so its shadow is
-   diluted over the circle, faint in proportion — a speck on the glasses is
-   not seen at all. The lens is a quarter of the stage wide, so at three
-   times life a point spreads over half the stage and the text is a haze
-   that condenses as the side lands; a transition can set zoom to start
-   nearer or further. The blur is the Gaussian with the
-   disc's RMS radius, σ = c/4, and an image's filter is applied in its own
-   pixels, before its transform, hence σ/s. --vit-s is the magnification
-   itself, registered so that it interpolates alongside the transform and
-   the blur is recomputed from it every frame. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-slide)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-slide)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
-html:active-view-transition-type(back)::view-transition-old(.enter-slide) {
-  --vit-transform: translateX(var(--vit-push, 100%));
-}
-html:active-view-transition-type(fwd):active-view-transition-type(leave-slide)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-slide)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
-html:active-view-transition-type(back)::view-transition-new(.leave-slide) {
-  --vit-transform: translateX(calc(-1 * var(--vit-push, 100%)));
-}
-html:active-view-transition-type(fwd):active-view-transition-type(enter-rise)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-rise)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
-html:active-view-transition-type(back)::view-transition-old(.enter-rise) {
-  --vit-transform: translateY(var(--vit-push, 100%));
-}
-html:active-view-transition-type(fwd):active-view-transition-type(leave-rise)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-rise)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
-html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
-  --vit-transform: translateY(calc(-1 * var(--vit-push, 100%)));
-}
-/* A page pushed by its own width is off the screen when it gets there, and
-   that is the whole of the effect. A mark is pushed by *its* width, so it
-   arrives beside where it started, still on the page and still opaque — and
-   the image would then simply cease to exist. So on a mark, and only there,
-   the push fades. */
-html:active-view-transition-type(fwd)::view-transition-new(.enter-slide),
-html:active-view-transition-type(back)::view-transition-old(.enter-slide),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-rise),
-html:active-view-transition-type(back)::view-transition-old(.enter-rise),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-slide),
-html:active-view-transition-type(back)::view-transition-new(.leave-slide),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-rise),
-html:active-view-transition-type(back)::view-transition-new(.leave-rise) {
-  --vit-opacity: 0;
-}
-html:active-view-transition-type(fwd):active-view-transition-type(enter-zoom)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-zoom)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-zoom),
-html:active-view-transition-type(back)::view-transition-old(.enter-zoom),
-html:active-view-transition-type(fwd):active-view-transition-type(leave-zoom)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-zoom)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-zoom),
-html:active-view-transition-type(back)::view-transition-new(.leave-zoom) {
-  --vit-aperture: calc(var(--vit-stage) / 4);
-  --vit-opacity: 0;
-  --vit-transform: scale(var(--vit-zoom, 3));
-  --vit-s-away: var(--vit-zoom, 3);
-  filter: blur(calc(var(--vit-aperture) / 4 * (var(--vit-s) - 1) / var(--vit-s)));
-}
-/* wipe-*: reveal, named by the direction the front travels (wipe-up sweeps
-   up from the bottom edge): the new one appears from that edge while the old
-   one is covered from the same edge, so at every instant the two tile the
-   box; back runs the front the other way. */
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-left)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-left)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-left),
-html:active-view-transition-type(back)::view-transition-old(.enter-wipe-left) {
-  --vit-clip: inset(0 0 0 100%);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-left)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-left)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-left),
-html:active-view-transition-type(back)::view-transition-new(.leave-wipe-left) {
-  --vit-clip: inset(0 100% 0 0);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-right)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-right)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-right),
-html:active-view-transition-type(back)::view-transition-old(.enter-wipe-right) {
-  --vit-clip: inset(0 100% 0 0);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-right)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-right)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-right),
-html:active-view-transition-type(back)::view-transition-new(.leave-wipe-right) {
-  --vit-clip: inset(0 0 0 100%);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-up)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-up)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-up),
-html:active-view-transition-type(back)::view-transition-old(.enter-wipe-up) {
-  --vit-clip: inset(100% 0 0 0);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-up)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-up)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-up),
-html:active-view-transition-type(back)::view-transition-new(.leave-wipe-up) {
-  --vit-clip: inset(0 0 100% 0);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(enter-wipe-down)::view-transition-new(root),
-html:active-view-transition-type(back):active-view-transition-type(enter-wipe-down)::view-transition-old(root),
-html:active-view-transition-type(fwd)::view-transition-new(.enter-wipe-down),
-html:active-view-transition-type(back)::view-transition-old(.enter-wipe-down) {
-  --vit-clip: inset(0 0 100% 0);
-  --vit-clip-rest: inset(0);
-}
-html:active-view-transition-type(fwd):active-view-transition-type(leave-wipe-down)::view-transition-old(root),
-html:active-view-transition-type(back):active-view-transition-type(leave-wipe-down)::view-transition-new(root),
-html:active-view-transition-type(fwd)::view-transition-old(.leave-wipe-down),
-html:active-view-transition-type(back)::view-transition-new(.leave-wipe-down) {
-  --vit-clip: inset(100% 0 0 0);
-  --vit-clip-rest: inset(0);
-}
-/* Opening/closing the overview is a whole-page zoom: the page interpolates as
-   one group, and element-level morphs would tear it apart, so the marks' names
-   are overridden first (an author !important beats the inline names hoist.js
-   wrote on the elements) and they fold back into root to zoom together. */
-html:active-view-transition-type(overview) .vit-mark {
-  view-transition-name: none !important;
-}
-@property --vit-s {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 1;
-}
-@keyframes vit-enter {
-  from {
-    opacity: var(--vit-opacity, 1);
-    transform: var(--vit-transform, none);
-    clip-path: var(--vit-clip, none);
-    --vit-s: var(--vit-s-away, 1);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    clip-path: var(--vit-clip-rest, none);
-    --vit-s: 1;
-  }
-}
-@keyframes vit-leave {
-  from {
-    opacity: 1;
-    transform: none;
-    clip-path: var(--vit-clip-rest, none);
-    --vit-s: 1;
-  }
-  to {
-    opacity: var(--vit-opacity, 1);
-    transform: var(--vit-transform, none);
-    clip-path: var(--vit-clip, none);
-    --vit-s: var(--vit-s-away, 1);
-  }
-}
-
 /* ── toolbar / laser pointer ──────────────────────────────────────────── */
 
-/* Where several pages are on screen at once — the overview's grid, the desk's
-   rail — a mark that appears on more than one of them carries the same name as
-   many times over. Duplicate names are not a transition that looks wrong, they
-   are no transition at all: the capture fails and the browser skips it. So
-   there a page moves as one picture, and no mark is named.
-
-   (This must stay outside the block gencss.py writes, which is everything
-   between "a transition is a pair" and this heading.) */
-.vit-deck:is(.vit-all, .vit-desk) .vit-mark,
-.vit-view .vit-mark {
-  view-transition-name: none !important;
-}
 .vit-bar {
   position: fixed;
   right: 16px;
@@ -779,7 +462,7 @@ body.vit-lasing.vit-nomouse .vit-deck {
 }
 /* no tracer where there is no pointing: off, or the page is a thumbnail */
 body:not(.vit-lasing) .vit-trail,
-body:has(.vit-deck:is(.vit-all, .vit-desk)) .vit-trail {
+:root:not([data-mode="present"]) .vit-trail {
   display: none;
 }
 
@@ -858,8 +541,8 @@ body.vit-lasing .vit-trail {
   }
 }
 
-/* no pointing where the page is a thumbnail: only the cursor is tucked away; the lasing flag stays and comes back on leaving */
-body.vit-lasing .vit-deck:is(.vit-all, .vit-desk) {
+/* no pointing where the page is not the whole screen: only the cursor is tucked away; the lasing flag stays and comes back on leaving */
+:root:not([data-mode="present"]) body.vit-lasing .vit-deck {
   cursor: default;
 }
 

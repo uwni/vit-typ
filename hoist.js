@@ -98,13 +98,19 @@
       if (!root) { slide.dataset.vitLifted = "1"; return false; }
 
       /* getBBox returns nothing that is not rendered, so the frame is laid out
-         and put back in the same task, unpainted — with `!important`, which is
-         how the desk and the overview hide frames. The states go back to what
-         the stylesheet says, so a mark's box does not depend on which step this
-         frame happens to be on. */
+         and put back in the same task, unpainted — with `!important`, since
+         what is out of the layout is out by a stylesheet rule. Everything above
+         it that is out too comes back with it: only one frame of the deck is
+         shown at a time, and in the overview the deck itself is not. The states
+         go back to what the stylesheet says, so a mark's box does not depend on
+         which step this frame happens to be on. */
       const group = slide.closest(".vit-group");
       const states = [...page.querySelectorAll("[data-tween-at]")];
-      const was = [show(slide, "block"), group ? show(group, "block") : null];
+      const out = [];
+      for (let el = slide; el && el !== document.body; el = el.parentElement) {
+         if (getComputedStyle(el).display === "none") out.push(el);
+      }
+      const was = out.map(el => show(el, "block"));
       const stateWas = states.map(unstep);
 
       try {
@@ -186,8 +192,7 @@
          anims.start();                                             // TEMPORARY
       } finally {
          states.forEach((g, i) => restore(g, stateWas[i]));
-         restore(slide, was[0]);
-         if (group) restore(group, was[1]);
+         out.forEach((el, i) => restore(el, was[i]));
       }
       return true;
    };
