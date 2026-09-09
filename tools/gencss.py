@@ -9,9 +9,9 @@ import os
 
 def T(*types): return "html" + "".join(":active-view-transition-type(" + t + ")" for t in types)
 def enter_side(x):   # the side the pair's enter effect governs: the new side forward, the old side back
-    return [T("fwd", "enter-" + x) + "::view-transition-new(root)", T("back", "enter-" + x) + "::view-transition-old(root)"] + enter_mark(x)
+    return [T("fwd", "enter-" + x) + "::view-transition-new(vit-screen)", T("back", "enter-" + x) + "::view-transition-old(vit-screen)"] + enter_mark(x)
 def leave_side(x):   # the side the pair's leave effect governs: the old side forward, the new side back
-    return [T("fwd", "leave-" + x) + "::view-transition-old(root)", T("back", "leave-" + x) + "::view-transition-new(root)"] + leave_mark(x)
+    return [T("fwd", "leave-" + x) + "::view-transition-old(vit-screen)", T("back", "leave-" + x) + "::view-transition-new(vit-screen)"] + leave_mark(x)
 def enter_mark(x):   # the same role, on a one-sided mark rather than on the page
     return [T("fwd") + "::view-transition-new(.enter-" + x + ")", T("back") + "::view-transition-old(.enter-" + x + ")"]
 def leave_mark(x):
@@ -46,11 +46,11 @@ out.append("""/* ── a transition is a pair of effects ───────�
    styles both images of every named element whether or not they exist, and
    an animation given to one that does not exist is never torn down and
    comes back finished the next time the name is used. */
-::view-transition-new(root),
+::view-transition-new(vit-screen),
 ::view-transition-new(.vit-only-new) {
   animation: vit-enter calc(var(--vit-duration) / var(--vit-speed)) var(--vit-timing, var(--vit-easing)) both;
 }
-::view-transition-old(root),
+::view-transition-old(vit-screen),
 ::view-transition-old(.vit-only-old) {
   animation: vit-leave calc(var(--vit-duration) / var(--vit-speed)) var(--vit-timing, var(--vit-easing)) both;
 }
@@ -78,7 +78,7 @@ out.append("""/* ── a transition is a pair of effects ───────�
   object-position: var(--vit-anchor, 50% 50%);
 }
 /* opening or closing the overview: the deck fades into the grid while the page zooms */
-html:active-view-transition-type(overview)::view-transition-new(root) {
+html:active-view-transition-type(overview)::view-transition-new(vit-screen) {
   --vit-opacity: 0;
 }
 /* fade. For root the old page is held beneath the new one fading in: both
@@ -89,7 +89,7 @@ html:active-view-transition-type(overview)::view-transition-new(root) {
    another entrance the old page fades out for real. */
 """)
 out.append(rule(enter_side("fade") + leave_side("fade"), ["--vit-opacity: 0"]))
-out.append(rule([T("enter-fade", "leave-fade") + "::view-transition-old(root)"], ["--vit-opacity: 1"]))
+out.append(rule([T("enter-fade", "leave-fade") + "::view-transition-old(vit-screen)"], ["--vit-opacity: 1"]))
 out.append("/* none: at once. The side jumps to its end state on the first frame. */\n")
 out.append(rule(enter_side("none") + leave_side("none"), ["--vit-opacity: 0", "--vit-timing: step-start"]))
 out.append("""/* slide / rise: push, by the width / height of the box. Forward the new one

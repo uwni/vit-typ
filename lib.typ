@@ -533,22 +533,27 @@
           + marks.css,
       )
       _tween.html-target.update(true)
-      html.elem(
-        "div",
-        attrs: (
-          class: "vit-deck",
-          "data-duration": str(duration),
-          "data-easing": easing.map(str).join(" "),
-          "data-theme": if theme == auto { "auto" } else { theme },
-          "data-version": str(version),
-        ),
-        body,
-      )
-      // The player, outside .vit-deck so that a page transition never drags
-      // it along. A preview (an iframe named vit-mirror) throws it away.
+      // The screen is what a page transition happens to: the deck and, at the
+      // desk, the page beside it. It is the size of the window whatever mode
+      // the deck is in, so the picture a transition moves is always the whole
+      // window. Everything of the player's own is outside it, and so takes no
+      // part in the transition.
+      html.elem("div", attrs: (class: "vit-screen"), {
+        html.elem(
+          "div",
+          attrs: (
+            class: "vit-deck",
+            "data-duration": str(duration),
+            "data-easing": easing.map(str).join(" "),
+            "data-theme": if theme == auto { "auto" } else { theme },
+            "data-version": str(version),
+          ),
+          body,
+        )
+        _pane()
+      })
       let href = if pdf == none { none } else if pdf == auto { auto } else { pdf }
       _bar(pdf: href)
-      _pane()
       _laser()
       _help(version: version, build: datetime.today().display())
       _settings()

@@ -434,7 +434,7 @@
   const loose = s => waapi.of(s).filter(a => a.id !== STEP);
   const still = s => loose(s).forEach(a => a.pause());
   const play = () => {
-    if (reduced.matches || over() || atDesk()) return;
+    if (reduced.matches) return;
     loose(slides[cur]).forEach(a => a.play());
   };
 
@@ -480,7 +480,7 @@
     lift(dest);               // before the transition: its setup reads both sides' marks
     stepTo(dest, k || 0, true);
     transition(
-      canvit && !reduced.matches && !over() && !atDesk() && types && `${types} ${dir}`.split(" "),
+      canvit && !reduced.matches && types && `${types} ${dir}`.split(" "),
       () => stage(i),
       undo => {
         balance(slides[cur], dest, undo);
@@ -569,14 +569,13 @@
     if (q) tap(q);
   };
 
-  /* While a transition runs the page is a set of snapshots: nothing is
-     hit-tested, every event targets <html>, and the click above never arrives.
-     What is left is where it fell — and the toolbar, drawn over the stage and
-     still up though its buttons are as dead as the rest, has to be stepped
-     around so that stabbing at one does not turn the page instead. */
-  const onBlindClick = e => {
-    if (!pendingUndo || e.target !== root || over() || atDesk()) return;
-    if (bar && frac(e, bar)) return;
+  /* A click nothing claimed. The margin beside the stage is one; so is every
+     click while a transition runs, when the screen is a picture that is not
+     hit-tested and the player is away and inert. Either way, if it fell on the
+     stage it is a page turn — the same rule whether or not anything is moving,
+     and the only thing asked of the geometry is which side it fell on. */
+  const onBodyClick = e => {
+    if (e.target !== document.body || over() || atDesk()) return;
     const q = frac(e, deck);
     if (q) tap(q);
   };
@@ -627,7 +626,7 @@
        dialog's own click, a button on the toolbar and the margin beside the
        stage never arrive here at all. */
     deck.addEventListener("click", onClick);
-    document.addEventListener("click", onBlindClick);
+    document.addEventListener("click", onBodyClick);
     deck.addEventListener("touchstart", onTouchStart, { passive: true });
     deck.addEventListener("touchend", onTouchEnd, { passive: true });
     deck.addEventListener("wheel", onWheel, { passive: true });
@@ -651,13 +650,16 @@
      interpolate its box. Meanwhile the CSS overrides every .vit-mark name so
      the marks fold into root — otherwise leftovers from the previous page pair
      up and fly, which is a page turn, not an opening. */
-  const zoomTo = (i, update, done) => {
-    const dest = groups[gOf[i]].el;
+  const zoomTo = (i, update, done) => zoom(groups[gOf[i]].el, update, done);
+
+  /* One box interpolated into another. Whoever is named is what the browser
+     carries across, so the caller names the thing that is in both states: the
+     page for the overview, the frame itself for the desk. */
+  const zoom = (dest, update, done) =>
     transition(canvit && !reduced.matches && ["overview"], update, undo => {
       dest.style.viewTransitionName = "vit-overview";
       undo.push(() => { dest.style.viewTransitionName = ""; });
     }, done);
-  };
 
   const toggleOverview = () => {
     if (over()) openSlide(cur);
@@ -665,6 +667,7 @@
       deck.classList.remove("vit-desk");
       deck.classList.add("vit-all");
       still(slides[cur]);
+      syncPane();
       /* the grid opens where we are, not at the top; inside the update callback,
          so the zoom flies to where the thumbnail will actually be */
       syncThumbs("center");
@@ -697,42 +700,104 @@
   /* ── the desk ─────────────────────────────────────────────────────────
      Where the deck opens and what Esc comes back to: thumbnails down one side,
      the page they point at beside them, its notes under it. The preview is the
-     same mirror the speaker view uses, so there is one renderer and it plays
-     the real transitions. Going either way is instant — the page is on screen
-     twice while the desk is up, and no zoom can be drawn between. */
+     page beside them is the frame itself, moved out of the rail, so the deck is
+     never rendered twice — and going either way is a zoom, because the small
+     one and the big one are the same element for the browser to carry across. */
   let pane = null, view = null, notes = null;
   const findPane = () => {
     pane = document.querySelector(".vit-pane");
     if (!pane) return;
-    view = pane.querySelector("iframe");
+    view = pane.querySelector(".vit-view");
     notes = pane.querySelector(".vit-notes");
     deck.addEventListener("vit:move-ready", syncPane);
   };
 
+  /* ── the page, in two places ─────────────────────────────────────────
+     At the desk the page is wanted big beside the rail and small within it,
+     and there is only one of it. So the page goes big — the element itself,
+     which keeps it live and lets it morph into the presented page — and its
+     place in the rail is held by a stand-in: an <svg> of two nodes whose
+     <use> points back at the very same drawing.
+
+     Two things the reference needs. The width and height have to be given:
+     the source carries its size in points, and left to itself it would draw
+     a third too large. And a mark that hoisting has lifted out of the page
+     is no longer inside it — what is referenced there is the <g> within,
+     which carries the matrix that puts it back in the page's own space. */
+  let parked = null;   // { slide, home, next, stand } — where it came from
+
+  const standFor = slide => {
+    const page = slide.querySelector(".vit-page");
+    const src = page?.querySelector("svg");
+    if (!src) return null;
+    const box = src.getAttribute("viewBox");
+    const [, , w, h] = box.split(/\s+/).map(Number);
+    src.id ||= `vit-src-${slides.indexOf(slide)}`;
+    const marks = [...page.querySelectorAll("svg.vit-mark > g")];
+    marks.forEach((g, i) => (g.id ||= `${src.id}-m${i}`));
+    const svg = (tag, attrs) => {
+      const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      return el;
+    };
+    const el = svg("svg", { class: "vit-stand", viewBox: box });
+    el.append(svg("use", { href: `#${src.id}`, width: w, height: h }));
+    for (const g of marks) el.append(svg("use", { href: `#${g.id}` }));
+    return el;
+  };
+
+  /* Put the frame back exactly where it was taken from, whatever has happened
+     to the rail meanwhile. */
+  const toRail = () => {
+    if (!parked) return;
+    const { slide, home, next, stand } = parked;
+    parked = null;
+    stand.remove();
+    home.insertBefore(slide, next);
+  };
+
+  /* The frame moves, not the page: the caption and the dots stay behind in the
+     rail, and the stand-in slots in exactly where the frame was. Which frame is
+     the model's answer, not the rail's — the rail is only told about it after. */
+  const toPane = () => {
+    const slide = slides[cur];
+    if (parked?.slide === slide) return;
+    toRail();
+    const stand = standFor(slide);
+    if (!stand) return;
+    parked = { slide, home: slide.parentNode, next: slide.nextSibling, stand };
+    slide.replaceWith(stand);
+    view.replaceChildren(slide);
+  };
+
   const syncPane = () => {
-    if (!atDesk()) return;
-    show(view, label(cur));
+    if (!atDesk()) { toRail(); return; }
+    toPane();
     notes.innerHTML = noteOf(cur);
   };
 
   const toggleDesk = () => {
     if (atDesk()) { present(); return; }
-    deck.classList.remove("vit-all");
-    deck.classList.add("vit-desk");
-    still(slides[cur]);
-    syncThumbs(true);
-    syncPane();
-    syncTools();
-    showBar();
+    zoom(slides[cur], () => {
+      deck.classList.remove("vit-all");
+      deck.classList.add("vit-desk");
+      still(slides[cur]);
+      syncThumbs(true);
+      syncPane();
+      syncTools();
+      showBar();
+    });
   };
 
   /* the selected page, full size: from the overview with its zoom, from the desk at once */
   const present = () => {
     if (over()) { openSlide(cur); return; }
-    deck.classList.remove("vit-desk");
-    play();
-    syncTools();
-    showBar();
+    zoom(slides[cur], () => {
+      deck.classList.remove("vit-desk");
+      syncPane();
+      syncTools();
+      showBar();
+    });
   };
 
   /* black screen (b / .): "look at me, not at the screen" — everything in the body is hidden, the keys still work */
@@ -828,10 +893,11 @@
   };
 
   /* ── toolbar ─────────────────────────────────────────────────────────
-     Outside .vit-deck with its own view-transition-name, so a page transition
-     never drags it along. There are two — the main window's, which auto-hides,
-     and the speaker view's, which does not. Each button names what it does in
-     data-act, and syncTools() refreshes them together. */
+     Outside .vit-screen, so a page transition neither captures it nor drags it
+     along — while one runs it is simply not on screen. There are two: the main
+     window's, which auto-hides, and the speaker view's, which does not. Each
+     button names what it does in data-act, and syncTools() refreshes them
+     together. */
 
   /* A download link with no address wants the .pdf beside this page: this
      page's own address is the one thing about the link only the browser knows.

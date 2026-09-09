@@ -1,10 +1,11 @@
 /// The desk: the page the thumbnails point at, beside them, with its notes
-/// under it. The preview is a copy of this very document positioned by #hash —
-/// the same mirror the speaker view uses, so there is one renderer.
+/// under it. `.vit-view` is left empty — the runtime puts the page itself in
+/// it, the very element the rail was showing, so the deck is never rendered
+/// twice and the two of them can morph into one another.
 #let pane() = html.div(
   class: "vit-pane",
   {
-    html.div(class: "vit-view", html.iframe(class: "vit-mirror", name: "vit-mirror", title: "Preview", ""))
+    html.div(class: "vit-view", "")
     html.div(class: "vit-notes", "")
   },
 )
