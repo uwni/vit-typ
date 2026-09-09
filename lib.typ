@@ -71,7 +71,7 @@
 #import "@local/tween:0.1.0" as _tween
 
 // The player's own markup — everything the reader sees that is not the deck.
-#import "chrome/bar.typ": bar as _bar
+#import "chrome/bar.typ": bar as _bar, reach as _reach
 #import "chrome/desk.typ": notes as _notes, pane as _pane, rail as _rail
 #import "chrome/help.typ": help as _help
 #import "chrome/laser.typ": laser as _laser
@@ -830,7 +830,12 @@
           "data-theme": if theme == auto { "auto" } else { theme },
           "data-version": str(version),
         ),
-        body,
+        {
+          body
+          // last, so it is over the pages; a child of the deck, so a press on it
+          // is a press on the page
+          _reach()
+        },
       ))
       // The rail beside the deck, and the notes under it. Both are the deck's
       // to emit: a thumbnail is one page's caption and dots, and only here is

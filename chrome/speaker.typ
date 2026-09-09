@@ -20,5 +20,5 @@
     html.iframe(class: "vit-mirror", name: "vit-mirror", "")
   })
   // a remote, not a second set of controls for the audience's screen
-  bar(pdf: pdf, shown: true, modes: false)
+  bar(pdf: pdf, modes: false)
 })

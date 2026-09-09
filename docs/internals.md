@@ -165,6 +165,28 @@ the same: every key it sees is a key at the deck, so the window doubles as a
 remote — every key but the chrome's own, which act on the window they were
 pressed in.
 
+**When the toolbar is out.** At the desk and in the overview it is furniture and
+stays. Over a page being shown it is chrome, and chrome does not sit on a slide:
+it is out only while somebody is reaching for it, or has the keyboard in it.
+
+A hidden toolbar must not be hit-testable, or the corner of the page it sits in
+would swallow the press that turns the page — and being hoverable and being
+pressable are the same switch, `pointer-events`. So what the pointer arrives on
+is not the toolbar but `.vit-reach`, a patch of page beneath it: fixed to the
+same corner of the window, so the two cover the same ground, and a child of the
+deck in the document, so a press on it bubbles to the deck and turns the page
+like any other. The stylesheet caps the toolbar's width at the patch's, so the
+patch cannot fail to cover it.
+
+What is watched is the browser's own arrivals and departures — `pointerenter`
+and `pointerleave` — rather than `:hover`. Both are the browser's hit testing;
+the difference is that `:hover` is re-evaluated continuously and events are
+edges. No pointer event is delivered while a view transition runs, so with
+events the pointer cannot appear to leave in the middle of one; measured, with
+`:hover` the toolbar goes out the instant a transition ends and comes back on
+the next twitch of the mouse. Where nothing can hover (`any-hover: none`) there
+is no way to reach for it, so there it stays out.
+
 **What the two sides agree on.** The Typst side writes markup and the runtime
 reads it; between them is one untyped protocol, so it is written down here and
 checked in `tests/invariants.mjs`.

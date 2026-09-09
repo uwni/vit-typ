@@ -173,6 +173,9 @@
       panel: doc.querySelector(".vit-settings"),
     };
     chromes.push(c);
+    /* the speaker view's toolbar is furniture in a window only the presenter
+       sees: it is out for as long as the window is */
+    if (doc !== document) c.bar?.classList.add("is-shown");
 
     if (c.bar) {
       c.count = c.bar.querySelector(".vit-count");
@@ -221,27 +224,29 @@
      is using it — the pointer on it, or the keyboard in it — and gone the
      moment they are not.
 
-     "The pointer on it" cannot be a hover, because a hidden toolbar must not be
-     hit-testable: an invisible row of buttons over that corner would swallow
-     the press that turns the page. So it is the pointer being inside the box
-     the toolbar occupies, which is the same box whether it is out or not —
-     hence the fade in place rather than a rise, in deck.css.
+     A hidden toolbar must not be hit-testable: an invisible row of buttons over
+     that corner would swallow the press that turns the page. So it is not the
+     toolbar the pointer arrives on but `.vit-reach`, the patch of page beneath
+     it — part of the deck, so a press there turns the page like any other.
 
-     `bar` is the audience's screen's. The speaker view's is furniture in a
+     What is watched is the browser's own arrivals and departures rather than
+     :hover, which is re-evaluated continuously: no pointer event is delivered
+     while a transition runs, so the pointer cannot appear to leave in the
+     middle of one — with :hover the toolbar goes out the instant a transition
+     ends and comes back on the next twitch of the mouse.
+
+     Where nothing can hover there is no way to reach for it, so there it stays.
+     `bar` is the audience's screen's; the speaker view's is furniture in a
      window nobody but the presenter is looking at, and never hides. */
-  let bar = null, onBar = false;
-
-  const inBox = (e, el) => {
-    const r = el.getBoundingClientRect();
-    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-  };
+  const canHover = matchMedia("(any-hover: hover)");
+  let bar = null, reaching = false;
 
   const drawBar = () => bar?.classList.toggle(
     "is-shown",
-    vit.mode === "desk" || onBar || bar.contains(document.activeElement),
+    vit.mode !== "present" || !canHover.matches || reaching || bar.contains(document.activeElement),
   );
 
-  const trackBar = e => { onBar = !!bar && inBox(e, bar); drawBar(); };
+  const reach = (yes) => { reaching = yes; drawBar(); };
 
   /* ── laser pointer ───────────────────────────────────────────────────
      The mouse gets a CSS cursor image, in deck.css; touch and pen have no
@@ -486,8 +491,7 @@
     /* The presenter is looking at this window now; the other one is the
        audience's screen and wants nothing on it. The pointer is still on its
        toolbar as far as that window knows, so it is told otherwise. */
-    onBar = false;
-    drawBar();
+    reach(false);
   };
 
   /* Only the src changes: a navigation that differs from the current URL by
@@ -582,8 +586,13 @@
     bar = wireChrome(document).bar;
     bar?.addEventListener("focusin", drawBar);
     bar?.addEventListener("focusout", drawBar);
-    /* the pointer out of the window is the pointer off the toolbar */
-    document.documentElement.addEventListener("pointerleave", () => { onBar = false; drawBar(); });
+    /* reaching for it, and having got there: the patch of page under the
+       toolbar, then the toolbar itself once it is out and can be pointed at */
+    for (const el of [document.querySelector(".vit-reach"), bar]) {
+      el?.addEventListener("pointerenter", () => reach(true));
+      el?.addEventListener("pointerleave", e => reach(!!e.relatedTarget?.closest?.(".vit-reach, .vit-bar")));
+    }
+    canHover.addEventListener("change", drawBar);
     findLaser();
     findLaserLook();
     findTrail();
@@ -591,7 +600,7 @@
     initSpeaker();
     document.addEventListener("keydown", guard, true);
     document.addEventListener("keydown", onKey);
-    document.addEventListener("pointermove", e => { trackBar(e); route(e); });
+    document.addEventListener("pointermove", route);
     document.addEventListener("pointerdown", route);
     document.addEventListener("pointerup", () => { if (touching) laser.classList.remove("is-on"); });
     document.addEventListener("pointercancel", () => laser.classList.remove("is-on"));

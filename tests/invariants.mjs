@@ -169,6 +169,12 @@ try {
       return t;
     };
     window.__settle = ms => new Promise(r => setTimeout(r, ms ?? 260));
+    /* Reaching for the toolbar and giving up on it, as the browser reports it:
+       the patch of page under the toolbar is what the pointer arrives on. */
+    window.__reach = yes => {
+      const el = document.querySelector(yes ? '.vit-reach' : '.vit-bar');
+      el?.dispatchEvent(new PointerEvent(yes ? 'pointerenter' : 'pointerleave', { relatedTarget: null }));
+    };
     /* Two waits, and a check has to mean one of them. __move is the move being
        announced — the new position is in the DOM and its animation is about to
        run, which is what counts a press. __done is the move having finished
@@ -486,23 +492,58 @@ try {
         await vt.finished.catch(() => { });
         return out;
       };
-      await new Promise(ok => { const t = () => (bar.classList.contains('is-shown') ? setTimeout(t, 100) : ok()); t(); });
+      window.__reach(false); await window.__settle(250);
       const hidden = await during();
-      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 400, clientY: 300 }));
-      await window.__settle(250);
+      window.__reach(true); await window.__settle(250);
       const shown = await during();
+      window.__reach(false);
       return { hidden, shown };`);
     check("a hidden toolbar has no group of its own", r.hidden.name === "none", JSON.stringify(r.hidden));
     check("a shown one keeps its glass through a transition",
       r.shown.name === "vit-bar" && /blur/.test(r.shown.glass), JSON.stringify(r.shown));
   }
 
+  /* Over a page being shown, the toolbar is out only while somebody is reaching
+     for it, and it is not there to be pressed when it is not: the corner it
+     sits in belongs to the page, and a press there turns the page. What is
+     reached is a patch of page under it, which therefore has to cover it — or
+     part of the toolbar could not be reached at all. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present';
+      await window.__done(() => { location.hash = '#${labels[0]}'; });
+      await window.__settle(400);
+      const bar = document.querySelector('.vit-bar'), reach = document.querySelector('.vit-reach');
+      const shown = () => bar.classList.contains('is-shown');
+      const b = bar.getBoundingClientRect(), z = reach.getBoundingClientRect();
+      const mid = [(b.left + b.right) / 2, (b.top + b.bottom) / 2];
+      const out = {
+        onArrival: shown(),
+        covers: z.left <= b.left && z.top <= b.top && z.right >= b.right && z.bottom >= b.bottom,
+        underPointer: String(document.elementFromPoint(...mid)?.className ?? ''),
+      };
+      window.__reach(true); await window.__settle(250); out.reaching = shown();
+      window.__reach(false); await window.__settle(250); out.gaveUp = shown();
+      /* and the press that lands there while it is hidden turns the page */
+      const was = window.vit.index;
+      document.elementFromPoint(...mid).dispatchEvent(
+        new MouseEvent('click', { bubbles: true, clientX: mid[0], clientY: mid[1] }));
+      await window.__settle(900);
+      out.turned = window.vit.index !== was;
+      return out;`);
+    check("the toolbar is out only while it is being reached for",
+      !r.onArrival && r.reaching && !r.gaveUp, JSON.stringify(r));
+    check("and hidden it is not in the page's way",
+      r.covers && !/vit-bar/.test(r.underPointer) && r.turned,
+      JSON.stringify({ covers: r.covers, under: r.underPointer, turned: r.turned }));
+  }
+
   /* At the desk the toolbar is furniture, not chrome over a picture: it stays. */
   {
     const r = await page.evaluate(`
       window.vit.mode = 'desk'; await window.__settle(400);
-      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 400, clientY: 300 }));
-      await window.__settle(3000);
+      window.__reach(false);
+      await window.__settle(1500);
       return document.querySelector('.vit-bar').classList.contains('is-shown');`);
     check("at the desk the toolbar stays out", r === true, String(r));
   }
@@ -597,15 +638,16 @@ try {
     const r = await page.evaluate(`
       window.vit.mode = 'present';
       await window.__done(() => { location.hash = '#${labels[0]}'; });
-      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, clientY: 300 }));
+      const bar = document.querySelector('.vit-bar');
+      window.__reach(true);
       await window.__settle(200);
-      const shownBefore = document.querySelector('.vit-bar').classList.contains('is-shown');
+      const shownBefore = bar.classList.contains('is-shown');
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', cancelable: true }));
       await window.__settle(900);
       const w = window.open('', 'vit-speaker');
       if (!w || w.closed || !w.document.querySelector('.vit-bar')) return null;
       const d = w.document;
-      const out = { shownBefore, shownAfter: document.querySelector('.vit-bar').classList.contains('is-shown'),
+      const out = { shownBefore, shownAfter: bar.classList.contains('is-shown'),
                     ownDialogs: !!d.querySelector('.vit-settings') && !!d.querySelector('.vit-help'),
                     /* it drives the deck, it does not decide what the audience is shown */
                     noModes: !d.querySelector('.vit-bar [data-act="desk"], .vit-bar [data-act="overview"]'),
@@ -623,9 +665,9 @@ try {
       d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
       await window.__settle(800);
       out.remote = window.vit.index !== was;
-      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, clientY: 300 }));
+      window.__reach(true);
       await window.__settle(200);
-      out.backOnHover = document.querySelector('.vit-bar').classList.contains('is-shown');
+      out.backOnHover = bar.classList.contains('is-shown');
       w.close();
       await window.__settle(300);
       return out;`);

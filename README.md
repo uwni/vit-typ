@@ -411,10 +411,12 @@ at a `#page.position` hash, so transitions and animation steps play there as
 they do on stage; keys and clicks in that window drive the main one, every key
 but those two. It works over `file://` and closes with the main window.
 
-The toolbar in the bottom-right corner hides after 2.4 s without mouse movement,
-stays on the desk, and goes at once when the speaker view opens — that screen is
-the audience's from then on, and moving the pointer over it brings the toolbar
-back. Its PDF button is a real `<a download target="_blank">`,
+The toolbar in the bottom-right corner is furniture at the desk and in the
+overview, and chrome while a page is being shown: there it is out only while you
+reach for it — the pointer in that corner, or the keyboard in the toolbar — and
+gone the moment you do not. Hidden, it is not there to be clicked: that corner
+belongs to the page, and a press in it turns the page as any other does. Where
+there is no pointer to reach with (a touchscreen) it stays out. Its PDF button is a real `<a download target="_blank">`,
 so it never navigates the deck away mid-presentation.
 
 ## Limitations

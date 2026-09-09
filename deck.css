@@ -373,10 +373,29 @@ html:active-view-transition-type(boxed)::view-transition-old(root) {
   clip-path: inset(0);
 }
 
+/* How far from the corner the toolbar sits, and how big the patch of page you
+   reach it through is. The toolbar may not outgrow that patch — otherwise part
+   of it could not be reached at all — so the same number caps its width. */
+html {
+  --vit-bar-inset: 16px;
+  --vit-reach: 28rem;
+}
+/* The patch itself: fixed to the same corner of the window as the toolbar, so
+   the two cover the same ground, and a child of the deck in the document, so a
+   press on it is a press on the page and bubbles to the deck like any other. It
+   is never painted and is in nothing's way but the pointer's. */
+.vit-reach {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: var(--vit-reach);
+  height: 5rem;
+}
 .vit-bar {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: var(--vit-bar-inset);
+  bottom: var(--vit-bar-inset);
+  max-width: calc(var(--vit-reach) - 2 * var(--vit-bar-inset));
   z-index: 20;
   display: flex;
   gap: 4px;

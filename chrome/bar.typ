@@ -32,17 +32,16 @@
 
 /// `pdf`: the handout's href, `none` for no download button, or `auto` to let
 /// the runtime work it out from this page's address — the only thing here it
-/// knows that the document does not. `shown` opens the toolbar already out:
-/// the speaker view's does not auto-hide.
+/// knows that the document does not.
 ///
 /// `modes` carries the two buttons that decide what is on the screen — the desk
 /// and the overview — and the one that opens the speaker view. A speaker view's
 /// own toolbar has none of them: it is a remote, and what the audience is shown
 /// is decided on the screen the audience is looking at. The runtime binds and
 /// refreshes whichever buttons it finds, so a toolbar is what it carries.
-#let bar(pdf: none, shown: false, modes: true) = html.elem(
+#let bar(pdf: none, modes: true) = html.elem(
   "div",
-  attrs: (class: "vit-bar" + if shown { " is-shown" }),
+  attrs: (class: "vit-bar"),
   {
     html.div(class: "vit-count", "")
     if modes {
@@ -66,3 +65,11 @@
     _swap("full", ("full", "Full screen (f)"), ("unfull", "Exit full screen (f)"))
   },
 )
+
+/// The patch of page you reach the toolbar through. While a page is being shown
+/// the toolbar is not there to be pointed at — a hidden toolbar that could be
+/// pointed at could also be pressed, and it sits over a corner of the page,
+/// where a press turns the page. So this sits under it instead: it is *part of
+/// the deck*, so a press on it is a press on the page and turns it like any
+/// other, and the pointer arriving on it is what brings the toolbar out.
+#let reach() = html.div(class: "vit-reach", "")
