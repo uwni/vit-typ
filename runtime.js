@@ -791,8 +791,14 @@
     play();
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
-    /* the deck's box changes without a window resize: desk ⇄ presenting */
-    new ResizeObserver(() => waapi.refit()).observe(deck);
+    /* The deck's box changes without a window resize: desk ⇄ presenting. An
+       effect that is a proportion follows the page by itself; one that is a
+       length — the zoom's lens is a quarter of the page — needs to be told how
+       wide the page came out, which only the browser knows. */
+    new ResizeObserver(() => {
+      waapi.refit();
+      root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
+    }).observe(deck);
     /* The deck, for anything that shows it or drives it — the player's own
        chrome included, which is written against this and nothing else. */
     window.vit = {

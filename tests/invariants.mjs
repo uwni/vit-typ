@@ -364,6 +364,9 @@ try {
           page: !!document.getAnimations().find(a => /group\\(vit-page\\)/.test(String(a.effect?.pseudoElement || ''))),
           rootOld: cs('::view-transition-old(root)').animationName,
           rootNew: cs('::view-transition-new(root)').animationName,
+          pageOld: cs('::view-transition-old(vit-page)').animationName,
+          pageNew: cs('::view-transition-new(vit-page)').animationName,
+          clipped: cs('::view-transition-group(vit-page)').clipPath,
         };
         document.startViewTransition = real;
         await vt.finished.catch(() => { });
@@ -377,6 +380,9 @@ try {
     check("at the desk it is the page's box, and the furniture holds still",
       r.desk.page && r.desk.types.includes("boxed") && r.desk.rootOld === "none" && r.desk.rootNew === "none",
       JSON.stringify(r.desk));
+    check("and the effect plays there, clipped to that box",
+      r.desk.pageOld === "vit-leave" && r.desk.pageNew === "vit-enter" && r.desk.clipped === "inset(0px)",
+      JSON.stringify({ old: r.desk.pageOld, new: r.desk.pageNew, clip: r.desk.clipped }));
   }
 
   /* The deck answers the keys, unless something modal is up: then only its own

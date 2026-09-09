@@ -105,13 +105,20 @@ a thumbnail wants anyway.
 **Whose transition it is.** A page's own effect — slide, zoom, a wipe — is
 written on `root`, which is right only while the page *is* the screen. So the
 page's snapshot is root while presenting and the deck's own group (`vit-page`)
-at the desk, where the page is a box beside the rail: there the transition
-carries the type `boxed`, which holds the furniture around it still and
-cross-fades the page inside its box while the marks morph across it as ever. In
-the overview there is no page transition at all — the pages are thumbnails, and
-turning to another only moves the highlight. Left on root, a page with
-`transition: "slide"` slides the whole desk, rail and notes and all, or the
-whole overview grid.
+at the desk, where the page is a box beside the rail. Every effect rule names
+both, so the same slide, zoom or wipe plays either way; the transition carries
+the type `boxed` at the desk, which holds the furniture around it still — it is
+not going anywhere — and the page's group is clipped to its own box, since a
+slide pushes a page by its own width and would otherwise travel out over the
+rail. In the overview there is no page transition at all: the pages are
+thumbnails, and turning to another only moves the highlight. Left on root, a
+page with `transition: "slide"` slides the whole desk, rail and notes and all,
+or the whole overview grid.
+
+An effect that is a proportion follows the page by itself — a push is `100%` of
+the image's own box. One that is a length does not: the zoom's lens is a quarter
+of the page, and `--vit-box` is how wide the page came out, which only the
+browser knows and the runtime publishes when the deck is resized.
 
 The page is not named while presenting because there it would buy nothing and
 cost the capture: measured on the tutorial, capturing the deck as a group of

@@ -260,7 +260,7 @@
   ),
   _css(
     _enter-side("zoom") + _leave-side("zoom"),
-    "--vit-aperture: calc(var(--vit-stage) / 4)",
+    "--vit-aperture: calc(var(--vit-box, var(--vit-stage)) / 4)",
     "--vit-opacity: 0",
     "--vit-transform: scale(var(--vit-zoom, 3))",
     "--vit-s-away: var(--vit-zoom, 3)",

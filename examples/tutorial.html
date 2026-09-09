@@ -852,7 +852,7 @@ html:active-view-transition-type(fwd):active-view-transition-type(leave-zoom)::v
 html:active-view-transition-type(back):active-view-transition-type(leave-zoom)::view-transition-new(vit-page),
 html:active-view-transition-type(fwd)::view-transition-old(.leave-zoom),
 html:active-view-transition-type(back)::view-transition-new(.leave-zoom) {
-  --vit-aperture: calc(var(--vit-stage) / 4);
+  --vit-aperture: calc(var(--vit-box, var(--vit-stage)) / 4);
   --vit-opacity: 0;
   --vit-transform: scale(var(--vit-zoom, 3));
   --vit-s-away: var(--vit-zoom, 3);
@@ -2508,8 +2508,14 @@ window.tween = (() => {
     play();
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
-    /* the deck's box changes without a window resize: desk ⇄ presenting */
-    new ResizeObserver(() => waapi.refit()).observe(deck);
+    /* The deck's box changes without a window resize: desk ⇄ presenting. An
+       effect that is a proportion follows the page by itself; one that is a
+       length — the zoom's lens is a quarter of the page — needs to be told how
+       wide the page came out, which only the browser knows. */
+    new ResizeObserver(() => {
+      waapi.refit();
+      root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
+    }).observe(deck);
     /* The deck, for anything that shows it or drives it — the player's own
        chrome included, which is written against this and nothing else. */
     window.vit = {
