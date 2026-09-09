@@ -155,6 +155,8 @@ let model = [], labels = [];
 const page = await open({ width: 1280, height: 800, port: 9351, args: ["--disable-popup-blocking"] });
 try {
   await page.goto("file://" + file, ".vit-deck[data-ready]");
+  /* focus events are not delivered to a document the window is not showing */
+  await page.send("Page.bringToFront");
 
   /* Every view transition is instrumented from here on: a capture that fails
      is not a transition that looks wrong, it is no transition at all, and the
@@ -170,10 +172,11 @@ try {
     };
     window.__settle = ms => new Promise(r => setTimeout(r, ms ?? 260));
     /* Reaching for the toolbar and giving up on it, as the browser reports it:
-       the patch of page under the toolbar is what the pointer arrives on. */
+       the pointer arriving on the patch of page under the toolbar, or on
+       anything else. */
     window.__reach = yes => {
-      const el = document.querySelector(yes ? '.vit-reach' : '.vit-bar');
-      el?.dispatchEvent(new PointerEvent(yes ? 'pointerenter' : 'pointerleave', { relatedTarget: null }));
+      const el = document.querySelector(yes ? '.vit-reach' : '.vit-deck');
+      el?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
     };
     /* Two waits, and a check has to mean one of them. __move is the move being
        announced — the new position is in the DOM and its animation is about to
@@ -536,6 +539,120 @@ try {
     check("and hidden it is not in the page's way",
       r.covers && !/vit-bar/.test(r.underPointer) && r.turned,
       JSON.stringify({ covers: r.covers, under: r.underPointer, turned: r.turned }));
+  }
+
+  /* While the deck moves, the browser cannot say where the pointer is: what was
+     captured is not hit-tested, so it reports the pointer leaving the toolbar
+     and arriving on <html> although it has not moved. Believed, the toolbar
+     goes out for the whole of every transition and comes back after it. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present';
+      await window.__done(() => { location.hash = '#${labels[0]}'; });
+      await window.__settle(300);
+      const bar = document.querySelector('.vit-bar');
+      window.__reach(true); await window.__settle(250);
+      const out = { reaching: bar.classList.contains('is-shown'), low: 1 };
+      let stop = false;
+      const tick = () => { out.low = Math.min(out.low, +getComputedStyle(bar).opacity);
+                           if (!stop) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
+      await window.__settle(60);
+      out.moving = window.vit.moving;
+      /* what the browser says when it cannot tell */
+      document.documentElement.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
+      await window.__settle(120);
+      out.during = bar.classList.contains('is-shown');
+      await window.__settle(1200);
+      stop = true;
+      out.after = bar.classList.contains('is-shown');
+      return out;`);
+    check("the toolbar does not blink when the deck moves under it",
+      r.reaching && r.moving && r.during && r.after && r.low === 1, JSON.stringify(r));
+  }
+
+  /* While the deck moves, the document is not hit-tested: pointer events still
+     arrive with their position, and with <html> for a target. So what follows
+     the pointer's position keeps up, and what needs its target does not — the
+     deck takes no press while it is a picture, and the keys are the fast path. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present';
+      await window.__done(() => { location.hash = '#${labels[0]}'; });
+      await window.__settle(300);
+      const laser = document.querySelector('.vit-laser');
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, cancelable: true }));
+      const touch = (t, x, y) => document.dispatchEvent(
+        new PointerEvent(t, { pointerType: 'touch', clientX: x, clientY: y, bubbles: true }));
+      key('l');                                   // the laser, as the DOM dot touch gets
+      touch('pointerdown', 300, 300);
+      await window.__settle(200);
+      const out = { atRest: laser.style.transform };
+      const was = window.vit.index;
+      key('ArrowRight');
+      await window.__settle(80);
+      out.moving = window.vit.moving;
+      out.target = String(document.elementFromPoint(640, 300)?.tagName ?? '');
+      touch('pointermove', 700, 420);             // the position is true …
+      const deck = document.querySelector('.vit-deck');
+      deck.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 1100, clientY: 300 }));
+      await window.__settle(120);
+      out.followed = laser.style.transform;
+      out.turnedByPress = window.vit.index !== was + 1;
+      await window.__settle(1400);
+      out.settled = window.vit.index === was + 1;
+      key('l');
+      return out;`);
+    check("what follows the pointer's position keeps up while the deck moves",
+      r.moving && r.target === "HTML" && r.atRest === "translate(300px, 300px)"
+        && r.followed === "translate(700px, 420px)", JSON.stringify(r));
+    check("and a press that lands on a picture is not a press on the page",
+      !r.turnedByPress && r.settled, JSON.stringify({ turned: r.turnedByPress, settled: r.settled }));
+  }
+
+  /* Reaching for it is not only with a pointer: a toolbar that cannot be got at
+     from the keyboard is a toolbar somebody cannot use at all. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present'; await window.__settle(400);
+      const bar = document.querySelector('.vit-bar');
+      window.__reach(false); await window.__settle(200);
+      const out = { hidden: !bar.classList.contains('is-shown') };
+      const btn = bar.querySelector('button');
+      btn.focus(); await window.__settle(200);
+      out.focused = document.activeElement === btn;
+      out.shown = bar.classList.contains('is-shown');
+      btn.blur(); await window.__settle(200);
+      out.afterBlur = bar.classList.contains('is-shown');
+      return out;`);
+    check("and the keyboard reaches it too", r.hidden && r.focused && r.shown && !r.afterBlur, JSON.stringify(r));
+  }
+
+  /* The laser is state, and what it looks like is drawn from that state — not
+     only when the pointer moves. Drawn only then, the dot is left behind on
+     screen when the deck changes mode under it. */
+  {
+    const r = await page.evaluate(`
+      const laser = document.querySelector('.vit-laser');
+      const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, cancelable: true }));
+      window.vit.mode = 'present'; await window.__settle(500);
+      key('l');
+      document.dispatchEvent(new PointerEvent('pointerdown', { pointerType: 'touch', clientX: 400, clientY: 300, bubbles: true }));
+      await window.__settle(200);
+      const out = { presenting: laser.classList.contains('is-on'), lasing: document.body.classList.contains('vit-lasing') };
+      window.vit.mode = 'overview';
+      await window.__settle(700);
+      /* no pointer event in between: the mode changing is what puts it out */
+      out.afterMode = laser.classList.contains('is-on');
+      out.stillOn = document.body.classList.contains('vit-lasing');
+      window.vit.mode = 'present'; await window.__settle(700);
+      key('l');
+      await window.__settle(150);
+      out.afterOff = document.body.classList.contains('vit-lasing');
+      return out;`);
+    check("the laser goes out when the deck changes under it",
+      r.presenting && r.lasing && !r.afterMode && r.stillOn && !r.afterOff, JSON.stringify(r));
   }
 
   /* At the desk the toolbar is furniture, not chrome over a picture: it stays. */

@@ -838,6 +838,11 @@
       /* Something else is using the pointer — the laser, say — so a press on
          the page is not a page turn. Touch only: a mouse can point and click. */
       hold: on => { held = !!on; },
+      /* Whether a transition is in flight. While one is, an element that was
+         captured is not hit-tested, so the browser cannot say where the pointer
+         is: it reports it leaving whatever it was on although it has not moved.
+         Anything that follows the pointer has to know not to believe that. */
+      get moving() { return busy > 0; },
       deck,
     };
     document.dispatchEvent(new CustomEvent("vit:ready", { detail: window.vit }));

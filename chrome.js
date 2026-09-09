@@ -229,11 +229,18 @@
      toolbar the pointer arrives on but `.vit-reach`, the patch of page beneath
      it — part of the deck, so a press there turns the page like any other.
 
-     What is watched is the browser's own arrivals and departures rather than
-     :hover, which is re-evaluated continuously: no pointer event is delivered
-     while a transition runs, so the pointer cannot appear to leave in the
-     middle of one — with :hover the toolbar goes out the instant a transition
-     ends and comes back on the next twitch of the mouse.
+     Where the pointer is is told by where it *arrives*: pointerover bubbles, so
+     one listener says, of every arrival anywhere, whether it was in that corner.
+     Departures say nothing — the pointer leaving one element is it arriving on
+     another — except the one departure that is real, the pointer leaving the
+     window.
+
+     Except while the deck is moving, when the browser cannot say where the
+     pointer is at all: a captured element is not hit-tested, so a transition
+     starting reads as the pointer leaving the toolbar and arriving on <html>
+     although it has not moved. Measured, believing that costs the toolbar the
+     whole of every transition; the browser hit-tests again some 13 ms after the
+     move is done and corrects us itself, wherever the pointer has ended up.
 
      Where nothing can hover there is no way to reach for it, so there it stays.
      `bar` is the audience's screen's; the speaker view's is furniture in a
@@ -246,7 +253,11 @@
     vit.mode !== "present" || !canHover.matches || reaching || bar.contains(document.activeElement),
   );
 
-  const reach = (yes) => { reaching = yes; drawBar(); };
+  const reach = yes => {
+    if (vit.moving) return;   // it is not saying where the pointer is, only that it cannot tell
+    reaching = yes;
+    drawBar();
+  };
 
   /* ── laser pointer ───────────────────────────────────────────────────
      The mouse gets a CSS cursor image, in deck.css; touch and pen have no
@@ -348,20 +359,37 @@
 
   /* The mouse's dot is the cursor, so there is nothing to place — but the
      tracer is ours to draw whichever pointer is in use. */
-  const route = e => {
-    const mouse = e.pointerType === "mouse" || e.pointerType === "";
-    touching = !mouse;
+  /* What the pointer is for is state — whether the laser is on, and whether the
+     pointer that last moved has a cursor of its own to restyle. What that looks
+     like is drawn from it, by the same rule as the toolbar: whenever the state
+     changes, not only when the pointer moves. Drawn on pointer moves alone, the
+     dot is left behind on the screen when the deck changes mode under it. */
+  const drawLaser = () => {
+    if (!laser) return;
+    const live = lasing && vit.mode === "present";
+    document.body.classList.toggle("vit-lasing", lasing);
     document.body.classList.toggle("vit-nomouse", touching);
-    if (!lasing || vit.mode !== "present") { laser.classList.remove("is-on"); clearTrail(); return; }
-    if (mouse) { laser.classList.remove("is-on"); trail(e.clientX, e.clientY); }
-    else dot(e.clientX, e.clientY);
+    /* the mouse is given the cursor image, in deck.css; the dot is for a pointer
+       that has no cursor to restyle, and only while it has somewhere to be */
+    if (!(live && touching)) laser.classList.remove("is-on");
+    if (!live) clearTrail();
+  };
+
+  /* Which pointer is in use, and where it is. Both are the event's own, and both
+     survive a transition — it is a pointer's *target* that a transition takes
+     away, not its position. */
+  const route = e => {
+    touching = !(e.pointerType === "mouse" || e.pointerType === "");
+    drawLaser();
+    if (!lasing || vit.mode !== "present") return;
+    if (touching) dot(e.clientX, e.clientY);
+    else trail(e.clientX, e.clientY);
   };
 
   const toggleLaser = () => {
     lasing = !lasing;
-    document.body.classList.toggle("vit-lasing", lasing);
-    if (!lasing) { laser.classList.remove("is-on"); clearTrail(); }
     vit.hold(lasing);   // while it is out, a press on the page points rather than turns
+    drawLaser();
     syncTools();
   };
 
@@ -586,12 +614,10 @@
     bar = wireChrome(document).bar;
     bar?.addEventListener("focusin", drawBar);
     bar?.addEventListener("focusout", drawBar);
-    /* reaching for it, and having got there: the patch of page under the
-       toolbar, then the toolbar itself once it is out and can be pointed at */
-    for (const el of [document.querySelector(".vit-reach"), bar]) {
-      el?.addEventListener("pointerenter", () => reach(true));
-      el?.addEventListener("pointerleave", e => reach(!!e.relatedTarget?.closest?.(".vit-reach, .vit-bar")));
-    }
+    /* every arrival, anywhere: was it in the corner the toolbar is reached
+       through, or on the toolbar itself once it is out and can be pointed at */
+    document.addEventListener("pointerover", e => reach(!!e.target.closest?.(".vit-reach, .vit-bar")));
+    document.documentElement.addEventListener("pointerleave", () => reach(false));
     canHover.addEventListener("change", drawBar);
     findLaser();
     findLaserLook();
@@ -605,10 +631,11 @@
     document.addEventListener("pointerup", () => { if (touching) laser.classList.remove("is-on"); });
     document.addEventListener("pointercancel", () => laser.classList.remove("is-on"));
     /* the deck draws itself and says so; everything here is drawn from that */
-    deck.addEventListener("vit:render", e => {
+    deck.addEventListener("vit:render", () => {
       syncTools();
       syncNotes();
       drawBar();
+      drawLaser();
     });
     const kept = parseFloat(store("vit-speed"));
     if (kept) vit.speed = kept;

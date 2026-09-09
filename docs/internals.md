@@ -153,6 +153,16 @@ writes, then whatever settings this document's transitions and marks asked for.
 The prose in those files is for whoever reads them and the browser has no use
 for it, so the comments are cut on the way out — about 16 kB per deck.
 
+**The chrome is drawn, not poked.** Everything the player shows is a projection
+of state, and the state's only writer is the deck: the toolbar's counter and
+pressed buttons, the notes beside the page, whether the toolbar is out, whether
+the laser's dot is. Each is redrawn on `vit:render` and when its own input
+changes, never inside the handler of whichever event happened to be the last
+one. A thing drawn only in an event handler is a thing that is right only until
+something else changes — the toolbar drawn only on pointer moves went out for
+the whole of every transition, and the laser's dot drawn only on pointer moves
+was left on screen after the deck had changed mode under it.
+
 **The chrome is per window.** The main window has a set of it and the speaker
 view another: a toolbar, the key table, the settings panel. What they set is
 shared — the deck, and what the presenter has chosen — but what they *show* is
@@ -178,14 +188,41 @@ deck in the document, so a press on it bubbles to the deck and turns the page
 like any other. The stylesheet caps the toolbar's width at the patch's, so the
 patch cannot fail to cover it.
 
-What is watched is the browser's own arrivals and departures — `pointerenter`
-and `pointerleave` — rather than `:hover`. Both are the browser's hit testing;
-the difference is that `:hover` is re-evaluated continuously and events are
-edges. No pointer event is delivered while a view transition runs, so with
-events the pointer cannot appear to leave in the middle of one; measured, with
-`:hover` the toolbar goes out the instant a transition ends and comes back on
-the next twitch of the mouse. Where nothing can hover (`any-hover: none`) there
-is no way to reach for it, so there it stays out.
+Where the pointer is is told by where it *arrives*: `pointerover` bubbles, so
+one listener says, of every arrival anywhere in the document, whether it was in
+that corner. Departures say nothing — the pointer leaving one element is it
+arriving on another — bar the one departure that is real, the pointer leaving
+the window. Where nothing can hover (`any-hover: none`) there is no way to reach
+for it, so there it stays out.
+
+While the deck is moving, none of it is believed. See below.
+
+**What a transition does to the pointer.** While one runs, the document is not
+hit-tested *at all* — measured: `elementFromPoint` answers `<html>` everywhere,
+including over a plain unnamed element added over everything else, and an
+element's own listeners do not fire. What does still arrive at the document is
+every pointer event, with its **position intact** and its **target `<html>`**.
+So:
+
+| what it needs | while the deck moves |
+| --- | --- |
+| the pointer's position — the laser's dot and its tracer | true, and they keep up |
+| the pointer's target — the toolbar knowing it is being reached for | unknowable |
+| a press landing on something — the deck's click, wheel and touch | not delivered |
+
+The toolbar therefore holds its last word while `vit.moving`, rather than
+believing the departure a transition manufactures: measured on the tutorial with
+a 700 ms page turn and the pointer resting on the toolbar, `pointerleave` fires
+at 4 ms and `pointerenter` again at 742 ms — believed, the toolbar is out of
+sight for the whole transition. The browser's own hit test some 13 ms after the
+move is done corrects us, including when the pointer really did leave meanwhile,
+since it then arrives somewhere else and says so.
+
+And a press that lands while the deck is a picture is not delivered to the deck,
+so it does not turn the page. The keys are the fast path: they are not
+hit-tested, and a press arriving mid-move counts from the target already
+accepted. Routing presses by position instead would keep them, at the cost of
+the deck deciding by coordinates what the browser is there to decide.
 
 **What the two sides agree on.** The Typst side writes markup and the runtime
 reads it; between them is one untyped protocol, so it is written down here and

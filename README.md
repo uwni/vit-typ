@@ -153,6 +153,7 @@ replaced whole.
 | `speed` · `mode` | the pace (writable), and `"desk"` / `"present"` / `"overview"` (writable) |
 | `label(i, k)` · `title(i)` · `note(i)` · `progress(i)` | a position's name, its page's caption and notes, how far through |
 | `after(i, k)` | the position after this one: `{ index, step, page }`, `page` true if it is on another one |
+| `moving` | whether a transition is in flight — while one is the document is not hit-tested, so a pointer event's position is still true but its target is not |
 | `version` · `deck` | the package version, and the deck element the events land on |
 
 On every move it dispatches two events on `.vit-deck`, one for one:
