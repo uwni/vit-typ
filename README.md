@@ -378,7 +378,7 @@ objects is the page's business, motion inside one is the object's.
 | `,`                                        | Settings: speed, laser colour and size, tracer length, theme. The presenter's, kept in `localStorage`, never in the file                            |
 | `?`                                        | The key table                                                                                                                                      |
 | Wheel                                      | Next / previous page — one notch per page with a mouse, one gesture (inertia included) per page on a trackpad; in the overview it scrolls the grid |
-| Click / swipe                              | Left third goes back, the rest goes forward; swipe left / right on touch. Clicks during a transition count                                         |
+| Click / swipe                              | Left third goes back, the rest goes forward; swipe left / right on touch. While a transition runs the page is a picture and takes no clicks                                         |
 
 The deck opens on the **desk**: pages down the left as thumbnails, the selected
 one beside them, its notes underneath. Clicking a thumbnail or a dot in its

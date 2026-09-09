@@ -818,16 +818,41 @@ body.vit-lasing .vit-deck {
     none;
 }
 
-/* The toolbar, the laser and its tracer are the player's, not the page's, and
-   are not captured at all: they are outside .vit-screen and carry no name of
-   their own. A transition is then none of their business — the snapshots are
-   painted over them and they are simply not on screen while one runs, which is
-   also the whole of what a viewer wants of them. Inert while they are away, so
-   that a click there is the click on the page it looks like. */
-:root:active-view-transition .vit-bar,
-:root:active-view-transition .vit-laser,
-:root:active-view-transition .vit-trail {
-  pointer-events: none;
+/* The toolbar, the laser and its tracer float over the page, and a transition
+   must not carry them with it. Each is given a name, which puts it in the
+   transition's own tree — drawn above the page's snapshots, so it stays in
+   sight while an opaque one slides or zooms across — and its group's animation
+   is switched off so it also stays still: the group would otherwise interpolate
+   the old box into the new and stretch the snapshot over the difference,
+   smearing the row of icons.
+
+   The price is that a named element is a picture for the length of a
+   transition, and pictures are not hit-tested. Nothing is aimed at them then,
+   which is why the deck takes no clicks while one runs.
+
+   The toolbar is named only while it is out: backdrop-filter is copied to
+   ::view-transition-group() while opacity is only baked into the snapshot, so a
+   hidden toolbar with a group of its own would be an invisible sheet of frosted
+   glass over the page. */
+.vit-bar.is-shown {
+  view-transition-name: vit-bar;
+}
+.vit-laser {
+  view-transition-name: vit-laser;
+}
+.vit-trail {
+  view-transition-name: vit-trail;
+}
+::view-transition-group(vit-bar),
+::view-transition-group(vit-laser),
+::view-transition-group(vit-trail),
+::view-transition-old(vit-bar),
+::view-transition-old(vit-laser),
+::view-transition-old(vit-trail),
+::view-transition-new(vit-bar),
+::view-transition-new(vit-laser),
+::view-transition-new(vit-trail) {
+  animation: none;
 }
 ::view-transition-old(vit-bar),
 ::view-transition-old(vit-laser),
@@ -1070,7 +1095,7 @@ body.vit-black > * {
 }
 .vit-speaker body.vit-lasing main {
   cursor:
-    var(--vit-laser) 16 16,
+    var(--vit-laser) var(--vit-laser-hot) var(--vit-laser-hot),
     none;
 }
 .vit-speaker .vit-notes {

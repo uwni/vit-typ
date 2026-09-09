@@ -569,16 +569,6 @@
     if (q) tap(q);
   };
 
-  /* A click nothing claimed. The margin beside the stage is one; so is every
-     click while a transition runs, when the screen is a picture that is not
-     hit-tested and the player is away and inert. Either way, if it fell on the
-     stage it is a page turn — the same rule whether or not anything is moving,
-     and the only thing asked of the geometry is which side it fell on. */
-  const onBodyClick = e => {
-    if (e.target !== document.body || over() || atDesk()) return;
-    const q = frac(e, deck);
-    if (q) tap(q);
-  };
 
   let tx = 0, ty = 0, swiping = false;
   const onTouchStart = e => {
@@ -626,7 +616,6 @@
        dialog's own click, a button on the toolbar and the margin beside the
        stage never arrive here at all. */
     deck.addEventListener("click", onClick);
-    document.addEventListener("click", onBodyClick);
     deck.addEventListener("touchstart", onTouchStart, { passive: true });
     deck.addEventListener("touchend", onTouchEnd, { passive: true });
     deck.addEventListener("wheel", onWheel, { passive: true });
