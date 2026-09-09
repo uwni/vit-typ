@@ -153,6 +153,18 @@ writes, then whatever settings this document's transitions and marks asked for.
 The prose in those files is for whoever reads them and the browser has no use
 for it, so the comments are cut on the way out — about 16 kB per deck.
 
+**The chrome is per window.** The main window has a set of it and the speaker
+view another: a toolbar, the key table, the settings panel. What they set is
+shared — the deck, and what the presenter has chosen — but what they *show* is
+each their own, so there is one record per window and everything that refreshes
+the chrome walks the list. A panel opened from a toolbar belongs on that
+toolbar's screen: the presenter's dials on the presenter's screen, not thrown up
+in front of the audience. The speaker view's copies are the very elements,
+cloned, rather than a second copy of the markup to keep in step. Its keys are
+the same: every key it sees is a key at the deck, so the window doubles as a
+remote — every key but the chrome's own, which act on the window they were
+pressed in.
+
 **What the two sides agree on.** The Typst side writes markup and the runtime
 reads it; between them is one untyped protocol, so it is written down here and
 checked in `tests/invariants.mjs`.
@@ -187,6 +199,17 @@ runtime's own tables rather than trusted.
 rendering is Typst's own and independent of installed fonts. The PDF and the
 HTML compiled from one source are compared pixel by pixel by `tools/verify.mjs`;
 what remains is anti-aliasing of two rasterisers.
+
+**When a drawing may move.** One sentence, and one writer: a drawing moves only
+while its frame is the one on stage, the deck is showing that frame rather than
+a grid of thumbnails, and no transition is in flight — a snapshot is still, so a
+playing element would jump when the snapshot goes. That is a property of the
+state, so `render()` decides it for every frame like everything else it draws,
+and the count of transitions in flight is part of the state. It used to be three
+writers — one paused the frames that were not on stage, one paused the current
+frame when the mode changed, and the transition played it again *if it was still
+the latest* — and a transition overtaken by the next one left the page it landed
+on paused for good.
 
 **Where the motion lives.** Element animation is not the deck's:
 `packages/tween` is N states of one drawing and the browser between them, with

@@ -391,16 +391,15 @@ html:active-view-transition-type(boxed)::view-transition-old(root) {
     system-ui,
     sans-serif;
   color: var(--vit-muted);
+  /* It fades in place rather than rising into place: hidden, it is still the
+     box the pointer has to be in for it to come out, and a box that moves as
+     it appears would move out from under the pointer that just found it. */
   opacity: 0;
-  transform: translateY(6px);
   pointer-events: none;
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+  transition: opacity 0.18s ease;
 }
 .vit-bar.is-shown {
   opacity: 1;
-  transform: none;
   pointer-events: auto;
 }
 .vit-bar button,

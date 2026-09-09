@@ -34,15 +34,23 @@
 /// the runtime work it out from this page's address — the only thing here it
 /// knows that the document does not. `shown` opens the toolbar already out:
 /// the speaker view's does not auto-hide.
-#let bar(pdf: none, shown: false) = html.elem(
+///
+/// `modes` carries the two buttons that decide what is on the screen — the desk
+/// and the overview — and the one that opens the speaker view. A speaker view's
+/// own toolbar has none of them: it is a remote, and what the audience is shown
+/// is decided on the screen the audience is looking at. The runtime binds and
+/// refreshes whichever buttons it finds, so a toolbar is what it carries.
+#let bar(pdf: none, shown: false, modes: true) = html.elem(
   "div",
   attrs: (class: "vit-bar" + if shown { " is-shown" }),
   {
     html.div(class: "vit-count", "")
-    _swap("desk", ("desk", "Desk (Esc)"), ("play", "Present (Enter)"))
-    _button("Overview (o)", "overview", icon("grid"))
+    if modes {
+      _swap("desk", ("desk", "Desk (Esc)"), ("play", "Present (Enter)"))
+      _button("Overview (o)", "overview", icon("grid"))
+    }
     _button("Laser pointer (l)", "laser", icon("laser"))
-    _button("Speaker view (s)", "speaker", icon("notes"))
+    if modes { _button("Speaker view (s)", "speaker", icon("notes")) }
     _button("Settings (,)", "settings", icon("tune"))
     if pdf != none {
       html.elem(

@@ -57,18 +57,23 @@
     document.body.classList.toggle("vit-black", black);
   };
 
-  /* the key table, on ? */
-  let help = null;
-  const toggleHelp = () => { if (help.open) help.close(); else help.showModal(); };
-  const findHelp = () => {
-    help = document.querySelector(".vit-help");
-    help?.addEventListener("click", () => help.close());
-  };
+  /* ── one window's chrome ──────────────────────────────────────────────
+     The main window has a set of it and the speaker view another: a toolbar,
+     the key table, the settings panel. What they set is shared — the deck, and
+     what the presenter has chosen — but what they *show* is each their own, and
+     a panel opened from a toolbar belongs on that toolbar's screen rather than
+     on the audience's. So there is one record per window and everything that
+     refreshes the chrome walks the list; wireChrome() below makes one.
 
-  /* ── settings ────────────────────────────────────────────────────────
-     A control in the panel names what it sets in data-set, and appears here
+     A control in the panel names what it sets in data-set, and appears in DIALS
      once: how to read it, how to apply it, and how to say it. */
-  let panel = null;
+  const chromes = [];
+  const chromeIn = doc => chromes.find(c => c.doc === doc) ?? chromes[0] ?? {};
+
+  const toggleHelp = doc => {
+    const { help } = chromeIn(doc);
+    if (help) help.open ? help.close() : help.showModal();
+  };
 
   const DIALS = {
     speed: {
@@ -97,22 +102,26 @@
     },
   };
 
-  /* the controls show what is in force, whatever moved it — a key, the panel
-     or another window */
+  /* the controls show what is in force, whatever moved it — a key, a panel in
+     another window, the deck itself */
   const syncSettings = () => {
-    if (!panel || !panel.open) return;
-    for (const el of panel.querySelectorAll("[data-set]")) {
-      const dial = DIALS[el.dataset.set];
-      if (!dial) continue;
-      const v = dial.read();
-      if (el.tagName === "INPUT") el.value = v;
-      else for (const b of el.children) b.setAttribute("aria-pressed", String(b.dataset.value === v));
-      const out = panel.querySelector(`[data-out="${el.dataset.set}"]`);
-      if (out && dial.say) out.textContent = dial.say(v);
+    for (const { panel } of chromes) {
+      if (!panel?.open) continue;
+      for (const el of panel.querySelectorAll("[data-set]")) {
+        const dial = DIALS[el.dataset.set];
+        if (!dial) continue;
+        const v = dial.read();
+        if (el.tagName === "INPUT") el.value = v;
+        else for (const b of el.children) b.setAttribute("aria-pressed", String(b.dataset.value === v));
+        const out = panel.querySelector(`[data-out="${el.dataset.set}"]`);
+        if (out && dial.say) out.textContent = dial.say(v);
+      }
     }
   };
 
-  const toggleSettings = () => {
+  const toggleSettings = doc => {
+    const { panel } = chromeIn(doc);
+    if (!panel) return;
     if (panel.open) panel.close();
     else { panel.showModal(); syncSettings(); }
   };
@@ -124,21 +133,6 @@
     applyLaser();
     applyTheme();
     syncSettings();
-  };
-
-  const findSettings = () => {
-    panel = document.querySelector(".vit-settings");
-    if (!panel) return;
-    panel.addEventListener("input", e => {
-      const dial = DIALS[e.target.dataset.set];
-      if (dial) { dial.write(e.target.value); syncSettings(); }
-    });
-    panel.addEventListener("click", e => {
-      if (e.target === panel) { panel.close(); return; }             // the backdrop
-      const seg = e.target.closest(".vit-seg [data-value]");
-      if (seg) { DIALS[seg.parentNode.dataset.set].write(seg.dataset.value); syncSettings(); return; }
-      if (e.target.closest('[data-act="reset"]')) resetSettings();
-    });
   };
 
   /* ── toolbar ─────────────────────────────────────────────────────────
@@ -168,57 +162,86 @@
     el.setAttribute("aria-label", on.dataset.title);
   };
 
-  const wireBar = el => {
-    const acts = {
-      desk: () => { vit.mode = vit.mode === "desk" ? "present" : "desk"; },
-      overview: () => { vit.mode = vit.mode === "overview" ? "present" : "overview"; },
-      laser: toggleLaser, speaker: openSpeaker, settings: toggleSettings, full: toggleFullscreen,
+  /* Everything of the chrome that this window has, wired and remembered. A
+     window that has none of it — a preview inside the speaker view — gets a
+     record of nothing, and the loops that walk the list skip it. */
+  const wireChrome = doc => {
+    const c = {
+      doc,
+      bar: doc.querySelector(".vit-bar"),
+      help: doc.querySelector(".vit-help"),
+      panel: doc.querySelector(".vit-settings"),
     };
-    const b = { el, count: el.querySelector(".vit-count") };
-    for (const [act, run] of Object.entries(acts)) {
-      const btn = el.querySelector(`[data-act="${act}"]`);
-      if (!btn) continue;
-      b[act] = btn;
-      btn.addEventListener("click", e => { e.stopPropagation(); run(); });
-    }
-    const dl = el.querySelector(".vit-dl");
-    if (dl) {
-      if (!dl.getAttribute("href")) {
-        const href = pdfLink();
-        if (href) dl.href = href;
-        else dl.remove();                     // no name to build one from
+    chromes.push(c);
+
+    if (c.bar) {
+      c.count = c.bar.querySelector(".vit-count");
+      const acts = {
+        desk: () => { vit.mode = vit.mode === "desk" ? "present" : "desk"; },
+        overview: () => { vit.mode = vit.mode === "overview" ? "present" : "overview"; },
+        laser: toggleLaser,
+        speaker: openSpeaker,
+        settings: () => toggleSettings(doc),
+        full: toggleFullscreen,
+      };
+      for (const [act, run] of Object.entries(acts)) {
+        const btn = c.bar.querySelector(`[data-act="${act}"]`);
+        if (!btn) continue;
+        c[act] = btn;
+        btn.addEventListener("click", e => { e.stopPropagation(); run(); });
       }
-      dl.addEventListener("click", e => e.stopPropagation());
+      const dl = c.bar.querySelector(".vit-dl");
+      if (dl) {
+        if (!dl.getAttribute("href")) {
+          const href = pdfLink();
+          if (href) dl.href = href;
+          else dl.remove();                   // no name to build one from
+        }
+        dl.addEventListener("click", e => e.stopPropagation());
+      }
     }
-    return b;
+
+    c.help?.addEventListener("click", () => c.help.close());
+    c.panel?.addEventListener("input", e => {
+      const dial = DIALS[e.target.dataset.set];
+      if (dial) { dial.write(e.target.value); syncSettings(); }
+    });
+    c.panel?.addEventListener("click", e => {
+      if (e.target === c.panel) { c.panel.close(); return; }         // the backdrop
+      const seg = e.target.closest(".vit-seg [data-value]");
+      if (seg) { DIALS[seg.parentNode.dataset.set].write(seg.dataset.value); syncSettings(); return; }
+      if (e.target.closest('[data-act="reset"]')) resetSettings();
+    });
+    return c;
   };
 
-  /* The two previews in the speaker view are copies of this very HTML
-     (iframe name="vit-mirror"): they only display, no toolbar. */
-  const bars = [];
-  let bar = null;
-  const findToolbar = () => {
-    document.addEventListener("fullscreenchange", syncTools);
-    bar = document.querySelector(".vit-bar");
-    if (!bar) return;
-    bars.push(wireBar(bar));
-    bar.addEventListener("pointerenter", showBar);
-    bar.addEventListener("pointerleave", showBar);
+  /* ── when the toolbar is out ──────────────────────────────────────────
+     At the desk it is furniture and stays. Over a page being shown it is
+     chrome, and chrome does not sit on a slide: it is out only while somebody
+     is using it — the pointer on it, or the keyboard in it — and gone the
+     moment they are not.
+
+     "The pointer on it" cannot be a hover, because a hidden toolbar must not be
+     hit-testable: an invisible row of buttons over that corner would swallow
+     the press that turns the page. So it is the pointer being inside the box
+     the toolbar occupies, which is the same box whether it is out or not —
+     hence the fade in place rather than a rise, in deck.css.
+
+     `bar` is the audience's screen's. The speaker view's is furniture in a
+     window nobody but the presenter is looking at, and never hides. */
+  let bar = null, onBar = false;
+
+  const inBox = (e, el) => {
+    const r = el.getBoundingClientRect();
+    return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
   };
 
-  /* auto-hide: the bar is chrome, not content. Shown on every activity and
-     hidden 2.4 s after the last, unless the pointer or the focus is on it. */
-  let barTimer = null;
-  const hideBar = () => {
-    if (bar.matches(":hover") || bar.contains(document.activeElement)) { barTimer = setTimeout(hideBar, 2400); return; }
-    bar.classList.remove("is-shown");
-  };
-  const showBar = () => {
-    if (!bar) return;
-    bar.classList.add("is-shown");
-    clearTimeout(barTimer);
-    if (vit.mode !== "desk") barTimer = setTimeout(hideBar, 2400);   // at the desk the toolbar is part of the furniture
-  };
+  const drawBar = () => bar?.classList.toggle(
+    "is-shown",
+    vit.mode === "desk" || onBar || bar.contains(document.activeElement),
+  );
+
+  const trackBar = e => { onBar = !!bar && inBox(e, bar); drawBar(); };
 
   /* ── laser pointer ───────────────────────────────────────────────────
      The mouse gets a CSS cursor image, in deck.css; touch and pen have no
@@ -335,29 +358,30 @@
     if (!lasing) { laser.classList.remove("is-on"); clearTrail(); }
     vit.hold(lasing);   // while it is out, a press on the page points rather than turns
     syncTools();
-    showBar();
   };
 
   const syncTools = () => {
     const text = `${vit.label()} / ${vit.pages}${vit.speed === 1 ? "" : ` · ${vit.speed}×`}`;   // a multiplier survives reloads: keep it in sight
     const fs = !!document.fullscreenElement;
-    for (const b of bars) {
-      b.el.ownerDocument.body.classList.toggle("vit-lasing", lasing);   // the speaker window's cursor follows too
+    for (const b of chromes) {
+      if (!b.bar) continue;
+      b.doc.body.classList.toggle("vit-lasing", lasing);   // the speaker window's cursor follows too
       b.count.textContent = text;
-      showFace(b.desk, vit.mode === "desk" ? "play" : "desk");
-      b.overview.setAttribute("aria-pressed", String(vit.mode === "overview"));
-      b.laser.setAttribute("aria-pressed", String(lasing));
-      showFace(b.full, fs ? "unfull" : "full");
+      /* a toolbar is what it carries: the speaker view's has no say in what the
+         audience is shown, so it has none of those buttons to refresh */
+      if (b.desk) showFace(b.desk, vit.mode === "desk" ? "play" : "desk");
+      b.overview?.setAttribute("aria-pressed", String(vit.mode === "overview"));
+      b.laser?.setAttribute("aria-pressed", String(lasing));
+      if (b.full) showFace(b.full, fs ? "unfull" : "full");
     }
   };
 
   /* flash something (the speed multiplier, say) where the counter is; syncTools writes the page number back after 900ms */
   let flashTimer = null;
   const flash = text => {
-    for (const b of bars) b.count.textContent = text;
+    for (const b of chromes) if (b.count) b.count.textContent = text;
     clearTimeout(flashTimer);
     flashTimer = setTimeout(syncTools, 900);
-    showBar();
   };
 
   /* Chrome theme: deck(theme:) fixes it, auto follows the system. Only the
@@ -398,8 +422,14 @@
     d.documentElement.className = "vit-speaker";
     d.documentElement.dataset.theme = root.dataset.theme;
     d.title = `Speaker view · ${document.title}`;
-    /* the window's whole body, its toolbar included */
+    /* the window's whole body, its toolbar included, and the same two dialogs
+       — the very elements, cloned, rather than a second copy of the markup to
+       keep in step */
     d.body.appendChild(d.importNode(document.querySelector("template.vit-speaker-body").content, true));
+    for (const el of document.querySelectorAll(".vit-help, .vit-settings")) {
+      const copy = d.body.appendChild(d.importNode(el, true));
+      copy.removeAttribute("open");
+    }
     spk = {
       page: d.querySelector("header b"), title: d.querySelector("header span"),
       clock: d.querySelector("time"), note: d.querySelector(".vit-notes"),
@@ -414,17 +444,22 @@
       tick();
     }, 1000);
 
-    /* its own toolbar, always shown bottom right; buttons and state are the main window's */
-    const b = wireBar(d.querySelector(".vit-bar"));
-    bars.push(b);
-    speaker.addEventListener("pagehide", () => bars.splice(bars.indexOf(b), 1));
+    /* its own chrome, wired like the main window's; the toolbar sits bottom
+       right and does not auto-hide, because nobody but the presenter sees it */
+    const c = wireChrome(d);
+    speaker.addEventListener("pagehide", () => chromes.splice(chromes.indexOf(c), 1));
 
-    /* a key pressed in this window is a key pressed in the main window, so it doubles as a remote */
+    /* A key pressed here is a key pressed at the deck, so this window doubles
+       as a remote — every key but the chrome's own, which act on the window
+       they were pressed in: the help and the settings belong where the
+       presenter is looking, not on the audience's screen. */
+    d.addEventListener("keydown", guard, true);
     d.addEventListener("keydown", e => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || KEYS[e.key]) return;
       e.preventDefault();
       document.dispatchEvent(new KeyboardEvent("keydown", { key: e.key, cancelable: true }));
     });
+    d.addEventListener("keydown", onKey);
 
     /* The "current" preview stands in for the main deck: clicking it is
        clicking the deck (same frac/tap), and moving over it with the laser on
@@ -448,6 +483,11 @@
 
     syncSpeaker();
     syncTools();
+    /* The presenter is looking at this window now; the other one is the
+       audience's screen and wants nothing on it. The pointer is still on its
+       toolbar as far as that window knows, so it is told otherwise. */
+    onBar = false;
+    drawBar();
   };
 
   /* Only the src changes: a navigation that differs from the current URL by
@@ -495,8 +535,8 @@
     s: openSpeaker,
     b: toggleBlack,
     ".": toggleBlack,
-    "?": toggleHelp,
-    ",": toggleSettings,
+    "?": doc => toggleHelp(doc),
+    ",": doc => toggleSettings(doc),
     "-": () => setSpeed(vit.speed / 1.25),
     "=": () => setSpeed(vit.speed * 1.25),
     "+": () => setSpeed(vit.speed * 1.25),
@@ -507,12 +547,13 @@
 
   const guard = e => {
     if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
+    const doc = e.currentTarget, { help, panel } = chromeIn(doc);
     const own = black
       ? { b: toggleBlack, ".": toggleBlack, Escape: toggleBlack }
       : help?.open
-        ? { "?": toggleHelp }        // Escape is the dialog's own
+        ? { "?": () => toggleHelp(doc) }        // Escape is the dialog's own
         : panel?.open
-          ? { ",": toggleSettings }
+          ? { ",": () => toggleSettings(doc) }
           : null;
     if (!own) return;
     e.stopPropagation();
@@ -522,13 +563,12 @@
   const onKey = e => {
     if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
     const run = KEYS[e.key];
-    if (run) { e.preventDefault(); run(); }
+    if (run) { e.preventDefault(); run(e.currentTarget); }
   };
 
   /* ── start ────────────────────────────────────────────────────────────
      The deck says when it is live. A preview inside the speaker view is
      driven by the window that opened it, so it takes none of this. */
-  let shownMode = null;
 
   const start = () => {
     vit = window.vit;
@@ -538,17 +578,20 @@
       return;
     }
     notes = document.querySelector("body > .vit-notes");
-    findToolbar();
+    document.addEventListener("fullscreenchange", syncTools);
+    bar = wireChrome(document).bar;
+    bar?.addEventListener("focusin", drawBar);
+    bar?.addEventListener("focusout", drawBar);
+    /* the pointer out of the window is the pointer off the toolbar */
+    document.documentElement.addEventListener("pointerleave", () => { onBar = false; drawBar(); });
     findLaser();
     findLaserLook();
     findTrail();
-    findHelp();
-    findSettings();
     initTheme();
     initSpeaker();
     document.addEventListener("keydown", guard, true);
     document.addEventListener("keydown", onKey);
-    document.addEventListener("pointermove", e => { showBar(); route(e); });
+    document.addEventListener("pointermove", e => { trackBar(e); route(e); });
     document.addEventListener("pointerdown", route);
     document.addEventListener("pointerup", () => { if (touching) laser.classList.remove("is-on"); });
     document.addEventListener("pointercancel", () => laser.classList.remove("is-on"));
@@ -556,13 +599,13 @@
     deck.addEventListener("vit:render", e => {
       syncTools();
       syncNotes();
-      if (e.detail.mode !== shownMode) { shownMode = e.detail.mode; showBar(); }
+      drawBar();
     });
     const kept = parseFloat(store("vit-speed"));
     if (kept) vit.speed = kept;
     syncTools();
     syncNotes();
-    showBar();
+    drawBar();
   };
 
   if (window.vit) start();

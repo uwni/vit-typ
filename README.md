@@ -404,13 +404,17 @@ you are on, the finished page elsewhere — and zooms a page into place when you
 open it. The **laser pointer** is a system cursor with a mouse and a DOM dot on
 touch or pen; while it is on, taps and swipes do not turn pages. The **speaker
 view** (`s`) opens a window you can drag to another screen: progress bar,
-current and next page, notes, a timer, its own toolbar. Its previews are iframes
-loading this same HTML at a `#page.position` hash, so transitions and animation
-steps play there as they do on stage; keys and clicks in that window drive the
-main one. It works over `file://` and closes with the main window.
+current and next page, notes, a timer, and its own chrome — a toolbar, the key
+table and the settings panel, so what you open from it is on your screen rather
+than in front of the audience. Its previews are iframes loading this same HTML
+at a `#page.position` hash, so transitions and animation steps play there as
+they do on stage; keys and clicks in that window drive the main one, every key
+but those two. It works over `file://` and closes with the main window.
 
 The toolbar in the bottom-right corner hides after 2.4 s without mouse movement,
-and stays on the desk. Its PDF button is a real `<a download target="_blank">`,
+stays on the desk, and goes at once when the speaker view opens — that screen is
+the audience's from then on, and moving the pointer over it brings the toolbar
+back. Its PDF button is a real `<a download target="_blank">`,
 so it never navigates the deck away mid-presentation.
 
 ## Limitations

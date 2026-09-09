@@ -40,13 +40,13 @@ export const chrome = () => {
 
 /* Launch, and return the few things a check needs: evaluate an expression in
    the page, send a raw CDP command, and read what the page complained about. */
-export async function open({ width = 1280, height = 800, port = 9333 } = {}) {
+export async function open({ width = 1280, height = 800, port = 9333, args = [] } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "vit-cdp-"));
   const proc = spawn(chrome(), [
     "--headless=new", `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`,
     "--no-first-run", "--no-default-browser-check", "--disable-gpu", "--no-sandbox",
     "--force-color-profile=srgb", "--hide-scrollbars",
-    `--window-size=${width},${height}`, "about:blank",
+    `--window-size=${width},${height}`, ...args, "about:blank",
   ], { stdio: ["ignore", "ignore", "ignore"] });
 
   let list;

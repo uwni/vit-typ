@@ -152,7 +152,7 @@ const attrs = name => [...new Set([...markup.matchAll(new RegExp(`data-${name}="
 
 /* ── and what only the browser can answer ───────────────────────────── */
 let model = [], labels = [];
-const page = await open({ width: 1280, height: 800, port: 9351 });
+const page = await open({ width: 1280, height: 800, port: 9351, args: ["--disable-popup-blocking"] });
 try {
   await page.goto("file://" + file, ".vit-deck[data-ready]");
 
@@ -169,8 +169,13 @@ try {
       return t;
     };
     window.__settle = ms => new Promise(r => setTimeout(r, ms ?? 260));
-    /* Wait for the move itself rather than for a duration: a deck's own pace is
-       its business, and the address bar is written when the move is announced. */
+    /* Two waits, and a check has to mean one of them. __move is the move being
+       announced — the new position is in the DOM and its animation is about to
+       run, which is what counts a press. __done is the move having finished
+       moving. A check that only wants to be somewhere waits for the second:
+       waiting for the first and carrying on overtakes the transition, which is
+       a thing the player has to survive but not a thing to do by accident in
+       the middle of measuring something else. */
     window.__move = fn => new Promise(r => {
       const deck = document.querySelector('.vit-deck');
       let done = false;
@@ -368,8 +373,8 @@ try {
     const r = await page.evaluate(`
       const turn = async mode => {
         window.vit.mode = mode;
-        await window.__move(() => { location.hash = '#${labels[0]}'; });
-        await window.__settle(400);
+        await window.__done(() => { location.hash = '#${labels[0]}'; });
+        await window.__settle(300);
         const real = document.startViewTransition.bind(document); let vt;
         document.startViewTransition = o => (vt = real(o));
         window.vit.next();
@@ -468,8 +473,8 @@ try {
   {
     const r = await page.evaluate(`
       window.vit.mode = 'present';
-      await window.__move(() => { location.hash = '#${labels[0]}'; });
-      await window.__settle(400);
+      await window.__done(() => { location.hash = '#${labels[0]}'; });
+      await window.__settle(300);
       const bar = document.querySelector('.vit-bar');
       const during = async () => {
         const real = document.startViewTransition.bind(document); let vt;
@@ -541,8 +546,8 @@ try {
       const out = {};
       for (const m of ['present', 'desk']) {
         window.vit.mode = m; await window.__settle(500);
-        await window.__move(() => { location.hash = '#${labels[0]}'; }); await window.__settle(300);
-        await window.__move(() => { location.hash = at; }); await window.__settle(500);
+        await window.__done(() => { location.hash = '#${labels[0]}'; }); await window.__settle(200);
+        await window.__done(() => { location.hash = at; }); await window.__settle(300);
         const s = document.querySelector('.vit-slide.is-active');
         const track = s.querySelector('[data-typst-label^="waapi-track:"] path');
         const dot = [...s.querySelectorAll('*')].find(e => getComputedStyle(e).offsetPath !== 'none');
@@ -578,12 +583,60 @@ try {
       const here = play(s.getAnimations({ subtree: true }));
       await window.__done(window.vit.prev);
       await window.__settle(300);
-      return { here, away: play(s.getAnimations({ subtree: true })),
-               at: '#${k < 0 ? 1 : model[k].labels[0]}', hash: location.hash,
-               mode: window.vit.mode, n: s.getAnimations({ subtree: true }).length };`);
+      return { here, away: play(s.getAnimations({ subtree: true })) };`);
     check("a drawing that plays itself runs on stage and is still off it",
       !r ? "n/a" : r.here.includes("running") && r.away.length > 0 && r.away.every(x => x === "paused"),
       r ? JSON.stringify(r) : "no drawing in this deck plays itself");
+  }
+
+  /* The speaker view is another window on another screen. It drives the deck
+     like a remote, and what belongs to the presenter rather than to the
+     audience belongs in it: its own help and its own settings panel, and the
+     audience's screen left with nothing on it. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present';
+      await window.__done(() => { location.hash = '#${labels[0]}'; });
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, clientY: 300 }));
+      await window.__settle(200);
+      const shownBefore = document.querySelector('.vit-bar').classList.contains('is-shown');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', cancelable: true }));
+      await window.__settle(900);
+      const w = window.open('', 'vit-speaker');
+      if (!w || w.closed || !w.document.querySelector('.vit-bar')) return null;
+      const d = w.document;
+      const out = { shownBefore, shownAfter: document.querySelector('.vit-bar').classList.contains('is-shown'),
+                    ownDialogs: !!d.querySelector('.vit-settings') && !!d.querySelector('.vit-help'),
+                    /* it drives the deck, it does not decide what the audience is shown */
+                    noModes: !d.querySelector('.vit-bar [data-act="desk"], .vit-bar [data-act="overview"]'),
+                    hasModes: !!document.querySelector('.vit-bar [data-act="overview"]') };
+      d.querySelector('.vit-bar [data-act="settings"]').click();
+      await window.__settle(250);
+      out.opensThere = !!d.querySelector('.vit-settings').open;
+      out.notHere = !document.querySelector('.vit-settings').open;
+      const was = window.vit.index;
+      d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
+      await window.__settle(500);
+      out.heldWhileOpen = window.vit.index === was;
+      d.querySelector('.vit-settings').close();
+      await window.__settle(200);
+      d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
+      await window.__settle(800);
+      out.remote = window.vit.index !== was;
+      document.dispatchEvent(new PointerEvent('pointermove', { clientX: 600, clientY: 300 }));
+      await window.__settle(200);
+      out.backOnHover = document.querySelector('.vit-bar').classList.contains('is-shown');
+      w.close();
+      await window.__settle(300);
+      return out;`);
+    /* A window that has been behind another one paints nothing, and what does
+       not paint does not advance: the checks after this need the page back. */
+    await page.send("Page.bringToFront");
+    await page.evaluate("await new Promise(r => setTimeout(r, 300)); return 1;");
+    check("the speaker view is the presenter's window, and the deck's remote",
+      !r ? "n/a" : r.shownBefore && !r.shownAfter && r.backOnHover && r.ownDialogs
+        && r.noModes && r.hasModes && r.opensThere && r.notHere && r.heldWhileOpen && r.remote,
+      r ? JSON.stringify(r) : "the browser would not open the window");
   }
 
   /* Everything the player can be asked to do, once — the captures are counted

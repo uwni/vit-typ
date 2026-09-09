@@ -49,12 +49,13 @@
      which is what a press arriving mid-zoom should be judged by; what is on
      screen until the update half runs is `<html data-mode>`, which render()
      writes. `peeked` is the position a hovered dot is previewing in place of
-     the rail's own answer.
+     the rail's own answer, and `busy` how many transitions are in flight —
+     while any is, the stage is a picture and nothing on it may move.
 
      Nothing else holds any of this, and nothing reads it back off the DOM:
      `<html data-mode>` is written by render() and read only by the stylesheet.
      move() is the one thing that changes it. */
-  let cur = -1, want = -1, mode = "present", peeked = null;
+  let cur = -1, want = -1, mode = "present", peeked = null, busy = 0;
 
   let reduced, canvit;
   const mirror = window.name === "vit-mirror";   // a preview inside the speaker view: it presents, and shows no rail
@@ -149,7 +150,8 @@
     root.dataset.mode = mode;
     slides.forEach((s, k) => {
       s.classList.toggle("is-active", k === cur);
-      if (k !== cur) { still(s); halt(k); }
+      if (k !== cur) halt(k);
+      runAnims(k);
     });
     syncRail(scroll);
     /* said out for whatever is drawn from the state and is not the deck's:
@@ -281,6 +283,7 @@
     const s = slides[i];
     if (!s || !window.vitLift(s)) return;
     name(s);
+    runAnims(i);
     const g = groups[gOf[i]];
     if (g?.stand?.dataset.shows?.startsWith(`${i}:`)) point(g.stand, i);
   };
@@ -456,16 +459,20 @@
 
   /* ── continuous animation ────────────────────────────────────────────
      None of it is the deck's: what moves says so where it is written, and tween
-     and waapi start it. What is left here is the lifecycle — everything under a
-     frame that is not on stage is paused, and the frame on stage plays once its
-     transition is over, since a snapshot is still and a playing element would
-     jump at the end. Step animations are the deck's own; halt() cancels those. */
+     and waapi start it. What is left here is when it may run, and that is one
+     sentence — a drawing moves only while its frame is the one on stage, the
+     deck is showing that frame rather than a grid of thumbnails, and no
+     transition is in flight, since a snapshot is still and a playing element
+     would jump when the snapshot goes.
 
-  const loose = s => waapi.of(s).filter(a => a.id !== STEP);
-  const still = s => loose(s).forEach(a => a.pause());
-  const play = () => {
-    if (reduced.matches) return;
-    loose(slides[cur]).forEach(a => a.play());
+     So it is drawn from the state like everything else, by render(), and there
+     is one writer of it. A frame that has just been lifted has animations that
+     did not exist when the deck last drew itself, so it is told on the spot.
+     Step animations are the deck's own; halt() cancels those. */
+
+  const runAnims = k => {
+    const live = k === cur && !busy && mode !== "overview" && !reduced.matches;
+    for (const a of waapi.of(slides[k])) if (a.id !== STEP) live ? a.play() : a.pause();
   };
 
   /* ── transition ──────────────────────────────────────────────────────
@@ -487,7 +494,7 @@
   let pendingUndo = null;
   const transition = (types, update, setup, done) => {
     if (pendingUndo) pendingUndo();
-    if (!types) { update(false); play(); done?.(); return; }
+    if (!types) { update(false); done?.(); return; }
     const undo = [];
     setup?.(undo);
     const flush = () => {
@@ -495,14 +502,15 @@
       while (undo.length) undo.pop()();
     };
     pendingUndo = flush;
+    busy++;
     const vit = document.startViewTransition({ update: () => update(pendingUndo === flush), types });
     /* Overtaking one is how the player answers a presenter pressing faster than
        the deck moves, so the skip it rejects with is expected, not a fault. */
     vit.ready.catch(() => { });
     const clear = () => {
-      const latest = pendingUndo === flush;
       flush();
-      if (latest) play();
+      busy--;
+      render();     // the stage is settled again, and what moves by itself may
       sweep();
       done?.();
     };
@@ -521,9 +529,6 @@
       cur = to;
       lift(to);
     }
-    /* a snapshot is still, and a playing element would jump at the end; the
-       transition plays it again when it is over */
-    if (changing) still(slides[cur]);
     const scroll = mode === "overview" ? "center" : true;
     if (moved) announce(scroll); else render(scroll);
   };
@@ -791,7 +796,6 @@
     mode = mirror ? "present" : "desk";
     apply(want = h0.i);
     moveDone(h0.i);
-    play();
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
     /* The deck's box changes without a window resize: desk ⇄ presenting. An
