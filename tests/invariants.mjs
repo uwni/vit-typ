@@ -127,6 +127,22 @@ const attrs = name => [...new Set([...markup.matchAll(new RegExp(`data-${name}="
 }
 
 {
+  /* An effect is written for the page, and the page's snapshot is root while
+     presenting and `vit-page` at the desk — so every rule an effect keys on
+     has to name both. One that names only root plays on the screen and not in
+     the box, which is how a cross-fade there stopped holding its old side and
+     dipped. (The mode zoom's own rules and `boxed` are keyed on those types
+     instead, and mean root alone.) */
+  const sheet = /<style id="vit-style">([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
+  const orphans = [...sheet.matchAll(/([^{}]*)\{[^{}]*\}/g)]
+    .map(m => m[1].trim())
+    .filter(sel => /active-view-transition-type\((?:enter|leave|set)-/.test(sel))
+    .filter(sel => /::view-transition-(?:old|new)\(root\)/.test(sel) && !sel.includes("(vit-page)"));
+  check("an effect names the page, whichever snapshot the page is",
+    sheet.length > 0 && orphans.length === 0, orphans.slice(0, 2).join(" | "));
+}
+
+{
   const list = /#let transitions = \(([^)]*)\)/.exec(lib)?.[1] ?? "";
   const names = [...list.matchAll(/"([^"]+)"/g)].map(m => m[1]);
   const missing = names.filter(t => !html.includes(`enter-${t}`) || !html.includes(`leave-${t}`));
@@ -509,6 +525,38 @@ try {
     check("a transition's own settings reach the stylesheet",
       !r ? "n/a" : r.ran === `${r.ms / 1000}s`,
       r ? `asked for ${r.ms}ms, group ran ${r.ran} · ${r.types.join(" ")}` : "no page in this deck sets any");
+  }
+
+  /* An element that runs along a path is placed by `offset-path`, a string of
+     pixels measured against the frame's own box — so it is only right once the
+     frame is on screen, and it has to be measured again whenever that box
+     changes. Wrong, and the thing sits in a corner of the page. */
+  {
+    const k = await page.evaluate(`
+      const gs = [...document.querySelectorAll('.vit-deck .vit-group')];
+      const t = document.querySelector('[data-typst-label^="waapi-track:"]');
+      return t ? gs.findIndex(g => g.contains(t)) : -1;`);
+    const r = k < 0 ? null : await page.evaluate(`
+      const at = '#${k < 0 ? 1 : model[k].labels[0]}';
+      const out = {};
+      for (const m of ['present', 'desk']) {
+        window.vit.mode = m; await window.__settle(500);
+        await window.__move(() => { location.hash = '#${labels[0]}'; }); await window.__settle(300);
+        await window.__move(() => { location.hash = at; }); await window.__settle(500);
+        const s = document.querySelector('.vit-slide.is-active');
+        const track = s.querySelector('[data-typst-label^="waapi-track:"] path');
+        const dot = [...s.querySelectorAll('*')].find(e => getComputedStyle(e).offsetPath !== 'none');
+        if (!track || !dot) { out[m] = { missing: true }; continue; }
+        const t = track.getBoundingClientRect(), d = dot.getBoundingClientRect();
+        const cx = d.x + d.width / 2, cy = d.y + d.height / 2;
+        out[m] = { on: cx >= t.x - 3 && cx <= t.right + 3 && cy >= t.y - 3 && cy <= t.bottom + 3,
+                   dot: [Math.round(cx), Math.round(cy)],
+                   track: [Math.round(t.x), Math.round(t.y), Math.round(t.right), Math.round(t.bottom)] };
+      }
+      return out;`);
+    check("an element that follows a path is on it, in every mode",
+      !r ? "n/a" : r.present?.on === true && r.desk?.on === true,
+      r ? JSON.stringify(r) : "no deck in this document follows a path");
   }
 
   /* A drawing that plays itself is the page's, not the deck's: the deck only

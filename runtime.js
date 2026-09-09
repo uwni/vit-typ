@@ -162,6 +162,10 @@
      transition but not a move. */
   const announce = (scroll = false) => {
     render(scroll);
+    /* A followed path is a string of pixels, so it is measured again whenever
+       the layout has moved — and only a frame that is on screen has a box to
+       measure it against, which is why this comes after render and not before. */
+    waapi.refit();
     try { history.replaceState(null, "", `#${label(cur)}`); } catch { }
     deck.dispatchEvent(new CustomEvent("vit:move-ready", { detail: { index: cur, step: at(cur) } }));
   };
@@ -516,7 +520,6 @@
       if (cur >= 0) settle(cur);
       cur = to;
       lift(to);
-      waapi.refit();   // this frame's box is new, and a followed path is in pixels
     }
     /* a snapshot is still, and a playing element would jump at the end; the
        transition plays it again when it is over */

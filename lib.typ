@@ -219,7 +219,10 @@
   pseudo-elements go — shows the new page, never the old. Paired with
   another entrance the old page fades out for real. */
   _css(_enter-side("fade") + _leave-side("fade"), "--vit-opacity: 0"),
-  _css((_type("enter-fade", "leave-fade") + "::view-transition-old(root)",), "--vit-opacity: 1"),
+  _css(
+    _page.map(p => _type("enter-fade", "leave-fade") + "::view-transition-old(" + p + ")"),
+    "--vit-opacity: 1",
+  ),
 
   /* none: at once. The side jumps to its end state on the first frame. */
   _css(_enter-side("none") + _leave-side("none"), "--vit-opacity: 0", "--vit-timing: step-start"),

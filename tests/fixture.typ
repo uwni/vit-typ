@@ -5,7 +5,7 @@
 //
 //   typst compile --root . --features html tests/fixture.typ out.html
 #import "../lib.typ": *
-#import "@local/tween:0.1.0": tween
+#import "@local/tween:0.1.0": tween, waapi
 
 #let blue = rgb("#7aa2ff")
 #let green = rgb("#8ce99a")
@@ -59,4 +59,16 @@
     play: (duration: 800, iterations: none),
     ..range(4).map(k => sq(amber, w: 40pt + 30pt * k)),
   ))
+]
+
+// 8 · an element running along a path: the path is measured in pixels against
+//     the frame's own box, so it is only right once the frame is on screen
+#slide(title: "Follow")[
+  #place(dx: 120pt, dy: 60pt, waapi.track("orbit", polygon(
+    stroke: 1.5pt + blue,
+    (0pt, 0pt), (160pt, 0pt), (160pt, 90pt), (0pt, 90pt),
+  )))
+  #place(dx: 120pt, dy: 60pt, waapi.animate(follow: "orbit", duration: 3000)[
+    #circle(radius: 8pt, fill: green)
+  ])
 ]
