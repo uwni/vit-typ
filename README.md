@@ -177,6 +177,11 @@ grows away, both blurred by how far they are from the focal plane) · `wipe-left
 / `wipe-right` / `wipe-up` / `wipe-down` (a reveal, named by the direction the
 front travels) · `none` (that side switches at once).
 
+A page effect is for a page that is on the screen, so it runs while presenting.
+At the desk the page is a box beside the rail: it cross-fades in that box and
+the furniture around it stays put. In the overview there is no page transition
+— turning to another page moves the highlight. Marks morph in all three.
+
 A string is the same effect both ways. `(enter: "slide", leave: "fade")` names
 how the new page comes in and how the old one goes out separately (`in` would be
 the natural key, but it is a Typst keyword). Going back, the page being left

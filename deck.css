@@ -353,6 +353,26 @@ body > .vit-notes {
 }
 /* ── toolbar / laser pointer ──────────────────────────────────────────── */
 
+/* ── the page, where it is not the screen ─────────────────────────────
+   At the desk the page is a box beside the rail, so a page turn is captured as
+   that box's own group (vit-page) rather than as the whole document, and the
+   page's own effect plays there instead of on root — the same slide, zoom or
+   wipe, at the size the page happens to be. The furniture around it holds
+   still: it is not going anywhere. */
+html:active-view-transition-type(boxed)::view-transition-old(root),
+html:active-view-transition-type(boxed)::view-transition-new(root) {
+  animation: none;
+}
+html:active-view-transition-type(boxed)::view-transition-old(root) {
+  opacity: 0;
+}
+/* The page's effect plays in the page's box, so it is clipped to it: a slide
+   pushes a page by its own width, and without this the page being left would
+   travel out over the rail and the notes instead of off its own edge. */
+::view-transition-group(vit-page) {
+  clip-path: inset(0);
+}
+
 .vit-bar {
   position: fixed;
   right: 16px;

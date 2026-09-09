@@ -42,11 +42,14 @@
 
   /* ── the state ────────────────────────────────────────────────────────
      Everything the deck is. `cur` is the frame on stage and `want` the frame
-     accepted: they differ only while a transition runs, because the update
-     half does not run until the old snapshot is captured, and a press arriving
-     meanwhile has to count from the target already taken. `mode` is which of
-     the deck and the rail are shown, and `peeked` the position a hovered dot
-     is previewing in place of the rail's own answer.
+     accepted: they differ only while a transition runs, because the update half
+     does not run until the old snapshot is captured, and a press arriving
+     meanwhile has to count from the target already taken. `mode` is the same
+     for which of the deck and the rail are shown — the mode we are going to,
+     which is what a press arriving mid-zoom should be judged by; what is on
+     screen until the update half runs is `<html data-mode>`, which render()
+     writes. `peeked` is the position a hovered dot is previewing in place of
+     the rail's own answer.
 
      Nothing else holds any of this, and nothing reads it back off the DOM:
      `<html data-mode>` is written by render() and read only by the stylesheet.
@@ -504,8 +507,8 @@
 
   /* The update half of a transition, and the only place the state changes:
      what this leaves behind is what the browser captures. */
-  const apply = (to, m) => {
-    const moved = to !== cur, changing = m !== mode;
+  const apply = to => {
+    const moved = to !== cur, changing = root.dataset.mode !== mode;
     if (moved) {
       /* A page we are not on shows its work finished, like a handout — so the
          frame being left goes to its last step. Once per move, here, rather
@@ -515,11 +518,10 @@
       lift(to);
       waapi.refit();   // this frame's box is new, and a followed path is in pixels
     }
-    mode = m;
     /* a snapshot is still, and a playing element would jump at the end; the
        transition plays it again when it is over */
     if (changing) still(slides[cur]);
-    const scroll = m === "overview" ? "center" : true;
+    const scroll = mode === "overview" ? "center" : true;
     if (moved) announce(scroll); else render(scroll);
   };
 
@@ -541,8 +543,8 @@
      A preview a hovered dot left behind is put back before anything else: it
      stepped that frame, and only a click says which step was meant. */
   const move = (where, done) => {
-    const to = clamp(where.frame ?? want), m = where.mode ?? mode;
-    const turning = to !== want, changing = m !== mode;
+    const to = clamp(where.frame ?? want), m = where.mode ?? mode, was = mode;
+    const turning = to !== want, changing = m !== was;
     if (!turning && !changing) {
       if (where.step != null) stepTo(to, where.step);
       done?.();
@@ -550,25 +552,40 @@
     }
     unpeek();
     want = to;
+    mode = m;
     lift(to);                 // before the transition: its setup reads both sides' marks
     stepTo(to, where.step ?? (turning ? 0 : at(to)), true);
 
     const own = slides[Math.max(to, cur)].dataset.transition;
     const dir = to >= cur ? "fwd" : "back";
-    const faces = changing ? [face(gOf[to], mode), face(gOf[to], m)] : null;
-    const types = changing ? ["overview"] : own && `${own} ${dir}`.split(" ");
+    const faces = changing ? [face(gOf[to], was), face(gOf[to], m)] : null;
+    /* A page's own effects are for a page that is on the screen. In the overview
+       it is one thumbnail among many, and turning to another only moves the
+       highlight — running its entrance there would slide the whole grid.
+
+       At the desk it is a box beside the rail, so it is captured as a group of
+       its own and the page changes inside that box: `boxed` holds the furniture
+       around it still and cross-fades the page, and the marks morph as ever. An
+       entrance is a page arriving on a screen, and there it is not one. */
+    const boxed = !changing && m === "desk";
+    const types = changing ? ["overview"]
+      : m !== "overview" && own && `${own} ${dir}${boxed ? " boxed" : ""}`.split(" ");
 
     transition(canvit && !reduced.matches && types, capturing => {
       if (capturing && faces) {
         faces[0].style.viewTransitionName = "";
         faces[1].style.viewTransitionName = "vit-zoom";
       }
-      apply(to, m);
+      apply(to);
     }, undo => {
       if (faces) {
         faces[0].style.viewTransitionName = "vit-zoom";
         undo.push(() => { faces[0].style.viewTransitionName = ""; faces[1].style.viewTransitionName = ""; });
       } else {
+        if (boxed) {
+          deck.style.viewTransitionName = "vit-page";
+          undo.push(() => { deck.style.viewTransitionName = ""; });
+        }
         balance(slides[cur], slides[to], undo);
         soloize(slides[cur], slides[to], undo);
       }
@@ -768,7 +785,8 @@
     stepTo(h0.i, h0.at, true);
     for (let i = 0; i < n; i++) if (i !== h0.i) settle(i);
     /* the deck opens on the desk; a preview opens on its page */
-    apply(want = h0.i, mirror ? "present" : "desk");
+    mode = mirror ? "present" : "desk";
+    apply(want = h0.i);
     moveDone(h0.i);
     play();
     deck.addEventListener("vit:move-ready", sweep);

@@ -102,6 +102,22 @@ the page is on without the page being on screen. What it does not follow is
 animation — style does not compute in a `display: none` subtree — which is what
 a thumbnail wants anyway.
 
+**Whose transition it is.** A page's own effect — slide, zoom, a wipe — is
+written on `root`, which is right only while the page *is* the screen. So the
+page's snapshot is root while presenting and the deck's own group (`vit-page`)
+at the desk, where the page is a box beside the rail: there the transition
+carries the type `boxed`, which holds the furniture around it still and
+cross-fades the page inside its box while the marks morph across it as ever. In
+the overview there is no page transition at all — the pages are thumbnails, and
+turning to another only moves the highlight. Left on root, a page with
+`transition: "slide"` slides the whole desk, rail and notes and all, or the
+whole overview grid.
+
+The page is not named while presenting because there it would buy nothing and
+cost the capture: measured on the tutorial, capturing the deck as a group of
+its own runs about 23 ms longer than capturing root, and that is a window in
+which the real DOM is already hidden and the snapshots are not composited yet.
+
 Going from one mode to another is a zoom between a page's two faces. The browser
 pairs the old image with the new by *name*, not by node, so the two faces need
 not be the same element: `vit-zoom` goes on the picture in the rail before the
@@ -123,6 +139,12 @@ genuinely meet are said out loud rather than reached across: `vit.hold(on)`,
 which the laser calls so a press on the page points instead of turning it, and
 a capture-phase key listener, so that while something modal is up the deck
 never hears the keys at all.
+
+**The stylesheet a deck carries.** `<style id="vit-style">` is the layout's
+constants, then tween's rules, then `deck.css`, then the effects `lib.typ`
+writes, then whatever settings this document's transitions and marks asked for.
+The prose in those files is for whoever reads them and the browser has no use
+for it, so the comments are cut on the way out — about 16 kB per deck.
 
 **What the two sides agree on.** The Typst side writes markup and the runtime
 reads it; between them is one untyped protocol, so it is written down here and

@@ -73,6 +73,15 @@ const markup = html.replace(/<script[\s\S]*?<\/script>/g, "").replace(/<style[\s
 const attrs = name => [...new Set([...markup.matchAll(new RegExp(`data-${name}="([^"]*)"`, "g"))].map(m => m[1]))];
 
 {
+  /* The prose in the stylesheets is for whoever reads them; a deck carries the
+     rules and nothing else. */
+  const sheet = /<style id="vit-style">([\s\S]*?)<\/style>/.exec(html)?.[1] ?? "";
+  const comments = (sheet.match(/\/\*/g) ?? []).length;
+  check("the stylesheet ships rules, not prose", sheet.length > 0 && comments === 0,
+    `${comments} comments in ${sheet.length} bytes`);
+}
+
+{
   const tokens = /:root\{([^}]*)\}/.exec(html)?.[1] ?? "";
   const names = [...tokens.matchAll(/--vit-([\w-]+)\s*:/g)].map(m => m[1]);
   const need = ["page", "w", "h", "duration", "easing"];
@@ -314,6 +323,60 @@ try {
       r.types.includes("overview") && r.groups.some(g => g.includes("vit-zoom")) && !r.groups.some(g => /\(m-/.test(g)),
       JSON.stringify(r));
     check("and it leaves the overview", r.mode === "present" && r.hash === "#" + model[2].labels[0], JSON.stringify(r));
+  }
+
+  /* A page's own entrance is for a page that is on the screen. In the overview
+     the pages are thumbnails; turning to another moves the highlight, and
+     nothing else may move. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'overview'; await window.__settle(600);
+      let started = 0;
+      const real = document.startViewTransition.bind(document);
+      document.startViewTransition = o => { started++; return real(o); };
+      const rail = document.querySelector('.vit-rail');
+      const before = rail.getBoundingClientRect();
+      for (let i = 0; i < 3; i++) { window.vit.next(); await window.__settle(300); }
+      const after = rail.getBoundingClientRect();
+      document.startViewTransition = real;
+      const here = [...document.querySelectorAll('.vit-rail .vit-thumb')].findIndex(t => t.classList.contains('is-here'));
+      return { started, moved: Math.round(after.x - before.x), here };`);
+    check("walking the overview moves the highlight and nothing else",
+      r.started === 0 && r.moved === 0 && r.here > 0, JSON.stringify(r));
+  }
+
+  /* A page turn moves the page. Presenting, the page is the screen and the
+     screen is what the effect is written on; at the desk it is a box beside the
+     rail, and the furniture around it must not go anywhere. */
+  {
+    const r = await page.evaluate(`
+      const turn = async mode => {
+        window.vit.mode = mode;
+        await window.__move(() => { location.hash = '#${labels[0]}'; });
+        await window.__settle(400);
+        const real = document.startViewTransition.bind(document); let vt;
+        document.startViewTransition = o => (vt = real(o));
+        window.vit.next();
+        await vt.ready;
+        const cs = ps => getComputedStyle(document.documentElement, ps);
+        const out = {
+          types: [...vt.types],
+          page: !!document.getAnimations().find(a => /group\\(vit-page\\)/.test(String(a.effect?.pseudoElement || ''))),
+          rootOld: cs('::view-transition-old(root)').animationName,
+          rootNew: cs('::view-transition-new(root)').animationName,
+        };
+        document.startViewTransition = real;
+        await vt.finished.catch(() => { });
+        await window.__settle(300);
+        return out;
+      };
+      return { present: await turn('present'), desk: await turn('desk') };`);
+    check("presenting, the page's effect is the screen's",
+      !r.present.page && r.present.rootOld === "vit-leave" && r.present.rootNew === "vit-enter",
+      JSON.stringify(r.present));
+    check("at the desk it is the page's box, and the furniture holds still",
+      r.desk.page && r.desk.types.includes("boxed") && r.desk.rootOld === "none" && r.desk.rootNew === "none",
+      JSON.stringify(r.desk));
   }
 
   /* The deck answers the keys, unless something modal is up: then only its own
