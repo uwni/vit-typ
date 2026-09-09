@@ -173,9 +173,6 @@
       panel: doc.querySelector(".vit-settings"),
     };
     chromes.push(c);
-    /* the speaker view's toolbar is furniture in a window only the presenter
-       sees: it is out for as long as the window is */
-    if (doc !== document) c.bar?.classList.add("is-shown");
 
     if (c.bar) {
       c.count = c.bar.querySelector(".vit-count");
@@ -219,44 +216,16 @@
   };
 
   /* ── when the toolbar is out ──────────────────────────────────────────
-     At the desk it is furniture and stays. Over a page being shown it is
-     chrome, and chrome does not sit on a slide: it is out only while somebody
-     is using it — the pointer on it, or the keyboard in it — and gone the
-     moment they are not.
+     CSS owns the rule (deck.css); what it cannot see is the pointer, since a
+     hidden toolbar is not hit-testable and what the pointer arrives on is
+     `.vit-reach`, the patch of page beneath it. So one class carries the
+     browser's answer — and while the deck moves nothing is hit-tested and it
+     has none to give, so the last one stands. */
+  let bar = null;
 
-     A hidden toolbar must not be hit-testable: an invisible row of buttons over
-     that corner would swallow the press that turns the page. So it is not the
-     toolbar the pointer arrives on but `.vit-reach`, the patch of page beneath
-     it — part of the deck, so a press there turns the page like any other.
-
-     Where the pointer is is told by where it *arrives*: pointerover bubbles, so
-     one listener says, of every arrival anywhere, whether it was in that corner.
-     Departures say nothing — the pointer leaving one element is it arriving on
-     another — except the one departure that is real, the pointer leaving the
-     window.
-
-     Except while the deck is moving, when the browser cannot say where the
-     pointer is at all: a captured element is not hit-tested, so a transition
-     starting reads as the pointer leaving the toolbar and arriving on <html>
-     although it has not moved. Measured, believing that costs the toolbar the
-     whole of every transition; the browser hit-tests again some 13 ms after the
-     move is done and corrects us itself, wherever the pointer has ended up.
-
-     Where nothing can hover there is no way to reach for it, so there it stays.
-     `bar` is the audience's screen's; the speaker view's is furniture in a
-     window nobody but the presenter is looking at, and never hides. */
-  const canHover = matchMedia("(any-hover: hover)");
-  let bar = null, reaching = false;
-
-  const drawBar = () => bar?.classList.toggle(
-    "is-shown",
-    vit.mode !== "present" || !canHover.matches || reaching || bar.contains(document.activeElement),
-  );
-
-  const reach = yes => {
-    if (vit.moving) return;   // it is not saying where the pointer is, only that it cannot tell
-    reaching = yes;
-    drawBar();
+  const reached = e => {
+    if (vit.moving) return;
+    bar?.classList.toggle("is-reached", e.type === "pointerover" && !!e.target.closest?.(".vit-reach, .vit-bar"));
   };
 
   /* ── laser pointer ───────────────────────────────────────────────────
@@ -516,10 +485,9 @@
 
     syncSpeaker();
     syncTools();
-    /* The presenter is looking at this window now; the other one is the
-       audience's screen and wants nothing on it. The pointer is still on its
-       toolbar as far as that window knows, so it is told otherwise. */
-    reach(false);
+    /* The audience's screen wants nothing on it, and still believes the
+       pointer is on its toolbar. */
+    bar?.classList.remove("is-reached");
   };
 
   /* Only the src changes: a navigation that differs from the current URL by
@@ -579,7 +547,11 @@
 
   const guard = e => {
     if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target)) return;
-    const doc = e.currentTarget, { help, panel } = chromeIn(doc);
+    const doc = e.currentTarget, { help, panel, bar: their } = chromeIn(doc);
+    /* A button with the keyboard on it is being used, and the keys it acts on
+       are its own: the deck must not take them. Propagation stops, so the deck
+       never hears them; the default is left alone, so the button is pressed. */
+    if (their?.querySelector(":focus-visible") && (e.key === "Enter" || e.key === " ")) { e.stopPropagation(); return; }
     const own = black
       ? { b: toggleBlack, ".": toggleBlack, Escape: toggleBlack }
       : help?.open
@@ -612,13 +584,8 @@
     notes = document.querySelector("body > .vit-notes");
     document.addEventListener("fullscreenchange", syncTools);
     bar = wireChrome(document).bar;
-    bar?.addEventListener("focusin", drawBar);
-    bar?.addEventListener("focusout", drawBar);
-    /* every arrival, anywhere: was it in the corner the toolbar is reached
-       through, or on the toolbar itself once it is out and can be pointed at */
-    document.addEventListener("pointerover", e => reach(!!e.target.closest?.(".vit-reach, .vit-bar")));
-    document.documentElement.addEventListener("pointerleave", () => reach(false));
-    canHover.addEventListener("change", drawBar);
+    /* every arrival anywhere, and the one departure that is real */
+    for (const t of ["pointerover", "pointerleave"]) document.documentElement.addEventListener(t, reached);
     findLaser();
     findLaserLook();
     findTrail();
@@ -634,14 +601,12 @@
     deck.addEventListener("vit:render", () => {
       syncTools();
       syncNotes();
-      drawBar();
       drawLaser();
     });
     const kept = parseFloat(store("vit-speed"));
     if (kept) vit.speed = kept;
     syncTools();
     syncNotes();
-    drawBar();
   };
 
   if (window.vit) start();

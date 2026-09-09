@@ -410,16 +410,32 @@ html {
     system-ui,
     sans-serif;
   color: var(--vit-muted);
-  /* It fades in place rather than rising into place: hidden, it is still the
-     box the pointer has to be in for it to come out, and a box that moves as
-     it appears would move out from under the pointer that just found it. */
+  transition: opacity 0.18s ease;
+  view-transition-name: vit-bar;
+}
+/* Furniture at the desk and in the overview. Over a page being shown it is
+   chrome, and out only while it is being reached for or the keyboard is in it.
+   Hidden it is untouchable — the corner it sits in belongs to the page, and a
+   press there turns the page — and unnamed, since a group of its own would be
+   an invisible sheet of frosted glass over the page. */
+:root[data-mode="present"] .vit-bar {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.18s ease;
+  view-transition-name: none;
 }
-.vit-bar.is-shown {
+:root[data-mode="present"] .vit-bar.is-reached,
+:root[data-mode="present"] .vit-bar:has(:focus-visible) {
   opacity: 1;
   pointer-events: auto;
+  view-transition-name: vit-bar;
+}
+/* where nothing can hover there is no reaching for it, so there it stays */
+@media (any-hover: none) {
+  :root[data-mode="present"] .vit-bar {
+    opacity: 1;
+    pointer-events: auto;
+    view-transition-name: vit-bar;
+  }
 }
 .vit-bar button,
 .vit-bar a {
@@ -540,13 +556,10 @@ body.vit-lasing .vit-deck {
    transition, and pictures are not hit-tested. Nothing is aimed at them then,
    which is why the deck takes no clicks while one runs.
 
-   The toolbar is named only while it is out: backdrop-filter is copied to
-   ::view-transition-group() while opacity is only baked into the snapshot, so a
-   hidden toolbar with a group of its own would be an invisible sheet of frosted
-   glass over the page. */
-.vit-bar.is-shown {
-  view-transition-name: vit-bar;
-}
+   The toolbar is named only while it is out (see above): backdrop-filter is
+   copied to ::view-transition-group() while opacity is only baked into the
+   snapshot, so a hidden toolbar with a group of its own would be an invisible
+   sheet of frosted glass over the page. */
 /* and the pointer's two, only while it is out: the tracer covers the whole
    window, and a group that size captured on every page turn is a full-screen
    sheet composited over the page for no reason at all. */

@@ -213,7 +213,7 @@ So:
 The toolbar therefore holds its last word while `vit.moving`, rather than
 believing the departure a transition manufactures: measured on the tutorial with
 a 700 ms page turn and the pointer resting on the toolbar, `pointerleave` fires
-at 4 ms and `pointerenter` again at 742 ms — believed, the toolbar is out of
+at 18 ms and `pointerenter` again at 735 ms — believed, the toolbar is out of
 sight for the whole transition. The browser's own hit test some 13 ms after the
 move is done corrects us, including when the pointer really did leave meanwhile,
 since it then arrives somewhere else and says so.
@@ -248,7 +248,7 @@ checked in `tests/invariants.mjs`.
 | `.vit-deck[data-ready]` | CSS | the scripts have run; before that nothing is shown |
 | `.vit-mark[data-vit-key]`, `style.viewTransitionName` | CSS, the browser | what hoisting lifted, and what pairs with what |
 | `.vit-stand[data-shows]` | itself | which frame the thumbnail is pointing at, and how many marks were out of it |
-| `is-active`, `is-here`, `is-shown`, `is-on`, `is-now`, `is-peek` | CSS | the frame on stage, the page we are on, the toolbar out, a dot passed / current / previewed |
+| `is-active`, `is-here`, `is-reached`, `is-on`, `is-now`, `is-peek` | CSS | the frame on stage, the page we are on, the toolbar being reached for, a dot passed / current / previewed |
 
 A control the document emits and nobody binds is silent rather than broken,
 which is why `data-act`, `data-set` and `data-out` are checked against the

@@ -174,6 +174,8 @@ try {
     /* Reaching for the toolbar and giving up on it, as the browser reports it:
        the pointer arriving on the patch of page under the toolbar, or on
        anything else. */
+    /* whether the toolbar is out — CSS decides it, so this asks CSS */
+    window.__barOut = () => +getComputedStyle(document.querySelector('.vit-bar')).opacity === 1;
     window.__reach = yes => {
       const el = document.querySelector(yes ? '.vit-reach' : '.vit-deck');
       el?.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
@@ -517,7 +519,7 @@ try {
       await window.__done(() => { location.hash = '#${labels[0]}'; });
       await window.__settle(400);
       const bar = document.querySelector('.vit-bar'), reach = document.querySelector('.vit-reach');
-      const shown = () => bar.classList.contains('is-shown');
+      const shown = () => window.__barOut();
       const b = bar.getBoundingClientRect(), z = reach.getBoundingClientRect();
       const mid = [(b.left + b.right) / 2, (b.top + b.bottom) / 2];
       const out = {
@@ -552,7 +554,7 @@ try {
       await window.__settle(300);
       const bar = document.querySelector('.vit-bar');
       window.__reach(true); await window.__settle(250);
-      const out = { reaching: bar.classList.contains('is-shown'), low: 1 };
+      const out = { reaching: window.__barOut(), low: 1 };
       let stop = false;
       const tick = () => { out.low = Math.min(out.low, +getComputedStyle(bar).opacity);
                            if (!stop) requestAnimationFrame(tick); };
@@ -563,10 +565,10 @@ try {
       /* what the browser says when it cannot tell */
       document.documentElement.dispatchEvent(new PointerEvent('pointerover', { bubbles: true }));
       await window.__settle(120);
-      out.during = bar.classList.contains('is-shown');
+      out.during = window.__barOut();
       await window.__settle(1200);
       stop = true;
-      out.after = bar.classList.contains('is-shown');
+      out.after = window.__barOut();
       return out;`);
     check("the toolbar does not blink when the deck moves under it",
       r.reaching && r.moving && r.during && r.after && r.low === 1, JSON.stringify(r));
@@ -618,13 +620,13 @@ try {
       window.vit.mode = 'present'; await window.__settle(400);
       const bar = document.querySelector('.vit-bar');
       window.__reach(false); await window.__settle(200);
-      const out = { hidden: !bar.classList.contains('is-shown') };
+      const out = { hidden: !window.__barOut() };
       const btn = bar.querySelector('button');
       btn.focus(); await window.__settle(200);
       out.focused = document.activeElement === btn;
-      out.shown = bar.classList.contains('is-shown');
+      out.shown = window.__barOut();
       btn.blur(); await window.__settle(200);
-      out.afterBlur = bar.classList.contains('is-shown');
+      out.afterBlur = window.__barOut();
       return out;`);
     check("and the keyboard reaches it too", r.hidden && r.focused && r.shown && !r.afterBlur, JSON.stringify(r));
   }
@@ -661,7 +663,7 @@ try {
       window.vit.mode = 'desk'; await window.__settle(400);
       window.__reach(false);
       await window.__settle(1500);
-      return document.querySelector('.vit-bar').classList.contains('is-shown');`);
+      return window.__barOut();`);
     check("at the desk the toolbar stays out", r === true, String(r));
   }
 
@@ -753,18 +755,19 @@ try {
      audience's screen left with nothing on it. */
   {
     const r = await page.evaluate(`
-      window.vit.mode = 'present';
+      window.vit.mode = 'present'; await window.__settle(500);
       await window.__done(() => { location.hash = '#${labels[0]}'; });
+      await window.__settle(200);
       const bar = document.querySelector('.vit-bar');
       window.__reach(true);
       await window.__settle(200);
-      const shownBefore = bar.classList.contains('is-shown');
+      const shownBefore = window.__barOut();
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', cancelable: true }));
       await window.__settle(900);
       const w = window.open('', 'vit-speaker');
       if (!w || w.closed || !w.document.querySelector('.vit-bar')) return null;
       const d = w.document;
-      const out = { shownBefore, shownAfter: bar.classList.contains('is-shown'),
+      const out = { shownBefore, shownAfter: window.__barOut(),
                     ownDialogs: !!d.querySelector('.vit-settings') && !!d.querySelector('.vit-help'),
                     /* it drives the deck, it does not decide what the audience is shown */
                     noModes: !d.querySelector('.vit-bar [data-act="desk"], .vit-bar [data-act="overview"]'),
@@ -779,12 +782,12 @@ try {
       out.heldWhileOpen = window.vit.index === was;
       d.querySelector('.vit-settings').close();
       await window.__settle(200);
-      d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
-      await window.__settle(800);
+      await window.__done(() => d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true })));
+      await window.__settle(300);
       out.remote = window.vit.index !== was;
       window.__reach(true);
       await window.__settle(200);
-      out.backOnHover = bar.classList.contains('is-shown');
+      out.backOnHover = window.__barOut();
       w.close();
       await window.__settle(300);
       return out;`);
@@ -859,7 +862,8 @@ try {
       window.vit.mode = 'overview'; await new Promise(r => setTimeout(r, 500));
       const over = document.documentElement.dataset.mode;
       window.vit.mode = 'present'; await new Promise(r => setTimeout(r, 500));
-      return { from, to: location.hash, over, bar: !!document.querySelector('.vit-bar.is-shown') };`);
+      const bar = document.querySelector('.vit-bar');
+      return { from, to: location.hash, over, bar: +getComputedStyle(bar).opacity === 1 };`);
   } finally { p2.close(); }
   check("a deck without the chrome still walks and still zooms",
     cut && walked?.to === "#" + labels[2] && walked.over === "overview" && !walked.bar && p2.errors.length === 0,
