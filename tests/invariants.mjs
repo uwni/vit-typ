@@ -578,7 +578,9 @@ try {
       const here = play(s.getAnimations({ subtree: true }));
       await window.__done(window.vit.prev);
       await window.__settle(300);
-      return { here, away: play(s.getAnimations({ subtree: true })) };`);
+      return { here, away: play(s.getAnimations({ subtree: true })),
+               at: '#${k < 0 ? 1 : model[k].labels[0]}', hash: location.hash,
+               mode: window.vit.mode, n: s.getAnimations({ subtree: true }).length };`);
     check("a drawing that plays itself runs on stage and is still off it",
       !r ? "n/a" : r.here.includes("running") && r.away.length > 0 && r.away.every(x => x === "paused"),
       r ? JSON.stringify(r) : "no drawing in this deck plays itself");
