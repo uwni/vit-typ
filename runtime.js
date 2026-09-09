@@ -193,6 +193,7 @@
         dot.classList.toggle("is-peek", !!peekHere && q.i === peeked.i && q.at === peeked.at);
       });
     });
+    dressStand();
   };
 
   /* The dots pair off with the page's positions in order: the nth dot is the
@@ -715,6 +716,12 @@
      which carries the matrix that puts it back in the page's own space. */
   let parked = null;   // { slide, home, next, stand } — where it came from
 
+  /* The rail holds one box per page, and while a frame is at the pane the box
+     in its place is the stand-in — so the stand-in wears that frame's thumbnail
+     state. Hovering another of the page's dots shows that other frame in the
+     slot instead, and then it is the stand-in's turn to stay out. */
+  const dressStand = () => parked?.stand.classList.toggle("is-thumb", parked.slide.classList.contains("is-thumb"));
+
   const standFor = slide => {
     const page = slide.querySelector(".vit-page");
     const src = page?.querySelector("svg");
@@ -757,6 +764,7 @@
     parked = { slide, home: slide.parentNode, next: slide.nextSibling, stand };
     slide.replaceWith(stand);
     view.replaceChildren(slide);
+    dressStand();
   };
 
   const syncPane = () => {
@@ -807,7 +815,6 @@
   /* ── settings ────────────────────────────────────────────────────────
      A control in the panel names what it sets in data-set, and appears here
      once: how to read it, how to apply it, and how to say it. */
-  const TRAIL = 400;
   let panel = null;
 
   const DIALS = {
@@ -860,7 +867,7 @@
   const resetSettings = () => {
     for (const k of ["vit-speed", "vit-trail", "vit-ink", "vit-size", "vit-theme"]) store(k, null);
     setSpeed(1);
-    setTrail(TRAIL);
+    setTrail(laserTrail);
     applyLaser();
     applyTheme();
     syncSettings();
@@ -985,7 +992,7 @@
   /* ── what the laser looks like ───────────────────────────────────────
      deck.css owns the drawing; this owns the colour and the size. Its URL and
      its ink are read once, so no colour or size is written here. */
-  let laserUrl = "", laserInk = "", laserSize = 32, laserPx = 32;
+  let laserUrl = "", laserInk = "", laserSize = 32, laserPx = 32, laserTrail = 400;
   const enc = hex => "%23" + hex.replace("#", "").toLowerCase();
 
   const applyLaser = () => {
@@ -1004,13 +1011,14 @@
     laserUrl = css.getPropertyValue("--vit-laser").trim();
     laserInk = css.getPropertyValue("--vit-laser-ink").trim();
     laserSize = parseFloat(css.getPropertyValue("--vit-laser-size")) || laserSize;
+    laserTrail = parseFloat(css.getPropertyValue("--vit-laser-trail")) || 0;
     applyLaser();
   };
 
   const findTrail = () => {
     segs = [...(document.querySelector(".vit-trail")?.children ?? [])];
     const kept = parseInt(store("vit-trail"), 10);
-    setTrail(Number.isFinite(kept) ? kept : TRAIL);
+    setTrail(Number.isFinite(kept) ? kept : laserTrail);
   };
 
   const setTrail = ms => {

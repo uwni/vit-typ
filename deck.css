@@ -142,10 +142,12 @@ body {
   overflow: hidden;
   background: var(--vit-page);
 }
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group:hover .vit-slide.is-thumb {
+/* the stand-in is the box in the slot as much as a frame is, so it is bordered
+   on the same terms — see .vit-stand */
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group:hover :is(.vit-slide, .vit-stand).is-thumb {
   border-color: var(--vit-accent);
 }
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group.is-here .vit-slide.is-thumb {
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group.is-here :is(.vit-slide, .vit-stand).is-thumb {
   border-color: var(--vit-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-accent) 28%, transparent);
 }
@@ -302,14 +304,19 @@ body:has(.vit-desk) .vit-pane {
   overflow: hidden;
 }
 /* What stands in for that page back in the rail: two nodes that point at the
-   very same drawing, so the rail looks no different for it having moved. */
+   very same drawing, so the rail looks no different for it having moved. It
+   holds the slot on the same terms as a frame — one box per page — so hovering
+   a dot can put one of the page's other frames there instead. */
 .vit-stand {
-  display: block;
+  display: none;
   width: 100%;
   aspect-ratio: var(--vit-w) / var(--vit-h);
   border: 1px solid var(--vit-line);
   border-radius: 0.5rem;
   background: var(--vit-page);
+}
+.vit-stand.is-thumb {
+  display: block;
 }
 /* the toolbar floats over the notes' bottom-right corner: leave it room */
 body:has(.vit-desk) .vit-notes {

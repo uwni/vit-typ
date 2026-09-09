@@ -72,7 +72,7 @@ mover[accent="true" i] > :not(:first-child) {
   math-depth: inherit;
   math-style: inherit;
   math-shift: inherit;
-}</style></head><body><style id="vit-style">:root{}
+}</style></head><body><style id="vit-style">:root{--vit-page:#111318;--vit-w:1280;--vit-h:720;--vit-duration:700ms;--vit-easing:cubic-bezier(0.32, 0.72, 0, 1);--vit-laser-ink:#ff3c3c;--vit-laser-size:32px;--vit-laser-hot:16;--vit-laser:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='16%25' stop-color='%23ffffff'/%3E%3Cstop offset='34%25' stop-color='%23ff3c3c'/%3E%3Cstop offset='56%25' stop-color='%23ff3c3c' stop-opacity='0.45'/%3E%3Cstop offset='100%25' stop-color='%23ff3c3c' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E");--vit-laser-trail:400ms;}
 /* The states of one drawing are stacked in one place: only the first shows,
    the rest are data, and the runtime swaps which one shows on every step
    (an inline display overrides these two rules). */
@@ -237,10 +237,12 @@ body {
   overflow: hidden;
   background: var(--vit-page);
 }
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group:hover .vit-slide.is-thumb {
+/* the stand-in is the box in the slot as much as a frame is, so it is bordered
+   on the same terms — see .vit-stand */
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group:hover :is(.vit-slide, .vit-stand).is-thumb {
   border-color: var(--vit-accent);
 }
-.vit-deck:is(.vit-all, .vit-desk) > .vit-group.is-here .vit-slide.is-thumb {
+.vit-deck:is(.vit-all, .vit-desk) > .vit-group.is-here :is(.vit-slide, .vit-stand).is-thumb {
   border-color: var(--vit-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-accent) 28%, transparent);
 }
@@ -397,14 +399,19 @@ body:has(.vit-desk) .vit-pane {
   overflow: hidden;
 }
 /* What stands in for that page back in the rail: two nodes that point at the
-   very same drawing, so the rail looks no different for it having moved. */
+   very same drawing, so the rail looks no different for it having moved. It
+   holds the slot on the same terms as a frame — one box per page — so hovering
+   a dot can put one of the page's other frames there instead. */
 .vit-stand {
-  display: block;
+  display: none;
   width: 100%;
   aspect-ratio: var(--vit-w) / var(--vit-h);
   border: 1px solid var(--vit-line);
   border-radius: 0.5rem;
   background: var(--vit-page);
+}
+.vit-stand.is-thumb {
+  display: block;
 }
 /* the toolbar floats over the notes' bottom-right corner: leave it room */
 body:has(.vit-desk) .vit-notes {
@@ -2122,6 +2129,7 @@ window.tween = (() => {
         dot.classList.toggle("is-peek", !!peekHere && q.i === peeked.i && q.at === peeked.at);
       });
     });
+    dressStand();
   };
 
   /* The dots pair off with the page's positions in order: the nth dot is the
@@ -2644,6 +2652,12 @@ window.tween = (() => {
      which carries the matrix that puts it back in the page's own space. */
   let parked = null;   // { slide, home, next, stand } — where it came from
 
+  /* The rail holds one box per page, and while a frame is at the pane the box
+     in its place is the stand-in — so the stand-in wears that frame's thumbnail
+     state. Hovering another of the page's dots shows that other frame in the
+     slot instead, and then it is the stand-in's turn to stay out. */
+  const dressStand = () => parked?.stand.classList.toggle("is-thumb", parked.slide.classList.contains("is-thumb"));
+
   const standFor = slide => {
     const page = slide.querySelector(".vit-page");
     const src = page?.querySelector("svg");
@@ -2686,6 +2700,7 @@ window.tween = (() => {
     parked = { slide, home: slide.parentNode, next: slide.nextSibling, stand };
     slide.replaceWith(stand);
     view.replaceChildren(slide);
+    dressStand();
   };
 
   const syncPane = () => {
@@ -2736,7 +2751,6 @@ window.tween = (() => {
   /* ── settings ────────────────────────────────────────────────────────
      A control in the panel names what it sets in data-set, and appears here
      once: how to read it, how to apply it, and how to say it. */
-  const TRAIL = 400;
   let panel = null;
 
   const DIALS = {
@@ -2789,7 +2803,7 @@ window.tween = (() => {
   const resetSettings = () => {
     for (const k of ["vit-speed", "vit-trail", "vit-ink", "vit-size", "vit-theme"]) store(k, null);
     setSpeed(1);
-    setTrail(TRAIL);
+    setTrail(laserTrail);
     applyLaser();
     applyTheme();
     syncSettings();
@@ -2914,7 +2928,7 @@ window.tween = (() => {
   /* ── what the laser looks like ───────────────────────────────────────
      deck.css owns the drawing; this owns the colour and the size. Its URL and
      its ink are read once, so no colour or size is written here. */
-  let laserUrl = "", laserInk = "", laserSize = 32, laserPx = 32;
+  let laserUrl = "", laserInk = "", laserSize = 32, laserPx = 32, laserTrail = 400;
   const enc = hex => "%23" + hex.replace("#", "").toLowerCase();
 
   const applyLaser = () => {
@@ -2933,13 +2947,14 @@ window.tween = (() => {
     laserUrl = css.getPropertyValue("--vit-laser").trim();
     laserInk = css.getPropertyValue("--vit-laser-ink").trim();
     laserSize = parseFloat(css.getPropertyValue("--vit-laser-size")) || laserSize;
+    laserTrail = parseFloat(css.getPropertyValue("--vit-laser-trail")) || 0;
     applyLaser();
   };
 
   const findTrail = () => {
     segs = [...(document.querySelector(".vit-trail")?.children ?? [])];
     const kept = parseInt(store("vit-trail"), 10);
-    setTrail(Number.isFinite(kept) ? kept : TRAIL);
+    setTrail(Number.isFinite(kept) ? kept : laserTrail);
   };
 
   const setTrail = ms => {

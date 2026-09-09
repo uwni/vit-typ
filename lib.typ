@@ -385,7 +385,7 @@
 /// The layout's constants, handed to deck.css as custom properties: it reads
 /// them and never guesses at a size or a colour the document chose. One entry
 /// here is one `--vit-` property there.
-#let _tokens(..t) = ":root{" + t.named().pairs().map(((k, v)) => "--vit-" + k + ":" + v + ";").join() + "}\n"
+#let _tokens(t) = ":root{" + t.pairs().map(((k, v)) => "--vit-" + k + ":" + v + ";").join() + "}\n"
 
 /// The pointer's own drawing, as a data URL. The viewBox stays 32 units
 /// whatever the size, so the runtime can resize the dot by rewriting the width
@@ -393,24 +393,11 @@
 /// recolours by substituting that one value, and a second colour in the
 /// gradient would be left behind.
 #let _laser-url(ink, size) = {
-  let c = "%23" + ink.to-hex().slice(1, 7)
-  let n = str(calc.round(size.pt()))
-  let stop(at, col, extra) = "%3Cstop offset='" + at + "%25' stop-color='" + col + "'" + extra + "/%3E"
-  (
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'"
-      + " viewBox='0 0 32 32' width='"
-      + n
-      + "' height='"
-      + n
-      + "'%3E%3Cdefs%3E%3CradialGradient id='g'%3E"
-      + stop("0", "%23ffffff", "")
-      + stop("16", "%23ffffff", "")
-      + stop("34", c, "")
-      + stop("56", c, " stop-opacity='0.45'")
-      + stop("100", c, " stop-opacity='0'")
-      + "%3C/radialGradient%3E%3C/defs%3E"
-      + "%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E\")"
-  )
+  // Written whole, then the two things that vary are put in — which is exactly
+  // what the runtime does to this same string when the presenter picks others.
+  let svg = "%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='SIZE' height='SIZE'%3E%3Cdefs%3E%3CradialGradient id='g'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='16%25' stop-color='%23ffffff'/%3E%3Cstop offset='34%25' stop-color='INK'/%3E%3Cstop offset='56%25' stop-color='INK' stop-opacity='0.45'/%3E%3Cstop offset='100%25' stop-color='INK' stop-opacity='0'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='16' cy='16' r='16' fill='url(%23g)'/%3E%3C/svg%3E"
+  let filled = svg.replace("SIZE", str(calc.round(size.pt()))).replace("INK", "%23" + ink.to-hex().slice(1, 7))
+  "url(\"data:image/svg+xml," + filled + "\")"
 }
 
 /// Which page and which frame we are up to. A page needs to find its own
@@ -528,12 +515,13 @@
   /// within one line.
   /// -> array
   font: ("DejaVu Sans", "Noto Sans CJK SC"),
-  /// What the laser pointer looks like when a deck is opened: `ink`, the colour
-  /// of the dot and of the tracer behind it, and `size`, how wide the dot is.
-  /// The presenter can change both from the settings panel (`,`) and their
-  /// browser remembers what they chose — this is only where a deck starts.
+  /// What the laser pointer is when a deck is opened: `ink`, the colour of the
+  /// dot and of the tracer behind it, `size`, how wide the dot is, and `trail`,
+  /// how long the tracer lasts, in milliseconds (`0` for none). The presenter can change all
+  /// three from the settings panel (`,`) and their browser remembers what they
+  /// chose — this is only where a deck starts.
   /// -> dictionary
-  laser: (ink: rgb("#ff3c3c"), size: 32pt),
+  laser: (ink: rgb("#ff3c3c"), size: 32pt, trail: 400),
   /// The pages.
   /// -> content
   body,
@@ -562,6 +550,7 @@
           "laser-size": str(calc.round(laser.size.pt())) + "px",
           "laser-hot": str(calc.round(laser.size.pt() / 2)),
           "laser": _laser-url(laser.ink, laser.size),
+          "laser-trail": str(laser.trail) + "ms",
         ))
           + _tween.css
           + read("deck.css")
@@ -583,7 +572,7 @@
       _pane()
       let href = if pdf == none { none } else if pdf == auto { auto } else { pdf }
       _bar(pdf: href)
-      _laser()
+      _laser(trail: laser.trail)
       _help(version: version, build: datetime.today().display())
       _settings()
       _speaker(pdf: href)
