@@ -400,6 +400,57 @@
     applyTheme();
   };
 
+  /* ── the desk's two boundaries ────────────────────────────────────────
+     What a grip is dragged through is a length: the width of the rail, or the
+     height the deck leaves the notes. Which grip is `data-grip`, and it is the
+     browser that says so — it hit-tests the grip and hands it the pointer, so
+     the rest of the drag arrives there and nowhere else until it is let go.
+     What is read of the pointer is how far it has come, against the size the
+     element itself reports; how far it may be taken is the stylesheet's, in the
+     clamps around the two properties. They are written on the body, which is
+     the element they describe and the only one that reads them — deck.css
+     registers them as not inheriting, so a drag recalculates that one element
+     rather than the whole document. Without its dashes, a property is the name
+     it is remembered under. */
+  const grips = {
+    rail: { of: ".vit-rail", prop: "--vit-rail", size: "offsetWidth", axis: "clientX" },
+    notes: { of: ".vit-pane", prop: "--vit-split", size: "offsetHeight", axis: "clientY" },
+  };
+  let held = null;
+  const grab = e => {
+    const g = e.target.closest?.(".vit-grip");
+    if (!g) return;
+    const { of, prop, size, axis } = grips[g.dataset.grip];
+    held = { g, prop, axis, base: document.querySelector(of)[size], from: e[axis] };
+    g.setPointerCapture(e.pointerId);
+    g.classList.add("is-held");
+  };
+  const pull = e => held && document.body.style.setProperty(held.prop, `${held.base + e[held.axis] - held.from}px`);
+  const drop = () => {
+    if (!held) return;
+    store(held.prop.slice(2), document.body.style.getPropertyValue(held.prop));
+    held.g.classList.remove("is-held");
+    held = null;
+  };
+  /* double-click: back to the size the stylesheet draws */
+  const reset = e => {
+    const g = e.target.closest?.(".vit-grip");
+    if (!g) return;
+    document.body.style.removeProperty(grips[g.dataset.grip].prop);
+    store(grips[g.dataset.grip].prop.slice(2), null);
+  };
+  const initSplit = () => {
+    for (const { prop } of Object.values(grips)) {
+      const kept = store(prop.slice(2));
+      if (kept) document.body.style.setProperty(prop, kept);
+    }
+    document.addEventListener("pointerdown", grab);
+    document.addEventListener("pointermove", pull);
+    document.addEventListener("pointerup", drop);
+    document.addEventListener("pointercancel", drop);
+    document.addEventListener("dblclick", reset);
+  };
+
   /* ── speaker view ────────────────────────────────────────────────────
      A separate window for another screen. "Current" and "next" are two iframes
      loading this very HTML, positioned by #hash, so there is no second renderer
@@ -590,6 +641,7 @@
     findLaserLook();
     findTrail();
     initTheme();
+    initSplit();
     initSpeaker();
     document.addEventListener("keydown", guard, true);
     document.addEventListener("keydown", onKey);

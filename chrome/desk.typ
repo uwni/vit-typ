@@ -46,3 +46,21 @@
 /// The current page's speaker notes, under the deck at the desk. Left empty —
 /// the runtime writes into it, from the page the deck is on.
 #let notes() = html.div(class: "vit-notes", "")
+
+/// The boundary between two parts of the desk, and the handle for moving it.
+/// `kind` says what moves: `"rail"` the width of the pages down the left,
+/// `"notes"` the height the deck leaves the notes underneath it.
+///
+/// It is the gap: the desk's grid gives it a track of its own where it used to
+/// leave empty space, so the boundary is an element the pointer can arrive on
+/// rather than a place between two. Empty — the three dots are the stylesheet's.
+#let grip(kind) = html.elem(
+  "div",
+  attrs: (
+    class: "vit-grip",
+    "data-grip": kind,
+    role: "separator",
+    "aria-orientation": if kind == "rail" { "vertical" } else { "horizontal" },
+  ),
+  "",
+)

@@ -801,6 +801,61 @@ try {
       r ? JSON.stringify(r) : "the browser would not open the window");
   }
 
+  /* The desk's two boundaries are the presenter's to move: the width of the
+     rail, and the height the deck leaves the notes. A drag sets a length, the
+     stylesheet says how far it may be taken, and the deck follows because it is
+     measured against the cell it sits in and nothing else. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'desk'; await window.__settle(500);
+      const box = s => { const b = document.querySelector(s).getBoundingClientRect();
+                         return [Math.round(b.width), Math.round(b.height)]; };
+      const drag = (which, dx, dy) => {
+        const g = document.querySelector('.vit-grip[data-grip=' + which + ']');
+        const b = g.getBoundingClientRect(), x = (b.left + b.right) / 2, y = (b.top + b.bottom) / 2;
+        const at = (t, ex, ey) => new PointerEvent(t, { bubbles: true, pointerId: 1, clientX: ex, clientY: ey });
+        g.dispatchEvent(at('pointerdown', x, y));
+        document.dispatchEvent(at('pointermove', x + dx, y + dy));
+        document.dispatchEvent(at('pointerup', x + dx, y + dy));
+      };
+      const drawn = { rail: box('.vit-rail')[0], pane: box('.vit-pane')[1],
+                      notes: box('.vit-notes')[1], deck: box('.vit-deck')[0] };
+      drag('rail', 90, 0); await window.__settle(150);
+      const wider = box('.vit-rail')[0];
+      drag('notes', 0, -120); await window.__settle(200);
+      const shorter = { pane: box('.vit-pane')[1], notes: box('.vit-notes')[1], deck: box('.vit-deck')[0] };
+      const kept = [localStorage.getItem('vit-rail'), localStorage.getItem('vit-split')];
+      /* taken past the end of the range, and the stylesheet holds it there */
+      drag('rail', 4000, 0); await window.__settle(150);
+      const capped = box('.vit-rail')[0];
+      /* double-click is the way back to the size the stylesheet draws */
+      for (const which of ['rail', 'notes']) {
+        document.querySelector('.vit-grip[data-grip=' + which + ']')
+          .dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      }
+      await window.__settle(200);
+      const back = { rail: box('.vit-rail')[0], pane: box('.vit-pane')[1], deck: box('.vit-deck')[0] };
+      const gone = [localStorage.getItem('vit-rail'), localStorage.getItem('vit-split')];
+      /* and nowhere else is there a boundary to move */
+      const elsewhere = {};
+      for (const m of ['present', 'overview']) {
+        window.vit.mode = m; await window.__settle(400);
+        elsewhere[m] = getComputedStyle(document.querySelector('.vit-grip')).display;
+      }
+      window.vit.mode = 'desk'; await window.__settle(400);
+      return { drawn, wider, shorter, capped, back, kept, gone, elsewhere };`);
+    check("the desk's boundaries move, and only where there are two sides to move",
+      r.wider === r.drawn.rail + 90
+      && r.shorter.pane === r.drawn.pane - 120 && r.shorter.notes === r.drawn.notes + 120
+      && r.shorter.deck < r.drawn.deck
+      && r.capped === Math.round(0.4 * 1280)
+      && r.kept.every(v => /^-?\d+px$/.test(v ?? ""))
+      && r.back.rail === r.drawn.rail && r.back.pane === r.drawn.pane && r.back.deck === r.drawn.deck
+      && r.gone.every(v => v === null)
+      && Object.values(r.elsewhere).every(d => d === "none"),
+      JSON.stringify(r));
+  }
+
   /* Everything the player can be asked to do, once — the captures are counted
      across all of it. */
   {

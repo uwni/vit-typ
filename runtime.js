@@ -495,6 +495,13 @@
   const transition = (types, update, setup, done) => {
     if (pendingUndo) pendingUndo();
     if (!types) { update(false); done?.(); return; }
+    /* The zoom's lens is a quarter of the page, and only the browser knows how
+       wide the page came out. Written here because a transition's own
+       pseudo-elements are the only readers of it, so this is the moment it has
+       to be right — and because a custom property on the root is one the whole
+       document is recalculated for, a price anything that resizes the deck
+       continuously would otherwise pay on every frame. */
+    root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
     const undo = [];
     setup?.(undo);
     const flush = () => {
@@ -798,14 +805,10 @@
     moveDone(h0.i);
     deck.addEventListener("vit:move-ready", sweep);
     sweep();
-    /* The deck's box changes without a window resize: desk ⇄ presenting. An
-       effect that is a proportion follows the page by itself; one that is a
-       length — the zoom's lens is a quarter of the page — needs to be told how
-       wide the page came out, which only the browser knows. */
-    new ResizeObserver(() => {
-      waapi.refit();
-      root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
-    }).observe(deck);
+    /* The deck's box changes without a window resize: desk ⇄ presenting, and
+       the presenter moving the desk's boundaries. What follows a path is a
+       string of pixels, so it is measured again against the box it is in. */
+    new ResizeObserver(() => waapi.refit()).observe(deck);
     /* The deck, for anything that shows it or drives it — the player's own
        chrome included, which is written against this and nothing else. */
     window.vit = {

@@ -132,7 +132,8 @@ body {
    The verdict lands on <html data-mode>, written by the runtime and read
    nowhere else. */
 body > .vit-rail,
-body > .vit-notes {
+body > .vit-notes,
+body > .vit-grip {
   display: none;
 }
 
@@ -145,21 +146,53 @@ body > .vit-notes {
 /* ── the desk ─────────────────────────────────────────────────────────
    Where the deck opens, and what Esc comes back to: the pages down the left,
    the one they point at beside them, its notes underneath. */
+/* Three tracks each way, not two: the gap between two parts is a track of its
+   own, and the boundary that used to be empty space is `.vit-grip`, an element
+   the pointer can arrive on. Nothing moves — the track is as wide as the gap
+   was.
+
+   The two sizes the presenter can move are the only variables here, and the
+   clamps around them are the range they may be moved through. Their defaults
+   are the layout as it was drawn: `2fr` of what the gap leaves, exactly.
+
+   They are registered, and registered as not inheriting, because they describe
+   the grid of the one element laid out against them and nothing else. A custom
+   property that inherits is one every element in the document is recalculated
+   for when it changes, and the pages are in this document many times over —
+   once each on stage, and again inside every thumbnail's `<use>`. Dragging
+   writes one of these on every frame, so it is the difference between a drag
+   that keeps up and one that does not. */
+@property --vit-rail {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --vit-split {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+html {
+  --vit-gap: 14px;
+}
 :root[data-mode="desk"] body {
+  --vit-rail: clamp(7rem, 17vw, 14rem);
+  --vit-split: calc((100% - var(--vit-gap)) * 2 / 3);
   display: grid;
-  grid-template-columns: clamp(7rem, 17vw, 14rem) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: clamp(7rem, var(--vit-rail), 40vw) var(--vit-gap) minmax(0, 1fr);
+  grid-template-rows: minmax(0, clamp(6rem, var(--vit-split), calc(100% - 8rem))) var(--vit-gap) minmax(0, 1fr);
   place-items: stretch;
-  gap: 14px;
-  padding: 14px;
+  gap: 0;
+  padding: var(--vit-gap);
   height: 100svh;
 }
 :root[data-mode="desk"] .vit-rail {
   display: flex;
-  grid-row: 1 / 3;
+  grid-area: 1 / 1 / -1 / 2;
 }
 :root[data-mode="desk"] .vit-pane {
   display: block;
+  grid-area: 1 / 3 / 2 / 4;
   container-type: size;
   min-height: 0;
 }
@@ -171,8 +204,57 @@ body > .vit-notes {
 }
 :root[data-mode="desk"] .vit-notes {
   display: block;
+  grid-area: 3 / 3 / 4 / 4;
   /* the toolbar floats over the bottom-right corner: leave it room */
   padding-bottom: 44px;
+}
+
+/* ── the boundaries ───────────────────────────────────────────────────
+   Two of them, one per size the presenter can move. Which one is being dragged
+   is `data-grip`, and the browser decides which by hit-testing it like anything
+   else; the pointer's travel while it is held is the length being set.
+
+   The three dots are one tile of the picture repeated: the strip is three tiles
+   long, so it is three dots, and the same rule laid across is the other one. */
+.vit-grip {
+  display: none;
+  position: relative;
+  color: var(--vit-muted);
+  touch-action: none;
+  user-select: none;
+}
+:root[data-mode="desk"] .vit-grip {
+  display: block;
+}
+.vit-grip:hover,
+.vit-grip.is-held {
+  color: var(--vit-fg);
+}
+.vit-grip[data-grip="rail"] {
+  grid-area: 1 / 2 / -1 / 3;
+  cursor: col-resize;
+}
+.vit-grip[data-grip="notes"] {
+  grid-area: 2 / 3 / 3 / 4;
+  cursor: row-resize;
+}
+.vit-grip::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  background-image: radial-gradient(circle, currentColor 1.4px, transparent 1.6px);
+}
+.vit-grip[data-grip="rail"]::before {
+  width: 4px;
+  height: 18px;
+  background-size: 4px 6px;
+}
+.vit-grip[data-grip="notes"]::before {
+  width: 18px;
+  height: 4px;
+  background-size: 6px 4px;
 }
 
 /* the overview: every page at once, in a grid down the window */
@@ -297,11 +379,17 @@ body > .vit-notes {
 /* narrow: the rail keeps the numbers only, and the deck takes the width it is
    given — the notes get the rest of the height, which is what is short here */
 @media (max-width: 720px) {
+  html {
+    --vit-gap: 8px;
+  }
   :root[data-mode="desk"] body {
-    grid-template-columns: 5.5rem minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 8px;
-    padding: 8px;
+    grid-template-columns: 5.5rem var(--vit-gap) minmax(0, 1fr);
+    grid-template-rows: auto var(--vit-gap) minmax(0, 1fr);
+  }
+  /* nothing to move: the rail is down to its numbers and the deck takes what
+     it is given */
+  :root[data-mode="desk"] .vit-grip {
+    display: none;
   }
   :root[data-mode="desk"] .vit-cap span {
     display: none;

@@ -72,7 +72,7 @@
 
 // The player's own markup — everything the reader sees that is not the deck.
 #import "chrome/bar.typ": bar as _bar, reach as _reach
-#import "chrome/desk.typ": notes as _notes, pane as _pane, rail as _rail
+#import "chrome/desk.typ": grip as _grip, notes as _notes, pane as _pane, rail as _rail
 #import "chrome/help.typ": help as _help
 #import "chrome/laser.typ": laser as _laser
 #import "chrome/settings.typ": settings as _settings
@@ -841,6 +841,8 @@
       // to emit: a thumbnail is one page's caption and dots, and only here is
       // every page's known at once.
       _rail(query(<vit-page>).map(m => m.value))
+      _grip("rail")
+      _grip("notes")
       _notes()
       let href = if pdf == none { none } else if pdf == auto { auto } else { pdf }
       _bar(pdf: href)
