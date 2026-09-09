@@ -882,10 +882,11 @@
   };
 
   /* ── toolbar ─────────────────────────────────────────────────────────
-     Outside .vit-screen, so a page transition neither captures it nor drags it
-     along — while one runs it is simply not on screen. There are two: the main
-     window's, which auto-hides, and the speaker view's, which does not. Each
-     button names what it does in data-act, and syncTools() refreshes them
+     A name of its own keeps a page transition from carrying it along: it is
+     captured as its own group and that group is told not to animate, so it
+     stays put and in sight while the page moves under it. There are two: the
+     main window's, which auto-hides, and the speaker view's, which does not.
+     Each button names what it does in data-act, and syncTools() refreshes them
      together. */
 
   /* A download link with no address wants the .pdf beside this page: this
