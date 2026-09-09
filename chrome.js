@@ -436,8 +436,9 @@
   const reset = e => {
     const g = e.target.closest?.(".vit-grip");
     if (!g) return;
-    document.body.style.removeProperty(grips[g.dataset.grip].prop);
-    store(grips[g.dataset.grip].prop.slice(2), null);
+    const { prop } = grips[g.dataset.grip];
+    document.body.style.removeProperty(prop);
+    store(prop.slice(2), null);
   };
   const initSplit = () => {
     for (const { prop } of Object.values(grips)) {

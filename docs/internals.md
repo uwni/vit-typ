@@ -118,7 +118,10 @@ or the whole overview grid.
 An effect that is a proportion follows the page by itself — a push is `100%` of
 the image's own box. One that is a length does not: the zoom's lens is a quarter
 of the page, and `--vit-box` is how wide the page came out, which only the
-browser knows and the runtime publishes when the deck is resized.
+browser knows. A transition's own pseudo-elements are its only readers, so the
+runtime draws it with everything else in `render()` rather than chasing the
+box: writing a custom property on the root costs a style recalculation of the
+whole document, and the desk's boundaries can be dragged.
 
 The page is not named while presenting because there it would buy nothing and
 cost the capture: measured on the tutorial, capturing the deck as a group of
@@ -196,6 +199,44 @@ the window. Where nothing can hover (`any-hover: none`) there is no way to reach
 for it, so there it stays out.
 
 While the deck is moving, none of it is believed. See below.
+
+**The desk's boundaries.** Two of the desk's sizes are the presenter's: the
+width of the rail, and the height the deck leaves the notes. The gap between
+two parts is a track of its own, so the boundary is `.vit-grip`, an element the
+pointer can arrive on rather than a place between two, marked with three dots
+and dragged. Which grip is being dragged is the browser's answer, not a
+calculation: it hit-tests the grip and hands it the pointer, and the rest of the
+drag arrives there. What is read of the pointer is how far it has come, against
+the size the element itself reports; how far it may be taken is the stylesheet's
+own, in the clamps around the two properties. A double-click is the way back to
+the size the stylesheet draws, and what has been dragged is remembered the way
+the theme and the speed are.
+
+The grips are `role="separator"` and not focusable, which in ARIA is a divider
+rather than a widget: what they say is true, but they say nothing about being
+movable. Making them movable from the keyboard means a focusable separator with
+`aria-valuenow`, and arrow keys that the deck must then not hear.
+
+**Why the two sizes are registered properties.** `--vit-rail` and `--vit-split`
+are declared `inherits: false` and written on the body, which is the element
+laid out against them and their only reader. This is not tidiness. A custom
+property that inherits, changed on `<html>`, invalidates the style of every
+element in the document, and a Typst deck is enormous — the tutorial is 64,786
+elements, mostly the `<use>` a page's glyphs are drawn with. Measured across a
+60-step drag of the rail:
+
+| | wall | style recalc | layout |
+| --- | --- | --- | --- |
+| inherited, written on `<html>` | 1714 ms | 1014 ms | 205 ms |
+| registered `inherits: false`, written on the body | 700 ms | 33 ms | 204 ms |
+
+Chrome has no cheap path for a property nothing references, either: writing an
+invented `--nobody-reads-this` on the root 60 times costs 1739 ms of style
+recalculation on the same document. That is why `--vit-box` moved out of the
+deck's `ResizeObserver` — it has to be on the root, where the transition
+pseudo-elements can inherit it, so instead it is written once per render rather
+than once per frame of a drag. The observer keeps what is genuinely per-resize:
+measuring the paths again.
 
 **What a transition does to the pointer.** While one runs, the document is not
 hit-tested *at all* — measured: `elementFromPoint` answers `<html>` everywhere,

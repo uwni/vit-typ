@@ -154,6 +154,13 @@
       runAnims(k);
     });
     syncRail(scroll);
+    /* The zoom's lens is a quarter of the page, and only the browser knows how
+       wide the page came out. A transition's own pseudo-elements are its only
+       readers, so it is drawn from the state here like everything else rather
+       than chased whenever the box changes — a custom property on the root is
+       one the whole document is recalculated for, and the desk's boundaries
+       are the presenter's to drag. */
+    root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
     /* said out for whatever is drawn from the state and is not the deck's:
        the toolbar's counter, the notes beside the page, a speaker view */
     deck.dispatchEvent(new CustomEvent("vit:render", { detail: { index: cur, step: at(cur), mode } }));
@@ -495,13 +502,6 @@
   const transition = (types, update, setup, done) => {
     if (pendingUndo) pendingUndo();
     if (!types) { update(false); done?.(); return; }
-    /* The zoom's lens is a quarter of the page, and only the browser knows how
-       wide the page came out. Written here because a transition's own
-       pseudo-elements are the only readers of it, so this is the moment it has
-       to be right — and because a custom property on the root is one the whole
-       document is recalculated for, a price anything that resizes the deck
-       continuously would otherwise pay on every frame. */
-    root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
     const undo = [];
     setup?.(undo);
     const flush = () => {

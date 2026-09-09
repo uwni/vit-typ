@@ -412,6 +412,11 @@ at a `#page.position` hash, so transitions and animation steps play there as
 they do on stage; keys and clicks in that window drive the main one, every key
 but those two. It works over `file://` and closes with the main window.
 
+At the desk, the boundary between the rail and the page, and the one between
+the page and its notes, are marked with three dots and can be dragged: the rail
+takes the width you give it, the notes the height. Double-click a boundary to
+put it back. Both are remembered by your browser, like the theme and the speed.
+
 The toolbar in the bottom-right corner is furniture at the desk and in the
 overview, and chrome while a page is being shown: there it is out only while you
 reach for it — the pointer in that corner, or the keyboard in the toolbar — and
