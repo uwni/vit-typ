@@ -2824,17 +2824,11 @@ window.tween = (() => {
   };
 
   /* ── when the toolbar is out ──────────────────────────────────────────
-     The rule is in deck.css, where the mode, the keyboard and a device with no
-     pointer are all things CSS knows by itself. One thing it does not: a hidden
-     toolbar must not be hit-testable — the corner it sits in belongs to the
-     page, and being hoverable and being pressable are the same switch — so what
-     the pointer arrives on is `.vit-reach`, the patch of page beneath it.
-
-     Hence this: the browser says where the pointer arrives, and that is written
-     down as a class. While the deck is moving it says nothing true — what was
-     captured is not hit-tested, so a transition starting reads as the pointer
-     leaving although it has not moved — and the last answer stands until the
-     browser can see again and corrects it. */
+     CSS owns the rule (deck.css); what it cannot see is the pointer, since a
+     hidden toolbar is not hit-testable and what the pointer arrives on is
+     `.vit-reach`, the patch of page beneath it. So one class carries the
+     browser's answer — and while the deck moves nothing is hit-tested and it
+     has none to give, so the last one stands. */
   let bar = null;
 
   const reached = e => {
@@ -3099,9 +3093,8 @@ window.tween = (() => {
 
     syncSpeaker();
     syncTools();
-    /* The presenter is looking at this window now; the other one is the
-       audience's screen and wants nothing on it. The pointer is still on its
-       toolbar as far as that window knows, so it is told otherwise. */
+    /* The audience's screen wants nothing on it, and still believes the
+       pointer is on its toolbar. */
     bar?.classList.remove("is-reached");
   };
 
