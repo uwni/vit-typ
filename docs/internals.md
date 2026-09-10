@@ -178,8 +178,17 @@ transitions, the state and the one function that changes it, the rail, and
 laser pointer and its tracer, the settings panel, the key help, the black
 screen, the speaker view. The dependency is one-way. The chrome reads
 `window.vit` and listens to `vit:ready`, `vit:drawn`, `vit:move-begin`,
-`vit:move-here` and `vit:move-done`; the deck names nothing in the chrome and
-does not know whether it is there. What the presenter chooses — the pace, the theme, what the laser
+`vit:move-here` and `vit:move-done`; the deck calls nothing in the chrome and
+does not care whether it is there.
+
+It is not quite silent about it, and the exception is worth naming rather than
+denying: the deck reads its own `window.name` and behaves differently when it
+is `vit-mirror` — a preview inside the speaker view. The platform leaves no
+other way round. Over `file://` the window that made a preview is another
+origin and cannot reach into it, so a preview that must present, drop the rail,
+skip the idle sweep and (if it runs ahead) not play a page change out has to
+learn all four from something it can see by itself. That is one fact about the
+window it is in, read once at start; everything else still flows the one way. What the presenter chooses — the pace, the theme, what the laser
 looks like — is the chrome's, kept in their browser; the document says where
 each starts and the deck itself only has a speed. Two places where the two
 genuinely meet are said out loud rather than reached across: `vit.hold(on)`,
@@ -202,6 +211,11 @@ one. A thing drawn only in an event handler is a thing that is right only until
 something else changes — the toolbar drawn only on pointer moves went out for
 the whole of every transition, and the laser's dot drawn only on pointer moves
 was left on screen after the deck had changed mode under it.
+
+`chrome/` in the source is the player's *markup*, not the chrome subsystem:
+`desk.typ` emits the rail and the notes, which the deck drives, beside the
+grips, which the chrome drives. The directory says where the Typst for the
+player lives; who drives a thing is said here and in the file that drives it.
 
 **The chrome is per window.** The main window has a set of it and the speaker
 view another: a toolbar, the key table, the settings panel. What they set is

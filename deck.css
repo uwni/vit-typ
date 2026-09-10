@@ -198,7 +198,10 @@ html {
    captures, and with root left out — so that the rail stays real — that frame
    is a hole where the page was. What fills it has to be the page, not a
    colour: a <use> of the deck's own drawing, which is what a thumbnail is and
-   costs no second rendering of anything. */
+   costs no second rendering of anything.
+
+   This is a workaround for that one frame, not a rule about where a page's
+   ground belongs; TODO.md says what would let it go. */
 .vit-plate {
   display: none;
 }

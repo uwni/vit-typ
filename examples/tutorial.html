@@ -2965,7 +2965,10 @@ window.tween = (() => {
   /* ── what the laser looks like ───────────────────────────────────────
      deck.css owns the drawing; this owns the colour and the size. Its URL and
      its ink are read once, so no colour or size is written here. */
-  let laserUrl = "", laserInk = "", laserSize = 32, laserPx = 32, laserTrail = 400;
+  /* All four are the document's: deck(laser:) writes them into the stylesheet
+     and findLaserLook() reads them back. Nothing here is a default — a second
+     copy of one would be a second thing to change. */
+  let laserUrl = "", laserInk = "", laserSize = 0, laserPx = 0, laserTrail = 0;
   const enc = hex => "%23" + hex.replace("#", "").toLowerCase();
 
   const applyLaser = () => {

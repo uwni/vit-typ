@@ -65,3 +65,24 @@ What is **not** waiting on the PR, and should not be deleted with it:
   true of any box, whoever makes it.
 - Re-fitting when a frame goes on stage, for the same reason: a thumbnail and a
   presented frame are different sizes.
+
+## Waiting on the engine — the frame a capture leaves empty
+
+A view transition captures the old state, runs the update half, then captures
+the new one. Between the two there is a frame in which a captured element is
+out of the live rendering and its snapshot is not up yet. While root is
+captured too that frame is never painted and the screen holds the last one;
+`boxed` leaves root out, so that the rail beside the page stays clickable, and
+then the rest of the page goes on painting and the deck's box is a hole in it.
+
+`.vit-plate` fills the hole with the page itself — a `<use>` of the very
+drawing the deck holds, at the deck's size, under it (`chrome/desk.typ`,
+`deck.css`, and `point(plate, cur)` in `render()`). It costs no second
+rendering of anything and measures free, but it exists for one frame of one
+engine's behaviour and nothing else.
+
+**It can go the day a browser stops painting that frame** — that is, the day
+the box is never empty between the two captures. To check when undoing it:
+turn pages at the desk with `.vit-plate` removed and watch the page's box for
+a flash of the desk behind it (`240` of 255 against the page's `42`, measured
+on the tutorial).
