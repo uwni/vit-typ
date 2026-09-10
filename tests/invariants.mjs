@@ -871,18 +871,50 @@ try {
       r ? JSON.stringify(r) : "the browser would not open the window");
   }
 
+  /* The clock times the talk, not the window. It cannot be asked here — this
+     deck has been on stage since the model was read — so it is asked in a
+     window that has never presented. */
+  {
+    const w = await open({ width: 1000, height: 700, port: 9354, args: ["--disable-popup-blocking"] });
+    let r = null;
+    try {
+      await w.goto("file://" + file, ".vit-deck[data-ready]");
+      const clock = () => w.evaluate(`const s = window.open('', 'vit-speaker');
+        return s && !s.closed ? s.document.querySelector('time').textContent : null;`);
+      const hold = ms => w.evaluate(`await new Promise(r => setTimeout(r, ${ms})); return 1;`);
+      await w.evaluate(`localStorage.clear();
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', cancelable: true }));
+        await new Promise(r => setTimeout(r, 2000)); return 1;`);
+      r = { mode: await w.evaluate("return window.vit.mode;") };
+      await hold(1400);
+      r.waiting = await clock();
+      await w.evaluate("window.vit.mode = 'present'; await new Promise(r => setTimeout(r, 200)); return 1;");
+      await hold(1400);
+      r.onStage = await clock();
+      /* and it does not stop for a look at the desk: the slot is still burning */
+      await w.evaluate("window.vit.mode = 'desk'; await new Promise(r => setTimeout(r, 200)); return 1;");
+      await hold(1400);
+      r.andAtTheDesk = await clock();
+    } finally { w.close(); }
+    check("the clock times the talk, not the window it is shown in",
+      !r?.waiting ? "n/a" : r.mode === "desk" && r.waiting === "00:00"
+        && r.onStage !== "00:00" && r.andAtTheDesk > r.onStage,
+      r ? JSON.stringify(r) : "the browser would not open the window");
+  }
+
   /* A preview inside the speaker view is this same document in a window that
      says so in its name. Over file:// it is another origin, so it cannot be
      reached into from here — it is asked in a window of its own instead,
      named the way the template names it.
 
-     The speaker's screen is a console, not a monitor: all of it runs ahead of
-     the audience, so a preview lands on the new page at once instead of
-     playing the change out. What a page's own drawings do still happens
-     there, which is the half the presenter is there to see coming. */
+     The two are not the same kind of thing. The mirror shows what the
+     audience is looking at, so it plays the page change out and its drawings
+     start on the same gate as theirs. The one that runs ahead shows what has
+     not happened yet, so there is nothing to be in step with and it lands at
+     once, legible while it is being read. */
   {
-    const ask = async name => {
-      const w = await open({ width: 900, height: 560, port: 9353 });
+    const ask = async (name, port) => {
+      const w = await open({ width: 900, height: 560, port });
       try {
         await w.goto("about:blank");
         await w.evaluate(`window.name = ${JSON.stringify(name)}; return 1;`);
@@ -913,14 +945,18 @@ try {
         `);
       } finally { w.close(); }
     };
-    const m = await ask("vit-mirror");
+    const m = await ask("vit-mirror", 9353);
+    const a = await ask("vit-mirror-ahead", 9355);
     check("a preview presents, with neither the rail nor the toolbar",
-      m.mode === "present" && !m.rail && !m.bar, JSON.stringify(m));
-    check("and it lands on the page rather than playing the change out",
-      m.started === 0 && m.to === m.from + 1, JSON.stringify(m));
-    check("but a page that draws itself still draws there",
-      m.plays === null ? "n/a" : m.plays === true,
-      m.plays === null ? "no frame in this deck plays itself" : JSON.stringify({ plays: m.plays }));
+      [m, a].every(x => x.mode === "present" && !x.rail && !x.bar), JSON.stringify({ m, a }));
+    check("the one that mirrors the audience plays the page change out",
+      m.started >= 1 && m.to === m.from + 1, JSON.stringify(m));
+    check("and the one that runs ahead of them lands at once",
+      a.started === 0 && a.to === a.from + 1, JSON.stringify(a));
+    check("a page that draws itself draws in either",
+      m.plays === null ? "n/a" : m.plays === true && a.plays === true,
+      m.plays === null ? "no frame in this deck plays itself"
+        : JSON.stringify({ mirror: m.plays, ahead: a.plays }));
   }
 
   /* The desk's two boundaries are the presenter's to move: the width of the

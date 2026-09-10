@@ -405,16 +405,21 @@ you are on, the finished page elsewhere — and zooms a page into place when you
 open it. The **laser pointer** is a system cursor with a mouse and a DOM dot on
 touch or pen; while it is on, taps and swipes do not turn pages. The **speaker
 view** (`s`) opens a window you can drag to another screen: progress bar,
-current and next page, notes, a timer, and its own chrome — a toolbar, the key
+current and next page, notes, a clock, and its own chrome — a toolbar, the key
 table and the settings panel, so what you open from it is on your screen rather
 than in front of the audience. Its previews are iframes loading this same HTML
 at a `#page.position` hash, so nothing there is a second rendering of anything.
-That screen is your console, not a monitor of the audience's: all of it runs
-ahead of them, so a preview lands on the new page at once instead of playing
-the page change out — what you read is legible from the first frame. Animation
-steps still play there, since what a step does is what you are looking to see
-coming. Keys and clicks in that window drive the main one, every key but those
-two. It works over `file://` and closes with the main window.
+The current page is a true mirror: the page change plays out there as it does
+in front of the audience, and a page's own drawings start at the same moment in
+both windows. The next page is not a mirror — what it shows has not happened
+yet — so it lands at once and stays readable while you are reading it. Keys and
+clicks in that window drive the main one, every key but those two. It works
+over `file://` and closes with the main window.
+
+The clock times the talk, not the window: it sits at `00:00` until the deck
+first goes on stage, however long before that you opened it. After that nothing
+stops it — a look at the desk, a black screen, a question taken off the slides,
+your slot is burning through all of them. Click it to time from now.
 
 At the desk, the boundary between the rail and the page, and the one between
 the page and its notes, are marked with three dots and can be dragged: the rail

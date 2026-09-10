@@ -216,16 +216,29 @@ remote — every key but the chrome's own, which act on the window they were
 pressed in.
 
 Its two previews are this same document in windows that say so in their name
-(`vit-mirror`), which is how each of them knows to present, to drop the rail
-and the toolbar, and not to play a page change out. That last one is the
-speaker view saying what it is: a console, not a monitor of the audience's
-screen. All of it already runs ahead of them — the counter, the progress bar
-and both previews are redrawn on `vit:move-ready`, which the deck announces at
-the *start* of a move, some 37 ms into a 730 ms turn — so a preview that played
-the change out would be the one thing on that screen still telling yesterday's
-news, and it would be unreadable while it did. Landing at once also spares two
-full-document captures a page turn, measured at 24–38 ms each; that is a
-saving, not the reason.
+— `vit-mirror` and `vit-mirror-ahead` — which is how each knows to present and
+to drop the rail and the toolbar, and how one of them knows it is not a mirror.
+
+The one showing the current page is: it plays the page change out, because it
+is the only picture of the audience's screen the presenter has. Being a copy of
+this same document rather than a second renderer is what keeps it honest for
+free — a page's own drawings are held by the same `!busy` gate until the same
+transition ends, so they start together. Measured on the tutorial, a frame that
+draws itself starts 850 ms after the turn in the main window and 846 ms in the
+mirror; with the transition taken out of the mirror it starts at 156 ms, a lead
+of about one whole transition.
+
+The one showing what comes next is not a mirror and has nothing to be in step
+with: what it shows has not happened yet. Playing the change out there would
+only blur it during the seconds it is being read, which is all it is for, so it
+lands at once. That also spares one full-document capture a page turn, measured
+at 24–38 ms — a saving, not the reason.
+
+The counter and the progress bar do run ahead of the audience: they are redrawn
+on `vit:move-ready`, which the deck announces at the *start* of a move, some
+37 ms into a 730 ms turn. That is deliberate and it is not the same thing. A
+number that is early is read as a number; a picture that is early is read as
+the screen.
 
 **When the toolbar is out.** At the desk and in the overview it is furniture and
 stays. Over a page being shown it is chrome, and chrome does not sit on a slide:

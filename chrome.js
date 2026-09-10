@@ -389,7 +389,10 @@
   /* Chrome theme: deck(theme:) fixes it, auto follows the system. Only the
      verdict lands on <html data-theme>; every colour is a token in deck.css,
      and the speaker window copies the same tokens. */
-  let speaker = null, spk = null, spkFrom = 0;
+  let speaker = null, spk = null;
+
+  let began = 0;
+  const onStage = () => { if (!began && vit.mode === "present") began = Date.now(); };
   const applyTheme = () => {
     const t = store("vit-theme") ?? deck.dataset.theme;
     root.dataset.theme = t === "auto" ? (prefersLight.matches ? "light" : "dark") : t;
@@ -460,7 +463,7 @@
      touched, only their src changes. Sync is the vit:move-ready events. */
 
   const tick = () => {
-    const s = Math.round((Date.now() - spkFrom) / 1000);
+    const s = began ? Math.round((Date.now() - began) / 1000) : 0;
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
     spk.clock.textContent = `${h ? `${h}:` : ""}${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}`;
   };
@@ -490,9 +493,7 @@
       now: d.querySelector("main iframe"), next: d.querySelector("aside iframe"),
       nextCap: d.querySelector("aside small"), prog: d.querySelector(".prog i"),
     };
-    /* timer: counts from opening, click to reset */
-    spkFrom = Date.now();
-    spk.clock.addEventListener("click", () => { spkFrom = Date.now(); tick(); });
+    spk.clock.addEventListener("click", () => { began = Date.now(); tick(); });
     const timer = setInterval(() => {
       if (speaker.closed) { clearInterval(timer); return; }
       tick();
@@ -623,13 +624,14 @@
   };
 
   /* ── start ────────────────────────────────────────────────────────────
-     The deck says when it is live. A preview inside the speaker view is
-     driven by the window that opened it, so it takes none of this. */
+     The deck says when it is live. A preview inside the speaker view — either
+     of them — is driven by the window that opened it, so it takes none of
+     this. */
 
   const start = () => {
     vit = window.vit;
     deck = vit.deck;
-    if (window.name === "vit-mirror") {
+    if (window.name.startsWith("vit-mirror")) {
       for (const el of document.querySelectorAll(".vit-bar, body > .vit-notes, .vit-help, .vit-settings, .vit-laser, .vit-trail, template.vit-speaker-body")) el.remove();
       return;
     }
@@ -652,10 +654,12 @@
     document.addEventListener("pointercancel", () => laser.classList.remove("is-on"));
     /* the deck draws itself and says so; everything here is drawn from that */
     deck.addEventListener("vit:render", () => {
+      onStage();
       syncTools();
       syncNotes();
       drawLaser();
     });
+    onStage();   // a deck already on stage when the chrome wires up
     const kept = parseFloat(store("vit-speed"));
     if (kept) vit.speed = kept;
     syncTools();
