@@ -107,10 +107,38 @@ written on `root`, which is right only while the page *is* the screen. So the
 page's snapshot is root while presenting and the deck's own group (`vit-page`)
 at the desk, where the page is a box beside the rail. Every effect rule names
 both, so the same slide, zoom or wipe plays either way; the transition carries
-the type `boxed` at the desk, which holds the furniture around it still — it is
-not going anywhere — and the page's group is clipped to its own box, since a
-slide pushes a page by its own width and would otherwise travel out over the
-rail. In the overview there is no page transition at all: the pages are
+the type `boxed` at the desk, under which root is not captured at all, and the
+page's group is clipped to its own box, since a slide pushes a page by its own
+width and would otherwise travel out over the rail.
+
+Leaving root out is not only about what animates. A captured element is not
+painted for as long as the transition runs, and what is not painted is not
+hit-tested either — so capturing root turns the whole document into a picture
+of itself, and a thumbnail cannot be clicked in a picture. Measured on the
+tutorial, a desk page turn with root captured leaves the rail dead for 793 ms
+of an 810 ms turn; without it, for 42 ms — the capture itself, and nothing
+more.
+
+It has a price, and the price is a frame. A captured element is out of the live
+rendering from the moment the old state is taken until the new one is, and the
+update half runs in between — so that is a frame, not an instant. With root
+captured that frame is never painted at all and the screen simply holds the
+last one; with root left out, the rest of the page goes on painting and the
+deck's box is a hole in it.
+
+**The page's ground.** What fills the hole has to be the page, not a colour: a
+flash of the desk and a flash of flat black are both a flash. So `.vit-plate`,
+an `<svg>` in the cell under the deck, is aimed by the same `point()` the rail
+uses at whatever the deck is showing — the same `<use>` a thumbnail is, at the
+deck's own size, so it is no second rendering of anything. It works because a
+`<use>` of a captured element still draws: measured mid-transition, the current
+page's thumbnail is still its page and not a blank.
+
+Measured inside the page's box with the deck not painting: without the ground,
+a flat 240 of 255 — the desk showing through the middle of the screen. With it,
+mean 42.4 over the range 7–255, against 42.4 over 7–255 for the page itself,
+0.29 % of pixels differing by more than 8. And it is free to keep: with the
+ground and without it, the desk holds the same 16.7 ms frame. In the overview there is no page transition at all: the pages are
 thumbnails, and turning to another only moves the highlight. Left on root, a
 page with `transition: "slide"` slides the whole desk, rail and notes and all,
 or the whole overview grid.
@@ -232,7 +260,21 @@ elements, mostly the `<use>` a page's glyphs are drawn with. Measured across a
 
 Chrome has no cheap path for a property nothing references, either: writing an
 invented `--nobody-reads-this` on the root 60 times costs 1739 ms of style
-recalculation on the same document. That is why `--vit-box` moved out of the
+recalculation on the same document, and Safari 26 spends 13.6 s on the same
+thing. A custom property on the root is never a cheap thing to write.
+
+The two engines want opposite things here, which is worth knowing before this
+is "improved". The same 60 writes, each followed by a forced layout:
+
+| | Chrome | Safari 26 |
+| --- | --- | --- |
+| inherited, written on `<html>` | 1014 ms | 188–429 ms |
+| registered `inherits: false`, written on the body | 33 ms | 935–1051 ms |
+
+Chrome is 30× better one way and Safari 4× better the other, so there is no
+choice that suits both; this is the Chrome one, and the worst case is about the
+same either way. `syntax: "*"` in place of `<length>` changes nothing in Safari,
+so what it costs there is not the type checking. It is also why `--vit-box` moved out of the
 deck's `ResizeObserver` — it has to be on the root, where the transition
 pseudo-elements can inherit it, so instead it is written once per render rather
 than once per frame of a drag. The observer keeps what is genuinely per-resize:
@@ -250,6 +292,10 @@ So:
 | the pointer's position — the laser's dot and its tracer | true, and they keep up |
 | the pointer's target — the toolbar knowing it is being reached for | unknowable |
 | a press landing on something — the deck's click, wheel and touch | not delivered |
+
+What goes dark is what was captured, which is why `boxed` leaves root out: at
+the desk only the page's box is a picture, and the rail beside it is live for
+all but the capture.
 
 The toolbar therefore holds its last word while `vit.moving`, rather than
 believing the departure a transition manufactures: measured on the tutorial with

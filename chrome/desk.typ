@@ -41,7 +41,16 @@
 /// The cell the deck sits in at the desk. The deck's size has to answer to the
 /// cell's, and a cell is a box only if something is one — so this is that box.
 /// Everywhere else it is `display: contents` and might as well not be there.
-#let pane(body) = html.div(class: "vit-pane", body)
+///
+/// The `<svg>` under the deck is the page's ground: the same `<use>` a
+/// thumbnail is, at the deck's own size, aimed by the runtime at whatever the
+/// deck is showing. For a frame at the start of every transition the deck is
+/// captured — out of the live rendering, its snapshot not yet up — and this is
+/// what is left to paint in its place. Left empty; the runtime fills it.
+#let pane(body) = html.div(class: "vit-pane", {
+  html.elem("svg", attrs: (class: "vit-plate", "aria-hidden": "true"), "")
+  body
+})
 
 /// The current page's speaker notes, under the deck at the desk. Left empty —
 /// the runtime writes into it, from the page the deck is on.

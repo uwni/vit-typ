@@ -379,7 +379,9 @@ try {
 
   /* A page turn moves the page. Presenting, the page is the screen and the
      screen is what the effect is written on; at the desk it is a box beside the
-     rail, and the furniture around it must not go anywhere. */
+     rail, and root is not captured at all — so the furniture around it is not a
+     picture of itself for the length of the turn, and a thumbnail in it can
+     still be clicked. */
   {
     const r = await page.evaluate(`
       const turn = async mode => {
@@ -391,9 +393,19 @@ try {
         window.vit.next();
         await vt.ready;
         const cs = ps => getComputedStyle(document.documentElement, ps);
+        const named = re => !!document.getAnimations().find(a => re.test(String(a.effect?.pseudoElement || '')));
+        /* whatever is captured is not painted, and what is not painted is not
+           hit-tested: this asks the browser, of a thumbnail, mid-transition */
+        const t = [...document.querySelectorAll('.vit-rail .vit-thumb')].find(t => {
+          const b = t.getBoundingClientRect();
+          return b.width && b.top > 40 && b.bottom < innerHeight - 40;
+        });
+        const tb = t?.getBoundingClientRect();
         const out = {
           types: [...vt.types],
-          page: !!document.getAnimations().find(a => /group\\(vit-page\\)/.test(String(a.effect?.pseudoElement || ''))),
+          page: named(/group\\(vit-page\\)/),
+          root: named(/\\(root\\)/),
+          rail: tb ? !!document.elementFromPoint((tb.left + tb.right) / 2, (tb.top + tb.bottom) / 2)?.closest('.vit-thumb') : null,
           rootOld: cs('::view-transition-old(root)').animationName,
           rootNew: cs('::view-transition-new(root)').animationName,
           pageOld: cs('::view-transition-old(vit-page)').animationName,
@@ -407,11 +419,43 @@ try {
       };
       return { present: await turn('present'), desk: await turn('desk') };`);
     check("presenting, the page's effect is the screen's",
-      !r.present.page && r.present.rootOld === "vit-leave" && r.present.rootNew === "vit-enter",
+      !r.present.page && r.present.root && r.present.rootOld === "vit-leave" && r.present.rootNew === "vit-enter",
       JSON.stringify(r.present));
-    check("at the desk it is the page's box, and the furniture holds still",
-      r.desk.page && r.desk.types.includes("boxed") && r.desk.rootOld === "none" && r.desk.rootNew === "none",
+    check("at the desk it is the page's box, and root is not captured at all",
+      r.desk.page && r.desk.types.includes("boxed") && !r.desk.root,
       JSON.stringify(r.desk));
+    check("so the rail is still there to be clicked while the page turns",
+      r.desk.rail === true, JSON.stringify({ rail: r.desk.rail }));
+    /* The price of that: for a frame at the start of a transition the deck is
+       captured and its snapshot is not up yet, and the rest of the page goes on
+       painting without it. What is behind it then has to be the page itself —
+       the same <use> a thumbnail is, at the deck's own size — or the desk shows
+       through the middle of the screen. */
+    const g = await page.evaluate(`
+      window.vit.mode = 'desk'; await window.__settle(400);
+      const out = [];
+      for (const [w, h] of [[1280, 800], [900, 1000], [1280, 500]]) {
+        /* the window cannot be resized from here; the cell can */
+        document.body.style.setProperty('--vit-rail', (1280 - w) / 2 + 112 + 'px');
+        document.body.style.setProperty('--vit-split', h / 2 + 'px');
+        await window.__settle(120);
+        const deck = document.querySelector('.vit-deck'), g = document.querySelector('.vit-plate');
+        const d = deck.getBoundingClientRect(), b = g.getBoundingClientRect();
+        out.push({
+          fits: Math.abs(b.width - d.width) < 1 && Math.abs(b.height - d.height) < 1
+                && Math.abs(b.x - d.x) < 1 && Math.abs(b.y - d.y) < 1,
+          /* and it is drawing the frame the deck is drawing, not some other */
+          shows: g.dataset.shows?.split(':')[0] === String(window.vit.index),
+          drawn: !!g.querySelector('use'),
+          box: [Math.round(d.width), Math.round(d.height)],
+          ground: [Math.round(b.width), Math.round(b.height)],
+        });
+      }
+      for (const k of ['--vit-rail', '--vit-split']) document.body.style.removeProperty(k);
+      await window.__settle(200);
+      return out;`);
+    check("and what is behind the page is the page itself, exactly its box",
+      g.every(x => x.fits && x.shows && x.drawn), JSON.stringify(g));
     check("and the effect plays there, clipped to that box",
       r.desk.pageOld === "vit-leave" && r.desk.pageNew === "vit-enter" && r.desk.clipped === "inset(0px)",
       JSON.stringify({ old: r.desk.pageOld, new: r.desk.pageNew, clip: r.desk.clipped }));
@@ -549,7 +593,10 @@ try {
      goes out for the whole of every transition and comes back after it. */
   {
     const r = await page.evaluate(`
+      /* the mode change is a transition of its own: let it finish, or the move
+         below overtakes it and what answers __done is the wrong one */
       window.vit.mode = 'present';
+      await window.__settle(500);
       await window.__done(() => { location.hash = '#${labels[0]}'; });
       await window.__settle(300);
       const bar = document.querySelector('.vit-bar');

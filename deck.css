@@ -192,14 +192,47 @@ html {
 }
 :root[data-mode="desk"] .vit-pane {
   display: block;
+  position: relative;
   grid-area: 1 / 3 / 2 / 4;
   container-type: size;
   min-height: 0;
+  /* the page's box, in the cell's own units: the deck takes it, and so does
+     the ground underneath */
+  --vit-fit: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
+}
+/* The page's ground: the page again, at the deck's own size, under it.
+
+   A transition captures the deck, and a captured element is out of the live
+   rendering from the moment the old state is taken until the new one is —
+   which is a frame, because the update half runs in between. With root
+   captured too that frame is never painted at all and the screen holds the
+   last one; with root left out, so that the rail stays real, the rest of the
+   page goes on painting and the deck's box is a hole in it.
+
+   What fills it has to be the page, not a colour: a flash of the desk and a
+   flash of flat black are both a flash. A <use> of the very drawing the deck
+   holds costs no second rendering of anything — it is what a thumbnail is —
+   and a <use> of a captured element still draws, which is the whole reason
+   this works. */
+.vit-plate {
+  display: none;
+}
+:root[data-mode="desk"] .vit-plate {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: var(--vit-fit);
+  aspect-ratio: var(--vit-w) / var(--vit-h);
+  background: var(--vit-page);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  pointer-events: none;
 }
 :root[data-mode="desk"] .vit-deck {
-  /* the layout's shape, in whatever the cell leaves — the same formula the
-     stage uses, in the cell's own units */
-  width: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
+  width: var(--vit-fit);
   border-radius: 0.5rem;
 }
 :root[data-mode="desk"] .vit-notes {
@@ -443,16 +476,17 @@ html {
 
 /* ── the page, where it is not the screen ─────────────────────────────
    At the desk the page is a box beside the rail, so a page turn is captured as
-   that box's own group (vit-page) rather than as the whole document, and the
-   page's own effect plays there instead of on root — the same slide, zoom or
-   wipe, at the size the page happens to be. The furniture around it holds
-   still: it is not going anywhere. */
-html:active-view-transition-type(boxed)::view-transition-old(root),
-html:active-view-transition-type(boxed)::view-transition-new(root) {
-  animation: none;
-}
-html:active-view-transition-type(boxed)::view-transition-old(root) {
-  opacity: 0;
+   that box's own group (vit-page) and root is not captured at all: the page's
+   own effect plays in the box instead of on the whole document — the same
+   slide, zoom or wipe, at the size the page happens to be.
+
+   Leaving root out is also what keeps the furniture around it real. A captured
+   element is not painted for as long as the transition runs, and what is not
+   painted is not hit-tested either; capturing root captures the document, so
+   the rail would be a picture of itself for the length of every page turn, and
+   a picture is not something a thumbnail can be clicked in. */
+html:active-view-transition-type(boxed) {
+  view-transition-name: none;
 }
 /* The page's effect plays in the page's box, so it is clipped to it: a slide
    pushes a page by its own width, and without this the page being left would

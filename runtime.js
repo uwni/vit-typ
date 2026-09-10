@@ -154,6 +154,10 @@
       runAnims(k);
     });
     syncRail(scroll);
+    /* and the ground under the deck, which is the same page by another route:
+       what it shows is what the deck shows, so a frame in which the deck is
+       captured and its snapshot is not up yet is not a hole */
+    point(plate, cur);
     /* The zoom's lens is a quarter of the page, and only the browser knows how
        wide the page came out. A transition's own pseudo-elements are its only
        readers, so it is drawn from the state here like everything else rather
@@ -746,8 +750,11 @@
      thumbnail in the rail, and neither ever moves. What the thumbnail shows is
      a <use> of the page's own drawing, so the picture in it is the page itself
      rendered once, and pointing it somewhere else is one attribute. */
-  let rail = null;
-  const findRail = () => { rail = document.querySelector(".vit-rail"); };
+  let rail = null, plate = null;
+  const findRail = () => {
+    rail = document.querySelector(".vit-rail");
+    plate = document.querySelector(".vit-plate");
+  };
 
   const svgEl = (tag, attrs) => {
     const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
