@@ -43,10 +43,8 @@
 /// Everywhere else it is `display: contents` and might as well not be there.
 ///
 /// The `<svg>` under the deck is the page's ground: the same `<use>` a
-/// thumbnail is, at the deck's own size, aimed by the runtime at whatever the
-/// deck is showing. For a frame at the start of every transition the deck is
-/// captured — out of the live rendering, its snapshot not yet up — and this is
-/// what is left to paint in its place. Left empty; the runtime fills it.
+/// thumbnail is, aimed by the runtime at whatever the deck is showing, so that
+/// the frame in which the deck is captured is not a hole. The runtime fills it.
 #let pane(body) = html.div(class: "vit-pane", {
   html.elem("svg", attrs: (class: "vit-plate", "aria-hidden": "true"), "")
   body
@@ -60,9 +58,8 @@
 /// `kind` says what moves: `"rail"` the width of the pages down the left,
 /// `"notes"` the height the deck leaves the notes underneath it.
 ///
-/// It is the gap: the desk's grid gives it a track of its own where it used to
-/// leave empty space, so the boundary is an element the pointer can arrive on
-/// rather than a place between two. Empty — the three dots are the stylesheet's.
+/// Empty: the grid gives it the track the gap used to be, and the three dots
+/// are the stylesheet's.
 #let grip(kind) = html.elem(
   "div",
   attrs: (

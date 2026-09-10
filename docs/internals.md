@@ -177,9 +177,9 @@ transitions, the state and the one function that changes it, the rail, and
 `window.vit`. `chrome.js` is everything that floats over it: the toolbar, the
 laser pointer and its tracer, the settings panel, the key help, the black
 screen, the speaker view. The dependency is one-way. The chrome reads
-`window.vit` and listens to `vit:ready`, `vit:render`, `vit:move-ready` and
-`vit:move-done`; the deck names nothing in the chrome and does not know whether
-it is there. What the presenter chooses — the pace, the theme, what the laser
+`window.vit` and listens to `vit:ready`, `vit:drawn`, `vit:move-begin`,
+`vit:move-here` and `vit:move-done`; the deck names nothing in the chrome and
+does not know whether it is there. What the presenter chooses — the pace, the theme, what the laser
 looks like — is the chrome's, kept in their browser; the document says where
 each starts and the deck itself only has a speed. Two places where the two
 genuinely meet are said out loud rather than reached across: `vit.hold(on)`,
@@ -196,7 +196,7 @@ for it, so the comments are cut on the way out — about 16 kB per deck.
 **The chrome is drawn, not poked.** Everything the player shows is a projection
 of state, and the state's only writer is the deck: the toolbar's counter and
 pressed buttons, the notes beside the page, whether the toolbar is out, whether
-the laser's dot is. Each is redrawn on `vit:render` and when its own input
+the laser's dot is. Each is redrawn on `vit:drawn` and when its own input
 changes, never inside the handler of whichever event happened to be the last
 one. A thing drawn only in an event handler is a thing that is right only until
 something else changes — the toolbar drawn only on pointer moves went out for
@@ -234,11 +234,22 @@ only blur it during the seconds it is being read, which is all it is for, so it
 lands at once. That also spares one full-document capture a page turn, measured
 at 24–38 ms — a saving, not the reason.
 
-The counter and the progress bar do run ahead of the audience: they are redrawn
-on `vit:move-ready`, which the deck announces at the *start* of a move, some
-37 ms into a 730 ms turn. That is deliberate and it is not the same thing. A
-number that is early is read as a number; a picture that is early is read as
-the screen.
+The previews are aimed twice, and the two events say different things.
+`vit:move-begin` is where the deck is *going*, said before it captures — aimed
+at then, the mirror begins its own move alongside the audience's instead of a
+tenth of a second behind it, which is what that gap was: `vit:move-here` does
+not come until the capture and the update are done, some 37 ms in, and the
+preview's own capture follows that. Measured on the tutorial, a frame that
+draws itself used to start 100 ms later in the mirror than in the main window,
+consistently; aimed at `begin` it lands within about 50 ms either way, which is
+the noise of two windows sampled at different frames. `vit:move-here` is where
+the deck *is*, and it is what corrects the aim when a move was overtaken by the
+next — `begin` is a prediction, `ready` is the fact.
+
+The counter and the progress bar are drawn from the same two events, so they
+run ahead of the audience by that much. That is deliberate and it is not the
+same kind of thing as a picture running ahead. A number that is early is read
+as a number; a picture that is early is read as the screen.
 
 **When the toolbar is out.** At the desk and in the overview it is furniture and
 stays. Over a page being shown it is chrome, and chrome does not sit on a slide:
@@ -398,7 +409,9 @@ container, `tween@i` on each state), derives the keyframes, and hands them to
 `waapi`, a binding that keeps no registry of its own because
 `getAnimations({ subtree: true })` is one. The deck is a host: it decides _when_
 to step, because a step is one of its positions, and it marks its animations
-`vit:step` or `vit:anim` so it can find them again.
+`vit-step` so it can find them again. The colon is the deck's events and
+nothing else: a name with one is something a listener can be put on, a name
+with a hyphen is a class, an attribute or, here, an animation's `id`.
 
 **Path reconciliation.** Two states are interpolated node by node, and the
 browser interpolates two paths only if they are the same list of commands.

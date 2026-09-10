@@ -162,12 +162,12 @@ try {
      is not a transition that looks wrong, it is no transition at all, and the
      only place it shows is `ready` rejecting. */
   await page.evaluate(`
-    window.__vt = { started: 0, failed: [] };
+    window.__vit = { started: 0, failed: [] };
     const real = window.__real = document.startViewTransition.bind(document);
     document.startViewTransition = opts => {
-      window.__vt.started++;
+      window.__vit.started++;
       const t = real(opts);
-      t.ready.catch(e => window.__vt.failed.push({ why: String(e && e.message || e), types: [...(opts.types || [])], mode: document.documentElement.dataset.mode }));
+      t.ready.catch(e => window.__vit.failed.push({ why: String(e && e.message || e), types: [...(opts.types || [])], mode: document.documentElement.dataset.mode }));
       return t;
     };
     window.__settle = ms => new Promise(r => setTimeout(r, ms ?? 260));
@@ -190,8 +190,8 @@ try {
     window.__move = fn => new Promise(r => {
       const deck = document.querySelector('.vit-deck');
       let done = false;
-      const ok = () => { if (done) return; done = true; deck.removeEventListener('vit:move-ready', ok); r(); };
-      deck.addEventListener('vit:move-ready', ok);
+      const ok = () => { if (done) return; done = true; deck.removeEventListener('vit:move-here', ok); r(); };
+      deck.addEventListener('vit:move-here', ok);
       fn();
       setTimeout(ok, 1500);   // a press with nowhere to go announces nothing
     });
@@ -341,16 +341,16 @@ try {
   {
     const r = await page.evaluate(`
       window.vit.mode = 'overview'; await window.__settle(500);
-      const real = document.startViewTransition.bind(document); let vt;
-      document.startViewTransition = o => (vt = real(o));
+      const real = document.startViewTransition.bind(document); let vit;
+      document.startViewTransition = o => (vit = real(o));
       document.querySelectorAll('.vit-rail .vit-thumb')[2].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await vt.ready;
+      await vit.ready;
       const groups = [...new Set(document.getAnimations()
         .map(a => String(a.effect?.pseudoElement || '')).filter(x => x.startsWith('::view-transition-group')))];
       document.startViewTransition = real;
-      await vt.finished.catch(() => { });
+      await vit.finished.catch(() => { });
       await window.__settle(300);
-      return { types: [...vt.types], groups, mode: document.documentElement.dataset.mode, hash: location.hash };`);
+      return { types: [...vit.types], groups, mode: document.documentElement.dataset.mode, hash: location.hash };`);
     check("opening a page from the overview is a whole-page zoom",
       r.types.includes("overview") && r.groups.some(g => g.includes("vit-zoom")) && !r.groups.some(g => /\(m-/.test(g)),
       JSON.stringify(r));
@@ -388,10 +388,10 @@ try {
         window.vit.mode = mode;
         await window.__done(() => { location.hash = '#${labels[0]}'; });
         await window.__settle(300);
-        const real = document.startViewTransition.bind(document); let vt;
-        document.startViewTransition = o => (vt = real(o));
+        const real = document.startViewTransition.bind(document); let vit;
+        document.startViewTransition = o => (vit = real(o));
         window.vit.next();
-        await vt.ready;
+        await vit.ready;
         const cs = ps => getComputedStyle(document.documentElement, ps);
         const named = re => !!document.getAnimations().find(a => re.test(String(a.effect?.pseudoElement || '')));
         /* whatever is captured is not painted, and what is not painted is not
@@ -402,7 +402,7 @@ try {
         });
         const tb = t?.getBoundingClientRect();
         const out = {
-          types: [...vt.types],
+          types: [...vit.types],
           page: named(/group\\(vit-page\\)/),
           root: named(/\\(root\\)/),
           /* A name is a capture and a capture is a hole, so under boxed nothing
@@ -425,7 +425,7 @@ try {
           clipped: cs('::view-transition-group(vit-page)').clipPath,
         };
         document.startViewTransition = real;
-        await vt.finished.catch(() => { });
+        await vit.finished.catch(() => { });
         await window.__settle(300);
         return out;
       };
@@ -544,13 +544,13 @@ try {
       await window.__settle(300);
       const bar = document.querySelector('.vit-bar');
       const during = async () => {
-        const real = document.startViewTransition.bind(document); let vt;
-        document.startViewTransition = o => (vt = real(o));
-        window.vit.next(); await vt.ready;
+        const real = document.startViewTransition.bind(document); let vit;
+        document.startViewTransition = o => (vit = real(o));
+        window.vit.next(); await vit.ready;
         const out = { name: getComputedStyle(bar).viewTransitionName,
                       glass: getComputedStyle(document.documentElement, '::view-transition-group(vit-bar)').backdropFilter };
         document.startViewTransition = real;
-        await vt.finished.catch(() => { });
+        await vit.finished.catch(() => { });
         return out;
       };
       window.__reach(false); await window.__settle(250);
@@ -748,14 +748,14 @@ try {
       if (f < 1) return null;
       const ms = +/set-duration-(\\d+)ms/.exec(all[f].dataset.transition)[1];
       await window.__done(() => window.vit.go(f - 1));
-      const real = document.startViewTransition.bind(document); let vt;
-      document.startViewTransition = o => (vt = real(o));
-      window.vit.go(f); await vt.ready;
+      const real = document.startViewTransition.bind(document); let vit;
+      document.startViewTransition = o => (vit = real(o));
+      window.vit.go(f); await vit.ready;
       const cs = ps => getComputedStyle(document.documentElement, ps);
-      const out = { ms, types: [...vt.types],
+      const out = { ms, types: [...vit.types],
                     ran: cs('::view-transition-group(root)').animationDuration };
       document.startViewTransition = real;
-      await vt.finished.catch(() => { });
+      await vit.finished.catch(() => { });
       return out;`);
     check("a transition's own settings reach the stylesheet",
       !r ? "n/a" : r.ran === `${r.ms / 1000}s`,
@@ -871,6 +871,42 @@ try {
       r ? JSON.stringify(r) : "the browser would not open the window");
   }
 
+  /* A move is said out twice: once when it has been accepted and nothing has
+     been captured, once when it has landed. The first is what lets another
+     window showing this deck start alongside rather than behind, so what it
+     has to be is early — before the capture — and it has to carry where the
+     deck is going, since where it is has not changed yet. A change of mode is
+     a transition but not a move and says neither. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present'; await window.__settle(500);
+      await window.__done(() => { location.hash = '#${labels[0]}'; });
+      await window.__settle(300);
+      const deck = document.querySelector('.vit-deck');
+      const seen = [];
+      const watch = t => e => seen.push({ t, index: e.detail.index,
+                                          where: window.vit.index, moving: window.vit.moving });
+      const b = watch('begin'), d = watch('done');
+      deck.addEventListener('vit:move-begin', b);
+      deck.addEventListener('vit:move-done', d);
+      await window.__done(window.vit.next);
+      await window.__settle(250);
+      const afterTurn = seen.length;
+      window.vit.mode = 'desk'; await window.__settle(800);
+      window.vit.mode = 'present'; await window.__settle(800);
+      const quiet = seen.length === afterTurn;
+      deck.removeEventListener('vit:move-begin', b);
+      deck.removeEventListener('vit:move-done', d);
+      return { seen, quiet };`);
+    const begin = r.seen.filter(x => x.t === "begin"), done = r.seen.filter(x => x.t === "done");
+    check("a move is said out before it is captured, and again once it has landed",
+      begin.length === 1 && done.length === 1
+        && begin[0].moving === false && begin[0].index !== begin[0].where
+        && done[0].index === begin[0].index && done[0].where === done[0].index,
+      JSON.stringify(r.seen));
+    check("and a change of mode, being no move, says neither", r.quiet, JSON.stringify(r));
+  }
+
   /* The clock times the talk, not the window. It cannot be asked here — this
      deck has been on stage since the model was read — so it is asked in a
      window that has never presented. */
@@ -941,6 +977,17 @@ try {
           await new Promise(r => setTimeout(r, 300));
           const state = a => [...new Set(a.map(x => x.playState))].sort();
           out.plays = state(slides[k].getAnimations({ subtree: true })).includes('running');
+          /* The pace is told to it, and only by the window that made it. Here
+             there is no such window — this one was opened by the suite, not by
+             a deck — so what can be asked is the half that must hold anyway:
+             a message from anyone else is ignored. That it is taken from its
+             maker is a thing of three windows and two origins, and over
+             file:// a preview cannot be seen into from here at all. */
+          const before = window.vit.speed;
+          postMessage({ vit: 'speed', speed: 4 }, '*');
+          await new Promise(r => setTimeout(r, 150));
+          out.pace = window.vit.speed;
+          out.deaf = out.pace === before;
           return out;
         `);
       } finally { w.close(); }
@@ -957,6 +1004,8 @@ try {
       m.plays === null ? "n/a" : m.plays === true && a.plays === true,
       m.plays === null ? "no frame in this deck plays itself"
         : JSON.stringify({ mirror: m.plays, ahead: a.plays }));
+    check("and neither takes a pace from a window that did not make it",
+      m.deaf && a.deaf, JSON.stringify({ mirror: m.pace, ahead: a.pace }));
   }
 
   /* The desk's two boundaries are the presenter's to move: the width of the
@@ -1017,7 +1066,7 @@ try {
   /* Everything the player can be asked to do, once — the captures are counted
      across all of it. */
   {
-    const vt = await page.evaluate(`
+    const vit = await page.evaluate(`
       const key = k => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, cancelable: true }));
       window.vit.mode = 'present'; await window.__settle(400);
       for (const k of ['ArrowRight', 'ArrowRight', 'ArrowLeft', 'End', 'Home']) { key(k); await window.__settle(); }
@@ -1027,7 +1076,7 @@ try {
       await window.__settle(400);
       for (const k of ['?', '?', ',', ',', 'l', 'l', 'b', 'b', '-', '=', '0']) { key(k); await window.__settle(80); }
       await window.__settle(400);
-      const seen = window.__vt;
+      const seen = window.__vit;
       /* And once more with nothing watching: a rejection the player does not
          handle itself only surfaces when no test is holding it. Fast enough
          that a transition is overtaken before it is even ready — later than
@@ -1041,10 +1090,10 @@ try {
     /* A transition overtaken by the next one is skipped on purpose — that is
        how the player answers a presenter pressing faster than the deck moves.
        Anything else is a capture that did not happen: no transition at all. */
-    const aborted = vt.failed.filter(m => !/skipped/i.test(m.why));
+    const aborted = vit.failed.filter(m => !/skipped/i.test(m.why));
     check("every capture succeeded", aborted.length === 0,
-      `${vt.started} transitions, ${vt.failed.length - aborted.length} overtaken, aborted: ${JSON.stringify(aborted.slice(0, 6))}`);
-    check("the sweep actually transitioned", vt.started > 8, `${vt.started} transitions`);
+      `${vit.started} transitions, ${vit.failed.length - aborted.length} overtaken, aborted: ${JSON.stringify(aborted.slice(0, 6))}`);
+    check("the sweep actually transitioned", vit.started > 8, `${vit.started} transitions`);
   }
 
   check("the page reported nothing", page.errors.length === 0, page.errors.slice(0, 3).join(" | "));
@@ -1067,8 +1116,8 @@ try {
       await new Promise(r => setTimeout(r, 400));
       const deck = document.querySelector('.vit-deck');
       const move = fn => new Promise(r => { let done = false;
-        const ok = () => { if (done) return; done = true; deck.removeEventListener('vit:move-ready', ok); r(); };
-        deck.addEventListener('vit:move-ready', ok); fn(); setTimeout(ok, 1500); });
+        const ok = () => { if (done) return; done = true; deck.removeEventListener('vit:move-here', ok); r(); };
+        deck.addEventListener('vit:move-here', ok); fn(); setTimeout(ok, 1500); });
       const from = location.hash;
       await move(window.vit.next);
       await move(window.vit.next);

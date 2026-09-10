@@ -1,21 +1,13 @@
 /// The speaker view's body, as a `<template>` for the runtime to import into
-/// the window it opens. Both previews are copies of this very document
-/// (`vit-mirror`), so nothing here is a second rendering of anything — but
-/// they are not the same kind of thing, and each says which it is in its
-/// `name`.
+/// the window it opens. Both previews are copies of this very document, so
+/// nothing here is a second rendering of anything — but they are not the same
+/// kind of thing, and each says which it is in its `name`.
 ///
-/// The one in `main` is a mirror: it shows what the audience is looking at,
-/// the page change played out and all, because it is the one place the
-/// presenter can see their screen. Being a copy of this document rather than
-/// a second renderer is also what keeps it in step — the same gate holds a
-/// page's own drawings until the same transition ends, in both windows at
-/// once.
-///
-/// The one in `aside` runs ahead: what it shows has not happened yet, so
-/// there is nothing for it to be in step with, and playing the change out
-/// would only make it unreadable exactly when it is being read. It lands at
-/// once. Element animations run either way: what a step does is what the
-/// presenter is here to see coming.
+/// `main` is a mirror: it plays the page change out, because it is the one
+/// place the presenter can see the audience's screen — and being a copy of
+/// this document is what keeps its drawings in step with theirs. `aside` runs
+/// ahead, with nothing yet to be in step with, so it lands at once and stays
+/// readable while it is read. Element animations run either way.
 
 #import "bar.typ": bar
 

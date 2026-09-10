@@ -41,6 +41,7 @@
   const setSpeed = v => {
     vit.speed = v;
     store("vit-speed", vit.speed);
+    tellPace();
     syncSettings();
     flash(`${vit.speed}×`);
   };
@@ -404,17 +405,11 @@
   };
 
   /* ── the desk's two boundaries ────────────────────────────────────────
-     What a grip is dragged through is a length: the width of the rail, or the
-     height the deck leaves the notes. Which grip is `data-grip`, and it is the
-     browser that says so — it hit-tests the grip and hands it the pointer, so
-     the rest of the drag arrives there and nowhere else until it is let go.
-     What is read of the pointer is how far it has come, against the size the
-     element itself reports; how far it may be taken is the stylesheet's, in the
-     clamps around the two properties. They are written on the body, which is
-     the element they describe and the only one that reads them — deck.css
-     registers them as not inheriting, so a drag recalculates that one element
-     rather than the whole document. Without its dashes, a property is the name
-     it is remembered under. */
+     Which grip is being dragged is the browser's answer: it hit-tests the grip
+     and hands it the pointer, so the rest of the drag arrives there. What is
+     read of the pointer is how far it has come, against the size the element
+     itself reports; how far it may be taken is the stylesheet's. Without its
+     dashes, a property is the name it is remembered under. */
   const grips = {
     rail: { of: ".vit-rail", prop: "--vit-rail", size: "offsetWidth", axis: "clientX" },
     notes: { of: ".vit-pane", prop: "--vit-split", size: "offsetHeight", axis: "clientY" },
@@ -460,7 +455,7 @@
      loading this very HTML, positioned by #hash, so there is no second renderer
      and the real transitions play there too. The window is about:blank and
      same-origin, so its own DOM is built directly; the iframes are never
-     touched, only their src changes. Sync is the vit:move-ready events. */
+     touched, only their src changes. Sync is the vit:move-here events. */
 
   const tick = () => {
     const s = began ? Math.round((Date.now() - began) / 1000) : 0;
@@ -493,6 +488,7 @@
       now: d.querySelector("main iframe"), next: d.querySelector("aside iframe"),
       nextCap: d.querySelector("aside small"), prog: d.querySelector(".prog i"),
     };
+    for (const f of [spk.now, spk.next]) f.addEventListener("load", tellPace);
     spk.clock.addEventListener("click", () => { began = Date.now(); tick(); });
     const timer = setInterval(() => {
       if (speaker.closed) { clearInterval(timer); return; }
@@ -555,20 +551,32 @@
   /* The "next" preview shows what the audience will see next: still within
      this page (next frame, or next step of an element animation) it is the
      next step; only past the page is it the next page. */
-  const syncSpeaker = () => {
+  /* Their src changes by fragment alone after the first, which is no reload,
+     so `load` is the once each preview is ready to listen. */
+  const tellPace = () => {
     if (!spk || speaker.closed) return;
-    const nx = vit.after();
-    spk.page.textContent = `${vit.label()} / ${vit.pages}`;
-    spk.prog.style.width = vit.progress();
-    spk.title.textContent = vit.title();
-    show(spk.now, vit.label());
+    for (const f of [spk.now, spk.next]) f.contentWindow?.postMessage({ vit: "speed", speed: vit.speed }, "*");
+  };
+
+  const syncSpeaker = at => {
+    if (!spk || speaker.closed) return;
+    const i = at?.index, k = at?.step;
+    const nx = vit.after(i, k);
+    spk.page.textContent = `${vit.label(i, k)} / ${vit.pages}`;
+    spk.prog.style.width = vit.progress(i);
+    spk.title.textContent = vit.title(i);
+    show(spk.now, vit.label(i, k));
     spk.next.hidden = !nx;
     spk.nextCap.textContent = !nx ? "Last page" : nx.page ? "Next page" : "Next step";
     if (nx) show(spk.next, vit.label(nx.index, nx.step));
   };
 
   const initSpeaker = () => {
-    deck.addEventListener("vit:move-ready", syncSpeaker);
+    /* `begin` is where the deck is going, said before it captures: aimed at
+       then, the mirror starts alongside the audience rather than behind them.
+       `ready` is where it is, and corrects the aim when a move was overtaken. */
+    deck.addEventListener("vit:move-begin", e => syncSpeaker(e.detail));
+    deck.addEventListener("vit:move-here", () => syncSpeaker());
     /* close it when the main window goes, so no window is left out of sync */
     addEventListener("pagehide", () => { if (speaker && !speaker.closed) speaker.close(); });
   };
@@ -633,6 +641,18 @@
     deck = vit.deck;
     if (window.name.startsWith("vit-mirror")) {
       for (const el of document.querySelectorAll(".vit-bar, body > .vit-notes, .vit-help, .vit-settings, .vit-laser, .vit-trail, template.vit-speaker-body")) el.remove();
+      /* A preview shows what the audience is shown, so it needs the pace the
+         presenter set — speed divides a transition and a drawing alike. It is
+         told, not left to look: over file:// every other window is another
+         origin. Its maker is the deck's window, not the one it sits in, and
+         the speaker view holds no script — so the sender to trust is
+         `parent.opener`, readable across origins when nothing else there is.
+         Nothing else the presenter chooses reaches a preview. */
+      let maker = null;
+      try { maker = parent.opener; } catch { }
+      addEventListener("message", e => {
+        if (e.source === maker && e.data?.vit === "speed") vit.speed = e.data.speed;
+      });
       return;
     }
     notes = document.querySelector("body > .vit-notes");
@@ -653,7 +673,7 @@
     document.addEventListener("pointerup", () => { if (touching) laser.classList.remove("is-on"); });
     document.addEventListener("pointercancel", () => laser.classList.remove("is-on"));
     /* the deck draws itself and says so; everything here is drawn from that */
-    deck.addEventListener("vit:render", () => {
+    deck.addEventListener("vit:drawn", () => {
       onStage();
       syncTools();
       syncNotes();

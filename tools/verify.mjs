@@ -25,8 +25,8 @@ const present = async p => {
 };
 const bare = p => p.evaluate(() => { const b = document.querySelector('.vit-bar'); if (b) b.remove(); });
 /* move and wait for it to be over: vit:move-done pairs one for one with
-   vit:move-ready,
-   so the listener goes on before the move and nothing is guessed */
+   vit:move-here, so the listener goes on before the move and nothing is
+   guessed */
 const move = (p, what, arg) => p.evaluate(([what, arg]) => new Promise(res => {
   const deck = document.querySelector('.vit-deck');
   const go = what === 'go' ? () => window.vit.go(arg) : () => { window.vit.step = arg === 'end' ? window.vit.steps : arg; };

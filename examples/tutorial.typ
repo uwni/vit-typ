@@ -1484,10 +1484,10 @@
       // mode is "desk" | "present" | "overview"
 
       const deck = document.querySelector('.vit-deck')
-      // the new position is in the DOM, and then
+      // the deck is at the new position, and then
       // it has finished moving — one for one,
       // e.detail is { index, step } for both
-      deck.addEventListener('vit:move-ready', on)
+      deck.addEventListener('vit:move-here', on)
       deck.addEventListener('vit:move-done', on)
       ```),
       screen(grid(

@@ -59,11 +59,9 @@
 
   let reduced, canvit;
   /* A preview inside the speaker view: it presents, and shows no rail. One of
-     the two runs ahead of the audience — what it shows has not happened yet,
-     so there is nothing for it to be in step with, and a page change lands
-     there at once. The other is a mirror and plays the change out, which is
-     also what keeps its drawings in step with the audience's: the same gate
-     holds them until the same transition ends. */
+     the two runs ahead of the audience, with nothing yet to be in step with,
+     so a page change lands there at once; the other is a mirror and plays it
+     out, which is what keeps its drawings in step with theirs. */
   const mirror = window.name.startsWith("vit-mirror");
   const ahead = window.name === "vit-mirror-ahead";
 
@@ -166,15 +164,13 @@
        captured and its snapshot is not up yet is not a hole */
     point(plate, cur);
     /* The zoom's lens is a quarter of the page, and only the browser knows how
-       wide the page came out. A transition's own pseudo-elements are its only
-       readers, so it is drawn from the state here like everything else rather
-       than chased whenever the box changes — a custom property on the root is
-       one the whole document is recalculated for, and the desk's boundaries
-       are the presenter's to drag. */
+       wide it came out. Drawn from the state here rather than chased whenever
+       the box changes: a custom property on the root costs the whole document
+       a recalculation, and the desk's boundaries are draggable. */
     root.style.setProperty("--vit-box", `${deck.clientWidth}px`);
     /* said out for whatever is drawn from the state and is not the deck's:
        the toolbar's counter, the notes beside the page, a speaker view */
-    deck.dispatchEvent(new CustomEvent("vit:render", { detail: { index: cur, step: at(cur), mode } }));
+    deck.dispatchEvent(new CustomEvent("vit:drawn", { detail: { index: cur, step: at(cur), mode } }));
   };
 
   /* Where we are, said out: the address bar, and anything listening. On every
@@ -187,10 +183,10 @@
        measure it against, which is why this comes after render and not before. */
     waapi.refit();
     try { history.replaceState(null, "", `#${label(cur)}`); } catch { }
-    deck.dispatchEvent(new CustomEvent("vit:move-ready", { detail: { index: cur, step: at(cur) } }));
+    deck.dispatchEvent(new CustomEvent("vit:move-here", { detail: { index: cur, step: at(cur) } }));
   };
 
-  /* One for one with `vit:move-ready`, including moves with nothing to animate
+  /* One for one with `vit:move-here`, including moves with nothing to animate
      and moves cut short by the next. Opening the overview announces neither. */
   const moveDone = i =>
     deck.dispatchEvent(new CustomEvent("vit:move-done", { detail: { index: i, step: at(i) } }));
@@ -418,7 +414,7 @@
      continuous one plays and pauses with the frame. The browser keeps both —
      they are asked for by role — and what it cannot keep stays here: the
      clean-ups a cross-fade owes, and the callbacks that re-measure a track. */
-  const STEP = "vit:step";
+  const STEP = "vit-step";
 
   /* the engine returns the animations and the undo; the frame keeps the undo,
      so that halt() can put back what a cancelled cross-fade changed */
@@ -581,6 +577,13 @@
     mode = m;
     lift(to);                 // before the transition: its setup reads both sides' marks
     stepTo(to, where.step ?? (turning ? 0 : at(to)), true);
+
+    /* Said out before anything is captured, so another window showing this
+       deck can begin its move alongside rather than behind. It carries where
+       the deck is going, not where it is — nothing has been drawn yet. One for
+       one with vit:move-done; a change of mode alone is not a move. */
+    if (turning) deck.dispatchEvent(new CustomEvent("vit:move-begin",
+      { detail: { index: to, step: at(to), mode } }));
 
     const own = slides[Math.max(to, cur)].dataset.transition;
     const dir = to >= cur ? "fwd" : "back";
@@ -817,7 +820,7 @@
     mode = mirror ? "present" : "desk";
     apply(want = h0.i);
     moveDone(h0.i);
-    deck.addEventListener("vit:move-ready", sweep);
+    deck.addEventListener("vit:move-here", sweep);
     sweep();
     /* The deck's box changes without a window resize: desk ⇄ presenting, and
        the presenter moving the desk's boundaries. What follows a path is a

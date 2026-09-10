@@ -146,22 +146,15 @@ body > .vit-grip {
 /* ── the desk ─────────────────────────────────────────────────────────
    Where the deck opens, and what Esc comes back to: the pages down the left,
    the one they point at beside them, its notes underneath. */
-/* Three tracks each way, not two: the gap between two parts is a track of its
-   own, and the boundary that used to be empty space is `.vit-grip`, an element
-   the pointer can arrive on. Nothing moves — the track is as wide as the gap
-   was.
+/* The gap between two parts is a track of its own, so the boundary is an
+   element the pointer can arrive on rather than a place between two. Nothing
+   moves: the track is as wide as the gap was, and the defaults are the layout
+   as it was drawn.
 
-   The two sizes the presenter can move are the only variables here, and the
-   clamps around them are the range they may be moved through. Their defaults
-   are the layout as it was drawn: `2fr` of what the gap leaves, exactly.
-
-   They are registered, and registered as not inheriting, because they describe
-   the grid of the one element laid out against them and nothing else. A custom
-   property that inherits is one every element in the document is recalculated
-   for when it changes, and the pages are in this document many times over —
-   once each on stage, and again inside every thumbnail's `<use>`. Dragging
-   writes one of these on every frame, so it is the difference between a drag
-   that keeps up and one that does not. */
+   The two sizes are registered as not inheriting because they describe the
+   grid of one element and nothing else — and a drag writes one of them on
+   every frame, which an inherited property would make the whole document pay
+   for. */
 @property --vit-rail {
   syntax: "<length>";
   inherits: false;
@@ -200,20 +193,12 @@ html {
      the ground underneath */
   --vit-fit: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
 }
-/* The page's ground: the page again, at the deck's own size, under it.
-
-   A transition captures the deck, and a captured element is out of the live
-   rendering from the moment the old state is taken until the new one is —
-   which is a frame, because the update half runs in between. With root
-   captured too that frame is never painted at all and the screen holds the
-   last one; with root left out, so that the rail stays real, the rest of the
-   page goes on painting and the deck's box is a hole in it.
-
-   What fills it has to be the page, not a colour: a flash of the desk and a
-   flash of flat black are both a flash. A <use> of the very drawing the deck
-   holds costs no second rendering of anything — it is what a thumbnail is —
-   and a <use> of a captured element still draws, which is the whole reason
-   this works. */
+/* The page's ground: the page again, at the deck's own size, under it. A
+   captured element is out of the live rendering for the frame between the two
+   captures, and with root left out — so that the rail stays real — that frame
+   is a hole where the page was. What fills it has to be the page, not a
+   colour: a <use> of the deck's own drawing, which is what a thumbnail is and
+   costs no second rendering of anything. */
 .vit-plate {
   display: none;
 }
@@ -243,12 +228,9 @@ html {
 }
 
 /* ── the boundaries ───────────────────────────────────────────────────
-   Two of them, one per size the presenter can move. Which one is being dragged
-   is `data-grip`, and the browser decides which by hit-testing it like anything
-   else; the pointer's travel while it is held is the length being set.
-
-   The three dots are one tile of the picture repeated: the strip is three tiles
-   long, so it is three dots, and the same rule laid across is the other one. */
+   One per size the presenter can move; which is being dragged is `data-grip`,
+   answered by hit-testing it like anything else. The three dots are one tile
+   repeated, so the strip's length is the count. */
 .vit-grip {
   display: none;
   position: relative;
@@ -480,13 +462,11 @@ html {
    page's own effect plays in the box instead of on the whole document — the
    same slide, zoom or wipe, at the size the page happens to be.
 
-   A name is not decoration. It says the element is captured, and a captured
-   element is not painted for as long as the transition runs — so it is not
-   hit-tested either, and between the two captures there is a frame with a hole
-   where it was. Root's name goes so that the furniture stays real: a thumbnail
-   cannot be clicked in a picture of itself. The chrome's names go for the same
-   reason turned around — they are there to hold it still while root animates,
-   and here root does not animate. All a name would buy them is the hole. */
+   A name is not decoration: it says the element is captured, and a captured
+   element is neither painted nor hit-tested while the transition runs. Root's
+   goes so that a thumbnail is not a picture of itself; the chrome's go for the
+   reason turned around — they hold it still while root animates, and here root
+   does not. */
 html:active-view-transition-type(boxed),
 html:active-view-transition-type(boxed) .vit-bar,
 html:active-view-transition-type(boxed) .vit-laser,
