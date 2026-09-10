@@ -675,18 +675,29 @@ try {
   /* Reaching for it is not only with a pointer: a toolbar that cannot be got at
      from the keyboard is a toolbar somebody cannot use at all. */
   {
-    const r = await page.evaluate(`
+    /* Reached for with the Tab key, not with `focus()`. Whether a scripted
+       focus counts as a visible one is the browser's own reading of what the
+       user last did, which nothing here sets; pressing the key is both what
+       the claim says and the only way to ask it without that hidden state. */
+    const tab = async () => {
+      for (const type of ["rawKeyDown", "keyUp"])
+        await page.send("Input.dispatchKeyEvent",
+          { type, key: "Tab", code: "Tab", windowsVirtualKeyCode: 9, nativeVirtualKeyCode: 9 });
+    };
+    await page.evaluate(`
       window.vit.mode = 'present'; await window.__settle(400);
-      const bar = document.querySelector('.vit-bar');
-      window.__reach(false); await window.__settle(200);
-      const out = { hidden: !window.__barOut() };
-      const btn = bar.querySelector('button');
-      btn.focus(); await window.__settle(200);
-      out.focused = document.activeElement === btn;
-      out.shown = window.__barOut();
-      btn.blur(); await window.__settle(200);
-      out.afterBlur = window.__barOut();
-      return out;`);
+      window.__reach(false); document.activeElement?.blur();
+      await window.__settle(200); return 1;`);
+    const r = { hidden: await page.evaluate("return !window.__barOut();"), focused: false };
+    for (let i = 0; i < 30 && !r.focused; i++) {
+      await tab();
+      r.focused = await page.evaluate(
+        "return !!document.querySelector('.vit-bar')?.contains(document.activeElement);");
+    }
+    await page.evaluate("await window.__settle(200); return 1;");
+    r.shown = await page.evaluate("return window.__barOut();");
+    await page.evaluate("document.activeElement?.blur(); await window.__settle(200); return 1;");
+    r.afterBlur = await page.evaluate("return window.__barOut();");
     check("and the keyboard reaches it too", r.hidden && r.focused && r.shown && !r.afterBlur, JSON.stringify(r));
   }
 
@@ -858,6 +869,58 @@ try {
       !r ? "n/a" : r.shownBefore && !r.shownAfter && r.backOnHover && r.ownDialogs
         && r.noModes && r.hasModes && r.opensThere && r.notHere && r.heldWhileOpen && r.remote,
       r ? JSON.stringify(r) : "the browser would not open the window");
+  }
+
+  /* A preview inside the speaker view is this same document in a window that
+     says so in its name. Over file:// it is another origin, so it cannot be
+     reached into from here — it is asked in a window of its own instead,
+     named the way the template names it.
+
+     The speaker's screen is a console, not a monitor: all of it runs ahead of
+     the audience, so a preview lands on the new page at once instead of
+     playing the change out. What a page's own drawings do still happens
+     there, which is the half the presenter is there to see coming. */
+  {
+    const ask = async name => {
+      const w = await open({ width: 900, height: 560, port: 9353 });
+      try {
+        await w.goto("about:blank");
+        await w.evaluate(`window.name = ${JSON.stringify(name)}; return 1;`);
+        await w.goto("file://" + file, ".vit-deck[data-ready]");
+        return await w.evaluate(`
+          await new Promise(r => setTimeout(r, 500));
+          const deck = document.querySelector('.vit-deck');
+          const done = fn => new Promise(r => { let ok = false;
+            const f = () => { if (ok) return; ok = true; deck.removeEventListener('vit:move-done', f); r(); };
+            deck.addEventListener('vit:move-done', f); fn(); setTimeout(f, 3000); });
+          let started = 0;
+          const real = document.startViewTransition.bind(document);
+          document.startViewTransition = o => { started++; return real(o); };
+          const from = window.vit.index;
+          await done(window.vit.next);
+          const out = { started, from, to: window.vit.index, mode: window.vit.mode,
+                        rail: !!document.querySelector('.vit-rail'),
+                        bar: !!document.querySelector('.vit-bar') };
+          /* a frame that plays itself: states of its own, no steps */
+          const slides = [...deck.querySelectorAll('.vit-slide')];
+          const k = slides.findIndex(s => !(+s.dataset.steps || 0) && s.querySelector('[data-tween-at]'));
+          if (k < 0) { out.plays = null; return out; }
+          await done(() => window.vit.go(k));
+          await new Promise(r => setTimeout(r, 300));
+          const state = a => [...new Set(a.map(x => x.playState))].sort();
+          out.plays = state(slides[k].getAnimations({ subtree: true })).includes('running');
+          return out;
+        `);
+      } finally { w.close(); }
+    };
+    const m = await ask("vit-mirror");
+    check("a preview presents, with neither the rail nor the toolbar",
+      m.mode === "present" && !m.rail && !m.bar, JSON.stringify(m));
+    check("and it lands on the page rather than playing the change out",
+      m.started === 0 && m.to === m.from + 1, JSON.stringify(m));
+    check("but a page that draws itself still draws there",
+      m.plays === null ? "n/a" : m.plays === true,
+      m.plays === null ? "no frame in this deck plays itself" : JSON.stringify({ plays: m.plays }));
   }
 
   /* The desk's two boundaries are the presenter's to move: the width of the

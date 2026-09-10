@@ -1874,7 +1874,11 @@ window.tween = (() => {
   let cur = -1, want = -1, mode = "present", peeked = null, busy = 0;
 
   let reduced, canvit;
-  const mirror = window.name === "vit-mirror";   // a preview inside the speaker view: it presents, and shows no rail
+  /* A preview inside the speaker view. It presents, shows no rail, and does
+     not play a page change out: the whole of that screen runs ahead of the
+     audience, so a preview lands on the new page at once and is legible from
+     the first frame. What a page's own drawings do still happens there. */
+  const mirror = window.name === "vit-mirror";
 
   const clamp = i => (i < 0 ? 0 : i > n - 1 ? n - 1 : i);
 
@@ -2406,7 +2410,7 @@ window.tween = (() => {
     const types = changing ? ["overview"]
       : m !== "overview" && own && `${own} ${dir}${boxed ? " boxed" : ""}`.split(" ");
 
-    transition(canvit && !reduced.matches && types, capturing => {
+    transition(canvit && !reduced.matches && !mirror && types, capturing => {
       if (capturing && faces) {
         faces[0].style.viewTransitionName = "";
         faces[1].style.viewTransitionName = "vit-zoom";

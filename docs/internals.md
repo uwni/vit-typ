@@ -215,6 +215,18 @@ the same: every key it sees is a key at the deck, so the window doubles as a
 remote — every key but the chrome's own, which act on the window they were
 pressed in.
 
+Its two previews are this same document in windows that say so in their name
+(`vit-mirror`), which is how each of them knows to present, to drop the rail
+and the toolbar, and not to play a page change out. That last one is the
+speaker view saying what it is: a console, not a monitor of the audience's
+screen. All of it already runs ahead of them — the counter, the progress bar
+and both previews are redrawn on `vit:move-ready`, which the deck announces at
+the *start* of a move, some 37 ms into a 730 ms turn — so a preview that played
+the change out would be the one thing on that screen still telling yesterday's
+news, and it would be unreadable while it did. Landing at once also spares two
+full-document captures a page turn, measured at 24–38 ms each; that is a
+saving, not the reason.
+
 **When the toolbar is out.** At the desk and in the overview it is furniture and
 stays. Over a page being shown it is chrome, and chrome does not sit on a slide:
 it is out only while somebody is reaching for it, or has the keyboard in it.

@@ -408,9 +408,13 @@ view** (`s`) opens a window you can drag to another screen: progress bar,
 current and next page, notes, a timer, and its own chrome — a toolbar, the key
 table and the settings panel, so what you open from it is on your screen rather
 than in front of the audience. Its previews are iframes loading this same HTML
-at a `#page.position` hash, so transitions and animation steps play there as
-they do on stage; keys and clicks in that window drive the main one, every key
-but those two. It works over `file://` and closes with the main window.
+at a `#page.position` hash, so nothing there is a second rendering of anything.
+That screen is your console, not a monitor of the audience's: all of it runs
+ahead of them, so a preview lands on the new page at once instead of playing
+the page change out — what you read is legible from the first frame. Animation
+steps still play there, since what a step does is what you are looking to see
+coming. Keys and clicks in that window drive the main one, every key but those
+two. It works over `file://` and closes with the main window.
 
 At the desk, the boundary between the rail and the page, and the one between
 the page and its notes, are marked with three dots and can be dragged: the rail
