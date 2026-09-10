@@ -476,16 +476,21 @@ html {
 
 /* ── the page, where it is not the screen ─────────────────────────────
    At the desk the page is a box beside the rail, so a page turn is captured as
-   that box's own group (vit-page) and root is not captured at all: the page's
-   own effect plays in the box instead of on the whole document — the same
-   slide, zoom or wipe, at the size the page happens to be.
+   that box's own group (vit-page) and nothing else is captured at all: the
+   page's own effect plays in the box instead of on the whole document — the
+   same slide, zoom or wipe, at the size the page happens to be.
 
-   Leaving root out is also what keeps the furniture around it real. A captured
-   element is not painted for as long as the transition runs, and what is not
-   painted is not hit-tested either; capturing root captures the document, so
-   the rail would be a picture of itself for the length of every page turn, and
-   a picture is not something a thumbnail can be clicked in. */
-html:active-view-transition-type(boxed) {
+   A name is not decoration. It says the element is captured, and a captured
+   element is not painted for as long as the transition runs — so it is not
+   hit-tested either, and between the two captures there is a frame with a hole
+   where it was. Root's name goes so that the furniture stays real: a thumbnail
+   cannot be clicked in a picture of itself. The chrome's names go for the same
+   reason turned around — they are there to hold it still while root animates,
+   and here root does not animate. All a name would buy them is the hole. */
+html:active-view-transition-type(boxed),
+html:active-view-transition-type(boxed) .vit-bar,
+html:active-view-transition-type(boxed) .vit-laser,
+html:active-view-transition-type(boxed) .vit-trail {
   view-transition-name: none;
 }
 /* The page's effect plays in the page's box, so it is clipped to it: a slide

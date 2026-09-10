@@ -107,9 +107,9 @@ written on `root`, which is right only while the page *is* the screen. So the
 page's snapshot is root while presenting and the deck's own group (`vit-page`)
 at the desk, where the page is a box beside the rail. Every effect rule names
 both, so the same slide, zoom or wipe plays either way; the transition carries
-the type `boxed` at the desk, under which root is not captured at all, and the
-page's group is clipped to its own box, since a slide pushes a page by its own
-width and would otherwise travel out over the rail.
+the type `boxed` at the desk, under which nothing outside the page is captured
+at all, and the page's group is clipped to its own box, since a slide pushes a
+page by its own width and would otherwise travel out over the rail.
 
 Leaving root out is not only about what animates. A captured element is not
 painted for as long as the transition runs, and what is not painted is not
@@ -118,6 +118,15 @@ of itself, and a thumbnail cannot be clicked in a picture. Measured on the
 tutorial, a desk page turn with root captured leaves the rail dead for 793 ms
 of an 810 ms turn; without it, for 42 ms — the capture itself, and nothing
 more.
+
+The chrome's names go with root's, for the same reason turned around.
+`vit-bar`, `vit-laser` and `vit-trail` exist so that the toolbar and the
+pointer are held still while root animates: a group of their own, `animation:
+none`. With root not captured there is nothing to hold them still from, and a
+name is not free — it is a capture, and a capture is a frame in which the
+element is not painted. Left named, the toolbar blinks once per page turn. So
+under `boxed` the page and the marks inside it are the only things in the
+document that carry a name, and an invariant walks the rest to say so.
 
 It has a price, and the price is a frame. A captured element is out of the live
 rendering from the moment the old state is taken until the new one is, and the

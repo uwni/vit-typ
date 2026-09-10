@@ -405,6 +405,18 @@ try {
           types: [...vt.types],
           page: named(/group\\(vit-page\\)/),
           root: named(/\\(root\\)/),
+          /* A name is a capture and a capture is a hole, so under boxed nothing
+             outside the page may carry one — the toolbar and the laser least of
+             all, since they sit over what the presenter is looking at. */
+          outside: (() => {
+            const w = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT, {
+              acceptNode: el => el.classList.contains('vit-deck') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+            const named = [];
+            while (w.nextNode())
+              if (getComputedStyle(w.currentNode).viewTransitionName !== 'none')
+                named.push((String(w.currentNode.className).split(' ')[0] || w.currentNode.tagName));
+            return named;
+          })(),
           rail: tb ? !!document.elementFromPoint((tb.left + tb.right) / 2, (tb.top + tb.bottom) / 2)?.closest('.vit-thumb') : null,
           rootOld: cs('::view-transition-old(root)').animationName,
           rootNew: cs('::view-transition-new(root)').animationName,
@@ -421,9 +433,9 @@ try {
     check("presenting, the page's effect is the screen's",
       !r.present.page && r.present.root && r.present.rootOld === "vit-leave" && r.present.rootNew === "vit-enter",
       JSON.stringify(r.present));
-    check("at the desk it is the page's box, and root is not captured at all",
-      r.desk.page && r.desk.types.includes("boxed") && !r.desk.root,
-      JSON.stringify(r.desk));
+    check("at the desk it is the page's box, and nothing else is captured at all",
+      r.desk.page && r.desk.types.includes("boxed") && !r.desk.root && r.desk.outside.length === 0,
+      JSON.stringify({ ...r.desk, outside: r.desk.outside }));
     check("so the rail is still there to be clicked while the page turns",
       r.desk.rail === true, JSON.stringify({ rail: r.desk.rail }));
     /* The price of that: for a frame at the start of a transition the deck is

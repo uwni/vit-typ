@@ -450,7 +450,10 @@ padding-bottom: 44px;
   animation-duration: calc(var(--vit-duration) / var(--vit-speed));
   animation-timing-function: var(--vit-easing);
 }
-html:active-view-transition-type(boxed) {
+html:active-view-transition-type(boxed),
+html:active-view-transition-type(boxed) .vit-bar,
+html:active-view-transition-type(boxed) .vit-laser,
+html:active-view-transition-type(boxed) .vit-trail {
   view-transition-name: none;
 }
 ::view-transition-group(vit-page) {
