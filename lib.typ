@@ -535,6 +535,14 @@
   "enter-" + p.enter.effect + " leave-" + p.leave.effect + _bundles(p).map(b => " " + _tag(b.role, b.vars)).join()
 )
 
+/// The layout a deck is cut to: the size of a page and the margin its contents
+/// are held off the edge by. An HTML export has no pages — a page set rule there
+/// is ignored, and the compiler says so — so this is not read off `page`: the
+/// document tells `player` what its layout is, and `slide` reads it back here.
+/// `deck` sets its own page from the same numbers, for the PDF.
+/// -> state
+#let _layout = state("vit-layout", none)
+
 /// The pair `deck(transition:)` set, for the pages that set none of their own;
 /// `none` is no transition between pages.
 /// -> state
@@ -714,25 +722,37 @@
   (table: t, css: sets.map(b => _rule(b.role, b.vars)).join(""))
 }
 
-/// The deck: page size, fonts, and on the HTML side the stylesheet and the
-/// runtime.
+/// The player: the stylesheet, the runtime and the chrome — the toolbar, the
+/// overview, the speaker view, the laser — around pages that are already laid
+/// out. This is vit's side of a deck, and all of it: what a page is made of,
+/// how big it is and what colour it sits on are the document's, and the player
+/// reads them off the page it is on rather than being told twice.
 ///
-/// `#show: deck.with(title: "…")`. One compile gives the PDF, one with
-/// `--features html` the HTML; side by side under one name, the toolbar's
-/// download link finds the PDF.
+/// `deck` is a document that is nothing but a vit deck: it sets the page, the
+/// text and the title, and then calls this. A package that already is the
+/// document — one that lays out its own pages, with its own margins, header and
+/// footer — sets its page as it always did and calls this directly. Either way
+/// there is one page, set once, and `slide` cuts its frames to it.
 /// -> content
-#let deck(
-  /// Document title.
-  /// -> str
-  title: "vit",
-  /// Layout width. The PDF page size; in the HTML every frame's `html.frame` is
-  /// the same size — `slide` reads `page.width` / `page.height`, nothing is
-  /// hard-coded.
+#let player(
+  /// Layout width — the size of a page. The PDF's page is this wide and so is
+  /// every frame's `html.frame`, and the player's aspect ratio follows.
   /// -> length
   width: 1280pt,
   /// Layout height.
   /// -> length
   height: 720pt,
+  /// How far the layout is held off the edge of a page. `slide` reads it back as
+  /// the inset of every frame, so a document that composes its own margins —
+  /// inside the pages it hands over — says `0pt` here and is framed exactly.
+  /// -> length | dictionary
+  margin: 60pt,
+  /// Layout background. `html.frame` carries no page background, so this opens
+  /// the stylesheet as `--vit-page` and is painted under the slides and the
+  /// thumbnails; on the PDF side `deck` gives the same value to `page(fill:)`,
+  /// so the two sides match.
+  /// -> color
+  fill: rgb("#111318"),
   /// Target of the toolbar's PDF download link. `auto` = the `.pdf` with the
   /// HTML's name, `none` = no button, a string is used as is.
   /// -> auto | none | str
@@ -765,18 +785,6 @@
   /// layout's colours are Typst's.
   /// -> auto | str
   theme: auto,
-  /// Layout background. The PDF uses `page(fill:)`; `html.frame` carries no
-  /// page background, so the same value opens the stylesheet as `--vit-page`
-  /// and is painted under the slides and thumbnails — identical on both
-  /// sides, and independent of the chrome theme.
-  /// -> color
-  fill: rgb("#111318"),
-  /// Font stack, glyph-by-glyph fallback in order. The default carries a CJK
-  /// family for a reason: with a Latin family alone, CJK text falls back glyph
-  /// by glyph to whatever system family has the glyph, and weights differ
-  /// within one line.
-  /// -> array
-  font: ("DejaVu Sans", "Noto Sans CJK SC"),
   /// What the laser pointer is when a deck is opened: `ink`, the colour of the
   /// dot and of the tracer behind it, `size`, how wide the dot is, and `trail`,
   /// how long the tracer lasts, in milliseconds (`0` for none). The presenter can change all
@@ -791,12 +799,10 @@
   let fx = _pair(transition)
   _bezier(easing)
   assert(theme in (auto, "dark", "light"), message: "theme must be auto, \"dark\" or \"light\"")
-  set document(title: title)
-  set page(width: width, height: height, margin: 0pt, fill: fill)
-  set text(size: 26pt, fill: rgb("#d5d9e2"), font: font)
   context {
     _fx.update(fx)
     _target.update(target())
+    _layout.update((width: width, height: height, margin: margin))
     if target() == "html" {
       let marks = _marks()
       html.elem(
@@ -860,6 +866,59 @@
       // the player's own chrome, written against the deck's surface alone
       html.script(read("chrome.js"))
     } else { body }
+  }
+}
+
+/// A document that is a deck: the page it is laid out on, the text it is set
+/// in, the title it goes by — and then the player around it. One compile gives
+/// the PDF, one with `--features html` the HTML; side by side under one name,
+/// the toolbar's download link finds the PDF.
+///
+/// `#show: deck.with(title: "…")`. Everything the player takes may be named
+/// here too and is handed straight on; what is named here and not there is what
+/// makes this a document rather than a player.
+/// -> content
+#let deck(
+  /// Document title.
+  /// -> str
+  title: "vit",
+  /// Layout width. The page's size on the PDF side, and the player's layout on
+  /// the HTML side: one figure, given once, and both sides take it from here.
+  /// -> length
+  width: 1280pt,
+  /// Layout height.
+  /// -> length
+  height: 720pt,
+  /// How far the layout is held off the edge of the page: the PDF's page margin
+  /// and every frame's inset alike, from this one figure.
+  /// -> length | dictionary
+  margin: 60pt,
+  /// Layout background: `page(fill:)` on the PDF side, and the ground the
+  /// stylesheet paints under the slides and thumbnails on the HTML side —
+  /// identical on both, and independent of the chrome theme.
+  /// -> color
+  fill: rgb("#111318"),
+  /// Font stack, glyph-by-glyph fallback in order. The default carries a CJK
+  /// family for a reason: with a Latin family alone, CJK text falls back glyph
+  /// by glyph to whatever system family has the glyph, and weights differ
+  /// within one line.
+  /// -> array
+  font: ("DejaVu Sans", "Noto Sans CJK SC"),
+  /// The player's settings, handed on untouched.
+  /// -> arguments
+  ..rest,
+  /// The pages.
+  /// -> content
+  body,
+) = {
+  assert(rest.pos().len() == 0, message: "deck takes the pages as its body, not as positional arguments")
+  set document(title: title)
+  set text(size: 26pt, fill: rgb("#d5d9e2"), font: font)
+  context {
+    // The page is the paged target's alone: an HTML export has none, ignores the
+    // rule and says so, and the player is told the same numbers either way.
+    set page(width: width, height: height, margin: margin, fill: fill) if target() != "html"
+    player(width: width, height: height, margin: margin, fill: fill, ..rest.named(), body)
   }
 }
 
@@ -1015,6 +1074,14 @@
   let section = (class: "vit-slide")
   context {
     let fx = if own == none { _fx.get() } else { own }
+    // The layout this deck is cut to, as the player was told it. A frame has no
+    // page of its own, so the margin becomes its inset; on the PDF side the page
+    // has already applied it and the block fills what is left.
+    let geo = _layout.get()
+    assert(
+      geo != none or target() != "html",
+      message: "a slide belongs to a deck: `deck` or `player` says what layout its frames are cut to",
+    )
     // this page's frames among the document's, and how many steps each has
     let base = _frames.get().first()
     let all = _steps()
@@ -1052,7 +1119,7 @@
                 html.elem(
                   "div",
                   attrs: (class: "vit-page"),
-                  html.frame(block(width: page.width, height: page.height, inset: 60pt, body)),
+                  html.frame(block(width: geo.width, height: geo.height, inset: geo.margin, body)),
                 )
               },
             ))
@@ -1064,7 +1131,7 @@
       )
     } else {
       for body in bodies {
-        block(width: 100%, height: 100%, inset: 60pt, body)
+        block(width: 100%, height: 100%, body)
         pagebreak(weak: true)
       }
     }
