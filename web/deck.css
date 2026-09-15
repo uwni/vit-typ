@@ -1,0 +1,941 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+/* The chrome's light/dark theme only governs these tokens (toolbar, overview,
+   speaker view); the layout itself is Typst's and not ours. The runtime lands
+   data-theme on <html> from deck(theme:) / the system preference; the speaker
+   window copies the same tokens. */
+html {
+  color-scheme: dark;
+  --vit-bg: #08090c;
+  --vit-panel: #111318;
+  --vit-glass: rgba(24, 27, 35, 0.82);
+  --vit-line: #2b313d;
+  --vit-fg: #eef1f7;
+  --vit-fg2: #aab3c5;
+  --vit-muted: #8992a5;
+  --vit-accent: #7aa2ff;
+  --vit-on-accent: #0d1017;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+  --vit-bg: #eef0f4;
+  --vit-panel: #ffffff;
+  --vit-glass: rgba(255, 255, 255, 0.85);
+  --vit-line: #d3d8e1;
+  --vit-fg: #14171e;
+  --vit-fg2: #3f4756;
+  --vit-muted: #6b7384;
+  --vit-accent: #2f62d8;
+  --vit-on-accent: #ffffff;
+}
+/* The layout's constants come first in this stylesheet, written by the Typst
+   side as a :root block from deck(): --vit-page, its background (content, not
+   chrome, so it does not follow the theme), --vit-w and --vit-h, its size in pt,
+   --vit-duration and --vit-easing, its pace. A transition can set its own
+   duration, easing and effect knobs; the runtime writes only --vit-speed, the
+   presenter's multiplier, which every duration here is divided by, so a
+   duration written anywhere still answers to the speed keys. The stage is the
+   layout's box on screen, as wide as the window allows, as tall as the window
+   allows, whichever binds. */
+html {
+  --vit-speed: 1;
+  --vit-stage: min(100vw, calc(100svh * var(--vit-w) / var(--vit-h)));
+  background: var(--vit-bg);
+}
+/* The window, before the runtime has said which mode we are in and in the one
+   it opens to. `place-items` is not idle here even where the layout is a block:
+   `justify-items` sizes a block-level child to fit its content, so a mode that
+   wants the width says so. */
+body {
+  margin: 0;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+}
+/* The snapshots are painted above the page in the top layer; without this they
+   would swallow every click as well. */
+::view-transition {
+  pointer-events: none;
+}
+.vit-deck {
+  position: relative;
+  aspect-ratio: var(--vit-w) / var(--vit-h);
+  width: var(--vit-stage);
+  margin: auto;
+  background: var(--vit-page);
+  overflow: hidden;
+}
+/* Before the scripts have run (hoist.js lifts the marks, the runtime marks the deck ready) nothing is shown: at that moment the marks are still in place and every state of an element animation is stacked, which nobody should see. Only the first frame is laid out, the rest costs nothing until hoist.js shows it to measure. */
+.vit-deck:not([data-ready]) {
+  visibility: hidden;
+}
+.vit-deck:not([data-ready]) .vit-group ~ .vit-group {
+  display: none;
+}
+.vit-deck:not([data-ready]) .vit-slide ~ .vit-slide {
+  display: none;
+}
+.vit-deck[data-ready] .vit-slide {
+  display: none;
+}
+.vit-deck[data-ready] .vit-slide.is-active {
+  display: block;
+}
+/* A group always fills the deck and always stays in the layout: everything in
+   it but the current frame is display:none, so while presenting it is an empty
+   box with no visual effect. But it **has a box**, so the overview's whole-page
+   zoom can be named on the group, independent of which frame is opened. */
+.vit-group {
+  position: absolute;
+  inset: 0;
+}
+.vit-slide {
+  position: absolute;
+  inset: 0;
+}
+.vit-page {
+  position: absolute;
+  inset: 0;
+}
+.vit-page > svg:not(.vit-mark) {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+/* overflow must be visible: getBBox() is the geometric box without the stroke,
+   and hidden clips half a stroke width on every side (the ends of a Lissajous
+   curve get cut flat). View Transitions snapshots carry ink overflow anyway,
+   so nothing flickers. */
+.vit-mark {
+  position: absolute;
+  display: block;
+  overflow: visible;
+  view-transition-class: vit-mo;
+}
+/* speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
+.vit-note {
+  display: none;
+}
+
+/* ── the three modes ──────────────────────────────────────────────────
+   The deck (one page, live) and the rail (one thumbnail per page) are both in
+   the document at all times, side by side; a mode is which of them is shown
+   and how the rail is laid out. Nothing is ever moved between them, so the
+   frames stay where the model says they are and a thumbnail is never a second
+   rendering: the picture in it is a <use> of the page itself.
+
+   The verdict lands on <html data-mode>, written by the runtime and read
+   nowhere else. */
+body > .vit-rail,
+body > .vit-notes,
+body > .vit-grip {
+  display: none;
+}
+
+/* The deck's cell. Only at the desk is it a box of its own, because the deck
+   has to be sized against what the cell leaves, and only an element can be
+   measured. */
+.vit-pane {
+  display: contents;
+}
+
+/* ── the desk ─────────────────────────────────────────────────────────
+   Where the deck opens, and what Esc comes back to: the pages down the left,
+   the one they point at beside them, its notes underneath. */
+/* The gap between two parts is a track of its own, so the boundary is an
+   element the pointer can arrive on rather than a place between two. Nothing
+   moves: the track is as wide as the gap was, and the defaults are the layout
+   as it was drawn.
+
+   The two sizes are registered as not inheriting because they describe the
+   grid of one element and nothing else, and a drag writes one of them on
+   every frame, which an inherited property would make the whole document pay
+   for. */
+@property --vit-rail {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --vit-split {
+  syntax: "<length-percentage>";
+  inherits: false;
+  initial-value: 0px;
+}
+html {
+  --vit-gap: 14px;
+}
+:root[data-mode="desk"] body {
+  --vit-rail: clamp(7rem, 17vw, 14rem);
+  --vit-split: calc((100% - var(--vit-gap)) * 2 / 3);
+  display: grid;
+  grid-template-columns: clamp(7rem, var(--vit-rail), 40vw) var(--vit-gap) minmax(0, 1fr);
+  grid-template-rows: minmax(0, clamp(6rem, var(--vit-split), calc(100% - 8rem))) var(--vit-gap) minmax(0, 1fr);
+  place-items: stretch;
+  gap: 0;
+  padding: var(--vit-gap);
+  height: 100svh;
+}
+:root[data-mode="desk"] .vit-rail {
+  display: flex;
+  grid-area: 1 / 1 / -1 / 2;
+}
+:root[data-mode="desk"] .vit-pane {
+  display: block;
+  position: relative;
+  grid-area: 1 / 3 / 2 / 4;
+  container-type: size;
+  min-height: 0;
+  /* the page's box, in the cell's own units: the deck takes it, and so does
+     the ground underneath */
+  --vit-fit: min(100cqw, calc(100cqh * var(--vit-w) / var(--vit-h)));
+}
+/* The page's ground: the page again, at the deck's own size, under it. A
+   captured element is out of the live rendering for the frame between the two
+   captures. With root left out (so that the rail stays interactive) that frame
+   is a hole where the page was. It is filled with the page rather than a
+   colour: a <use> of the deck's own drawing, the same as a thumbnail, so nothing
+   is rendered twice.
+
+   This is a workaround for that one frame, not a rule about where a page's
+   ground belongs; TODO.md says what would let it go. */
+.vit-plate {
+  display: none;
+}
+:root[data-mode="desk"] .vit-plate {
+  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: var(--vit-fit);
+  aspect-ratio: var(--vit-w) / var(--vit-h);
+  background: var(--vit-page);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+:root[data-mode="desk"] .vit-deck {
+  width: var(--vit-fit);
+  border-radius: 0.5rem;
+}
+:root[data-mode="desk"] .vit-notes {
+  display: block;
+  grid-area: 3 / 3 / 4 / 4;
+  /* the toolbar floats over the bottom-right corner: leave it room */
+  padding-bottom: 44px;
+}
+
+/* ── the boundaries ───────────────────────────────────────────────────
+   One per size the presenter can move; which is being dragged is `data-grip`,
+   answered by hit-testing it like anything else. The three dots are one tile
+   repeated, so the strip's length is the count. */
+.vit-grip {
+  display: none;
+  position: relative;
+  color: var(--vit-muted);
+  touch-action: none;
+  user-select: none;
+}
+:root[data-mode="desk"] .vit-grip {
+  display: block;
+}
+.vit-grip:hover,
+.vit-grip.is-held {
+  color: var(--vit-fg);
+}
+.vit-grip[data-grip="rail"] {
+  grid-area: 1 / 2 / -1 / 3;
+  cursor: col-resize;
+}
+.vit-grip[data-grip="notes"] {
+  grid-area: 2 / 3 / 3 / 4;
+  cursor: row-resize;
+}
+.vit-grip::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  background-image: radial-gradient(circle, currentColor 1.4px, transparent 1.6px);
+}
+.vit-grip[data-grip="rail"]::before {
+  width: 4px;
+  height: 18px;
+  background-size: 4px 6px;
+}
+.vit-grip[data-grip="notes"]::before {
+  width: 18px;
+  height: 4px;
+  background-size: 6px 4px;
+}
+
+/* the overview: every page at once, in a grid down the window */
+:root[data-mode="overview"] body {
+  display: block;
+  place-items: normal;
+}
+:root[data-mode="overview"] .vit-deck {
+  display: none;
+}
+:root[data-mode="overview"] .vit-rail {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr));
+  gap: 1rem;
+  padding: 1rem;
+  overflow: visible;
+}
+
+/* ── the rail ─────────────────────────────────────────────────────────
+   One thumbnail per page: the caption above it so the group's bottom edge is
+   the picture's, and the dots in the picture's bottom-right corner. Down a
+   column at the desk, across a grid in the overview. Only the two rules above
+   differ between the two. */
+.vit-rail {
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.vit-thumb {
+  position: relative;
+  flex: none;
+  cursor: pointer;
+}
+/* What the page's picture is doing here: a <use> of the very drawing the deck
+   holds, so the page is rendered once and the rail costs no second copy of it.
+   Empty until the runtime points it somewhere. */
+.vit-stand {
+  display: block;
+  width: 100%;
+  aspect-ratio: var(--vit-w) / var(--vit-h);
+  content-visibility: auto;
+  border: 1px solid var(--vit-line);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--vit-page);
+}
+.vit-thumb:hover .vit-stand,
+.vit-thumb.is-here .vit-stand {
+  border-color: var(--vit-accent);
+}
+.vit-thumb.is-here .vit-stand {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-accent) 28%, transparent);
+}
+.vit-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0 0.2rem 0.3rem;
+  font:
+    500 12px/1.35 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.vit-cap b {
+  flex: none;
+  font-weight: 600;
+  color: var(--vit-muted);
+  font-variant-numeric: tabular-nums;
+}
+.is-here .vit-cap b {
+  color: var(--vit-accent);
+}
+.vit-cap span {
+  color: var(--vit-fg2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vit-dots {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px 6px;
+  border-radius: 99px;
+  background: var(--vit-glass);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+/* three states, one shape: what is still ahead is an outline, what has been
+   passed is filled in the muted colour, the position we are on is filled in the
+   accent */
+.vit-dots i {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--vit-accent);
+  cursor: pointer;
+}
+.vit-dots i.is-on {
+  background: var(--vit-muted);
+  border-color: var(--vit-muted);
+}
+.vit-dots i.is-now {
+  background: var(--vit-accent);
+  border-color: var(--vit-accent);
+}
+/* pointing at one says so whatever state it is in, so this comes last */
+.vit-dots i:hover,
+.vit-dots i.is-peek {
+  border-color: var(--vit-fg);
+}
+.vit-dots i.is-peek {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vit-fg) 35%, transparent);
+}
+
+/* narrow: the rail keeps the numbers only, and the deck takes the width it is
+   given; the notes get the rest of the height, which is what is short here */
+@media (max-width: 720px) {
+  html {
+    --vit-gap: 8px;
+  }
+  :root[data-mode="desk"] body {
+    grid-template-columns: 5.5rem var(--vit-gap) minmax(0, 1fr);
+    grid-template-rows: auto var(--vit-gap) minmax(0, 1fr);
+  }
+  /* nothing to move: the rail is down to its numbers and the deck takes what
+     it is given */
+  :root[data-mode="desk"] .vit-grip {
+    display: none;
+  }
+  :root[data-mode="desk"] .vit-cap span {
+    display: none;
+  }
+}
+
+/* ── preview and notes ────────────────────────────────────────────────
+   Two components, used by the desk and by the speaker view: a copy of this
+   document showing one position, and one page's notes. */
+.vit-mirror {
+  display: block;
+  box-sizing: border-box;
+  border: 1px solid var(--vit-line);
+  width: 100%;
+  aspect-ratio: var(--vit-w) / var(--vit-h);
+  border-radius: 6px;
+  background: var(--vit-page);
+  pointer-events: none;
+}
+.vit-notes {
+  overflow: auto;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--vit-panel);
+  border: 1px solid var(--vit-line);
+  color: var(--vit-fg);
+  font:
+    16px/1.6 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.vit-notes:empty::before {
+  content: "No notes for this page";
+  color: var(--vit-muted);
+}
+.vit-notes > :first-child {
+  margin-top: 0;
+}
+.vit-notes > :last-child {
+  margin-bottom: 0;
+}
+.vit-notes ul,
+.vit-notes ol {
+  padding-left: 1.3em;
+}
+::view-transition-group(*) {
+  animation-duration: calc(var(--vit-duration) / var(--vit-speed));
+  animation-timing-function: var(--vit-easing);
+}
+/* ── toolbar / laser pointer ──────────────────────────────────────────── */
+
+/* ── the page, where it is not the screen ─────────────────────────────
+   At the desk the page is a box beside the rail, so a page turn is captured as
+   that box's own group (vit-page) and nothing else is captured at all: the
+   page's own effect plays in the box instead of on the whole document: the
+   same slide, zoom or wipe, at the size the page happens to be.
+
+   A name marks the element as captured, and a captured
+   element is neither painted nor hit-tested while the transition runs. Root's
+   goes so that a thumbnail is not a picture of itself; the chrome's go for the
+   opposite reason: they hold it still while root animates, and here root does
+   not. */
+html:active-view-transition-type(boxed),
+html:active-view-transition-type(boxed) .vit-bar,
+html:active-view-transition-type(boxed) .vit-laser,
+html:active-view-transition-type(boxed) .vit-trail {
+  view-transition-name: none;
+}
+/* The page's effect plays in the page's box, so it is clipped to it: a slide
+   pushes a page by its own width, and without this the page being left would
+   travel out over the rail and the notes instead of off its own edge. */
+::view-transition-group(vit-page) {
+  clip-path: inset(0);
+}
+
+/* How far from the corner the toolbar sits, and how big the patch of page you
+   reach it through is. The same number caps the toolbar's width, because a
+   toolbar wider than that patch could not be reached in full. */
+html {
+  --vit-bar-inset: 16px;
+  --vit-reach: 28rem;
+}
+/* The patch itself: fixed to the same corner of the window as the toolbar, so
+   the two cover the same ground, and a child of the deck in the document, so a
+   press on it is a press on the page and bubbles to the deck like any other. It
+   is never painted and is in nothing's way but the pointer's. */
+.vit-reach {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: var(--vit-reach);
+  height: 5rem;
+}
+.vit-bar {
+  position: fixed;
+  right: var(--vit-bar-inset);
+  bottom: var(--vit-bar-inset);
+  max-width: calc(var(--vit-reach) - 2 * var(--vit-bar-inset));
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--vit-glass);
+  border: 1px solid var(--vit-line);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  font:
+    500 12px/1 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--vit-muted);
+  transition: opacity 0.18s ease;
+  view-transition-name: vit-bar;
+}
+/* Furniture at the desk and in the overview. Over a page being shown it is
+   chrome, and out only while it is being reached for or the keyboard is in it.
+   Hidden, it cannot be pressed, because the corner it sits in belongs to the
+   page and a press there turns the page. It is also unnamed, since a group of
+   its own would be an invisible sheet of frosted glass over the page. */
+:root[data-mode="present"] .vit-bar {
+  opacity: 0;
+  pointer-events: none;
+  view-transition-name: none;
+}
+:root[data-mode="present"] .vit-bar.is-reached,
+:root[data-mode="present"] .vit-bar:has(:focus-visible) {
+  opacity: 1;
+  pointer-events: auto;
+  view-transition-name: vit-bar;
+}
+/* where nothing can hover there is no reaching for it, so there it stays */
+@media (any-hover: none) {
+  :root[data-mode="present"] .vit-bar {
+    opacity: 1;
+    pointer-events: auto;
+    view-transition-name: vit-bar;
+  }
+}
+.vit-bar button,
+.vit-bar a {
+  all: unset;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  color: var(--vit-fg2);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    color 0.12s;
+}
+.vit-bar button:hover,
+.vit-bar a:hover {
+  background: var(--vit-line);
+  color: var(--vit-fg);
+}
+.vit-bar button[aria-pressed="true"] {
+  background: var(--vit-accent);
+  color: var(--vit-on-accent);
+}
+.vit-bar button:focus-visible,
+.vit-bar a:focus-visible {
+  outline: 2px solid var(--vit-accent);
+  outline-offset: 2px;
+}
+.vit-bar svg {
+  width: 17px;
+  height: 17px;
+  pointer-events: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.vit-bar .vit-count {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  height: 32px;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* The dot the presenter points with. The mouse's cursor and the DOM dot below
+   are the same image. deck(laser:) writes it, together with --vit-laser-
+   ink, -size and -hot, so a document can open with a pointer of its own; the
+   runtime rewrites the same four when the presenter picks others. */
+/* the DOM dot is the pointer here, so hide the system one: else there are two */
+body.vit-lasing.vit-nomouse .vit-deck {
+  cursor: none;
+}
+/* The tracer: where the pointer has just been, each segment thinner than the
+   one before it. The segments are in the document and the runtime only gives
+   each one a piece of the path, so the tracer can be no longer than there are
+   segments. */
+.vit-trail {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  pointer-events: none;
+  overflow: visible;
+  /* The alpha belongs to the group: segments share their end points, and a
+     per-segment alpha paints every join twice and beads the tracer. */
+  opacity: 0.72;
+}
+/* Round, so a bend is filled in: a segment is a straight line, and butt ends
+   would leave a notch on the outside of every turn. */
+.vit-trail path {
+  fill: none;
+  stroke: var(--vit-laser-ink);
+  stroke-linecap: round;
+}
+/* no tracer where there is no pointing: off, or the page is a thumbnail */
+body:not(.vit-lasing) .vit-trail,
+:root:not([data-mode="present"]) .vit-trail {
+  display: none;
+}
+
+.vit-laser {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 30;
+  width: var(--vit-laser-size);
+  height: var(--vit-laser-size);
+  margin: calc(var(--vit-laser-size) / -2) 0 0 calc(var(--vit-laser-size) / -2);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  background: var(--vit-laser) center / var(--vit-laser-size)
+    var(--vit-laser-size) no-repeat;
+}
+.vit-laser.is-on {
+  opacity: 1;
+}
+
+body.vit-lasing .vit-deck {
+  cursor:
+    var(--vit-laser) var(--vit-laser-hot) var(--vit-laser-hot),
+    none;
+}
+
+/* The toolbar, the laser and its tracer float over the page, and a transition
+   must not carry them with it. Each is given a name, which puts it in the
+   transition's own tree, drawn above the page's snapshots, so it stays in
+   sight while an opaque one slides or zooms across. Its group's animation is
+   switched off so it also stays still: the group would otherwise interpolate
+   the old box into the new and stretch the snapshot over the difference,
+   smearing the row of icons.
+
+   The price is that a named element is a picture for the length of a
+   transition, and pictures are not hit-tested. Nothing is aimed at them then,
+   which is why the deck takes no clicks while one runs.
+
+   The toolbar is named only while it is out (see above): backdrop-filter is
+   copied to ::view-transition-group() while opacity is only baked into the
+   snapshot, so a hidden toolbar with a group of its own would be an invisible
+   sheet of frosted glass over the page. */
+/* and the pointer's two, only while it is out: the tracer covers the whole
+   window, and a group that size captured on every page turn is a full-screen
+   sheet composited over the page for no reason at all. */
+body.vit-lasing .vit-laser {
+  view-transition-name: vit-laser;
+}
+body.vit-lasing .vit-trail {
+  view-transition-name: vit-trail;
+}
+::view-transition-group(vit-bar),
+::view-transition-group(vit-laser),
+::view-transition-group(vit-trail),
+::view-transition-old(vit-bar),
+::view-transition-old(vit-laser),
+::view-transition-old(vit-trail),
+::view-transition-new(vit-bar),
+::view-transition-new(vit-laser),
+::view-transition-new(vit-trail) {
+  animation: none;
+}
+::view-transition-old(vit-bar),
+::view-transition-old(vit-laser),
+::view-transition-old(vit-trail) {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vit-bar {
+    transition: none;
+  }
+}
+
+/* no pointing where the page is not the whole screen: only the cursor is tucked away; the lasing flag stays and comes back on leaving */
+:root:not([data-mode="present"]) body.vit-lasing .vit-deck {
+  cursor: default;
+}
+
+/* ── black screen (b / .) ─────────────────────────────────────────────── */
+body.vit-black {
+  background: #000;
+}
+body.vit-black > * {
+  visibility: hidden;
+}
+
+/* ── key help (?) ─────────────────────────────────────────────────────── */
+.vit-help {
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font:
+    14px/1.5 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--vit-fg2);
+  cursor: pointer;
+}
+/* showModal focuses the dialog itself when it holds nothing focusable, and a
+   ring around the whole sheet is noise; the controls inside keep theirs. */
+.vit-help:focus,
+.vit-settings:focus {
+  outline: none;
+}
+/* only when open: a display here would override the closed dialog's own */
+.vit-help[open] {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+.vit-help::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.vit-help table {
+  padding: 14px 22px;
+  border-spacing: 0 3px;
+  border-radius: 10px;
+  background: var(--vit-panel);
+  border: 1px solid var(--vit-line);
+}
+.vit-help td {
+  padding: 1px 6px;
+}
+.vit-about {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.vit-help kbd {
+  font: inherit;
+  color: var(--vit-fg);
+  background: var(--vit-line);
+  border-radius: 4px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* ── settings (, or the toolbar) ──────────────────────────────────────
+   The presenter's dials: speed, and what the laser looks like. Each control
+   says what it sets in data-set; the runtime reads that. Same overlay as the
+   help: a click on the backdrop closes it. */
+.vit-settings {
+  margin: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font:
+    14px/1.5 ui-sans-serif,
+    system-ui,
+    sans-serif;
+  color: var(--vit-fg2);
+}
+.vit-settings::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+.vit-settings form {
+  display: grid;
+  gap: 10px;
+  min-width: 23rem;
+  padding: 18px 22px 16px;
+  border-radius: 10px;
+  background: var(--vit-panel);
+  border: 1px solid var(--vit-line);
+}
+.vit-settings h2 {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vit-muted);
+}
+.vit-settings .vit-row {
+  display: grid;
+  grid-template-columns: 6rem 1fr 3.4rem;
+  align-items: center;
+  gap: 10px;
+}
+.vit-settings output {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--vit-fg);
+}
+.vit-settings input[type="range"] {
+  width: 100%;
+  accent-color: var(--vit-accent);
+}
+.vit-settings input[type="color"] {
+  width: 100%;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--vit-line);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.vit-seg {
+  display: flex;
+  gap: 4px;
+}
+.vit-settings button {
+  border-radius: 6px;
+  border: 1px solid var(--vit-line);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.vit-seg button {
+  flex: 1;
+  padding: 3px 8px;
+}
+.vit-seg button[aria-pressed="true"] {
+  border-color: var(--vit-accent);
+  color: var(--vit-fg);
+}
+.vit-reset {
+  justify-self: start;
+  margin-top: 4px;
+  padding: 4px 14px;
+}
+
+/* ── speaker view ─────────────────────────────────────────────────────
+   A separate window, about:blank: the runtime copies this whole stylesheet
+   into it and puts .vit-speaker on its <html>, so the tokens, the toolbar and
+   these rules come from one file, the layout's constants with them. */
+.vit-speaker {
+  color: var(--vit-fg2);
+  font:
+    15px/1.55 ui-sans-serif,
+    system-ui,
+    sans-serif;
+}
+.vit-speaker body {
+  margin: 0;
+  height: 100vh;
+  min-height: 0;
+  padding: 12px;
+  display: grid;
+  place-items: stretch;
+  gap: 12px;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+.vit-speaker .prog {
+  grid-column: 1 / -1;
+  height: 3px;
+  margin: -12px -12px 0;
+  background: var(--vit-line);
+}
+.vit-speaker .prog i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--vit-accent);
+  transition: width 0.3s var(--vit-easing);
+}
+.vit-speaker header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  color: var(--vit-muted);
+}
+.vit-speaker header b {
+  color: var(--vit-fg);
+  font-variant-numeric: tabular-nums;
+}
+.vit-speaker header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vit-speaker header time {
+  margin-left: auto;
+  font:
+    600 26px/1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  color: var(--vit-fg);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.vit-speaker main,
+.vit-speaker aside {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.vit-speaker small {
+  color: var(--vit-muted);
+}
+.vit-speaker [hidden] {
+  display: none;
+}
+.vit-speaker main {
+  cursor: default;
+}
+.vit-speaker body.vit-lasing main {
+  cursor:
+    var(--vit-laser) var(--vit-laser-hot) var(--vit-laser-hot),
+    none;
+}
+.vit-speaker .vit-notes {
+  flex: 1;
+  min-height: 0;
+}
