@@ -307,16 +307,16 @@
     title: "build: frames that accumulate",
     note: [What stays on the page is written once; the source then reads as what each step adds.],
     ..build(
-      item("measure", blue, "every marked box, before anything moves"),
-      item("hoist", amber, "each one into an SVG host with a name"),
+      item("record", blue, "every marked box, where the layout put it"),
+      item("draw", amber, "each one again, in a frame placed by percentage"),
       item("pair", green, "old against new, by name; the browser does this itself"),
     ).map(r => lesson(
       "build: frames that accumulate",
       [`build(a, b, c)` is the three frames `a`, `a + b`, `a + b + c`. Content in, content out, so it builds the body of a drawing just as well.],
       src(```typ
       #slide(title: "How it works", ..build(
-        item("measure", blue, "every marked box…"),
-        item("hoist", amber, "each one into an SVG host…"),
+        item("record", blue, "every marked box, where the layout…"),
+        item("draw", amber, "each one again, in a frame placed…"),
         item("pair", green, "old against new, by name…"),
       ))
       ```),
@@ -545,12 +545,12 @@
   }
   slide(
     title: "Assemblies: layers",
-    note: [When X's layer arrives the square glides over as one picture, because it *is* one picture: written once, laid out the same on every frame, and only ever moved as a whole. `meet` is the corner the arriving layer does not push; it has to be given, because HTML export reports sizes but not positions (typst\#5512).],
+    note: [When X's layer arrives the square glides over as one picture, because it *is* one picture: written once, laid out the same on every frame, and only ever moved as a whole. The layers are hung on the point they share, which `anchor` names in the later one: it can be anywhere in the picture.],
     ..reveal(3, (step, at) => lesson(
       "Assemblies: layers",
       [A group interpolates its *box* and cross-fades its two *pictures*. What is inside them is never moved. So what moves has to be one picture.],
       src(```typ
-      #layers("pb", meet: bottom + right,
+      #layers("pb",
         cd({                     // the square, written once
           node((1, 0), $B$); node((1, 1), $D$)
           node((0, 0), at(2, mark("pbA", transition: "zoom")[$A$]))
@@ -558,15 +558,13 @@
                stroke: at(2, 1pt + grey))
         }),
         if step >= 3 { cd({      // X, a layer of its own,
-          node((0, 0), hide($A$))    // anchors drawn hidden
+          node((0, 0), anchor("pbA", $A$))   // the point they share
           node((-1, -1), mark("pbX", transition: "rise")[$X$])
         }) },
       )
       ```),
       screen(align(center + horizon, layers(
         "pb",
-        // X arrives up and to the left, so the corner it does not push is the other one
-        meet: bottom + right,
         cd({
           node((1, 0), $B$)
           node((1, 1), $D$)
@@ -582,7 +580,8 @@
             node((1, 0), hide($B$))
             node((1, 1), hide($D$))
             node((0, 1), hide($C$))
-            node((0, 0), hide($A$))
+            // the point the two layers share, named in both
+            node((0, 0), anchor("pbA", $A$))
             node((-1, -1), mark("pbX", transition: "rise")[$X$])
             edge((-1, -1), (1, 0), "->", bend: 30deg)
             edge((-1, -1), (0, 1), "->", bend: -30deg)
@@ -590,7 +589,7 @@
           })
         },
       ))),
-      when: [`reveal` keeps a picture from being re-laid-out; `layers` is for what arrives *outside* it.],
+      when: [`reveal` keeps a picture from being re-laid-out; `layers` is for what arrives *outside* it. Name one point that is in both layers and the rest follows from the layout.],
     )),
   )
 
@@ -1525,7 +1524,7 @@
   )
   slide(
     title: "Choosing",
-    note: [The map: which question sends you to which call. Out of reach: hoisted regions paint above the page, overflow is clipped silently, a view transition is a bitmap halfway through a large size change, and glyph-level morphing between two different pieces of text is not attempted.],
+    note: [The map: which question sends you to which call. Out of reach: a marked region is drawn over the page rather than in it, overflow is clipped silently, a view transition is a bitmap halfway through a large size change, and glyph-level morphing between two different pieces of text is not attempted.],
   )[
     #lesson(
       "Choosing",
@@ -1537,7 +1536,7 @@
       slide(a, b, c)                 // frames, written out
       build(a, b, c)                 // frames that accumulate
       reveal(n, (step, at) => …)     // frames that stay put
-      layers(key, meet: …, a, b)     // an assembly that grows
+      layers(key, a, b)              // an assembly that grows
       mark(key, anim: …)             // it moves on its own
       deck(transition:, duration:, …)// how pages turn
       ```),

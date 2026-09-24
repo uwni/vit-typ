@@ -8,7 +8,7 @@
 
    `typst` must be on PATH; if the deck's packages live outside the default
    package directory, set TYPST_PACKAGE_PATH as you would to build by hand. */
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -32,12 +32,20 @@ const build = async () => {
      whatever that was the last time someone ran the build */
   await (await import("../build.mjs")).build();
   const out = join(mkdtempSync(join(tmpdir(), "vit-fixture-")), "fixture.html");
-  try {
-    execFileSync("typst", ["compile", "--root", ROOT, "--features", "html",
-      join(ROOT, "tests/fixture.typ"), out], { stdio: ["ignore", "ignore", "pipe"] });
-  } catch (e) {
-    process.stderr.write(String(e.stderr ?? e.message));
+  const run = spawnSync("typst", ["compile", "--root", ROOT, "--features", "html",
+    join(ROOT, "tests/fixture.typ"), out], { encoding: "utf8" });
+  const said = run.stderr ?? "";
+  if (run.status !== 0) {
+    process.stderr.write(said || String(run.error?.message ?? ""));
     throw new Error("the fixture did not compile");
+  }
+  /* A deck that does not settle is a deck whose counts, queries and step
+     indicators are one introspection round stale, and the HTML it produces is
+     wrong in ways nothing below would notice. It is a failure, not a note. */
+  const unsettled = said.split("\n").filter(l => /did not converge|did not stabilize/.test(l));
+  if (unsettled.length) {
+    process.stderr.write(said);
+    throw new Error("the fixture did not settle: " + unsettled[0].trim());
   }
   return out;
 };
@@ -310,6 +318,70 @@ try {
       return out;`);
     const want = model.reduce((n, g) => n + g.frames, 0);
     same("every frame is in the deck, in every mode", counts, { present: want, desk: want, overview: want });
+  }
+
+  /* Where a region sits on its page is worked out when the document is
+     compiled, from the layout, and written into the element. Nothing in the
+     browser measures it any more, so nothing else can put it right: if the
+     compiler answered zero to the positions inside its frames, or the stack
+     arithmetic moved a layer the wrong way, this is the only thing that
+     notices. Reading the attribute back would compare a constant with itself,
+     so these ask what the page actually shows. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present'; await window.__settle(400);
+      const out = { marks: 0, noAt: 0, off: [], at: [] };
+      // Only the frame on stage has a size, so walk them, and wait for each
+      // move to finish: a page in the middle of a view transition is out of the
+      // live rendering and measures as nothing.
+      for (let k = 0; k < window.vit.total; k++) {
+        if (window.vit.index !== k) await window.__done(() => window.vit.go(k));
+        await window.__settle(120);
+        const pg = document.querySelector('.vit-slide.is-active .vit-page');
+        const box = pg?.getBoundingClientRect();
+        const src = pg?.querySelector(':scope > svg');
+        if (!box?.width || !src) continue;
+        const [, , w, h] = src.getAttribute('viewBox').split(' ').map(Number);
+        for (const m of pg.querySelectorAll(':scope > .vit-mark')) {
+          out.marks++;
+          const said = m.dataset.vitAt;
+          if (!said) { out.noAt++; continue; }
+          out.at.push(k + ':' + said);
+          /* A declaration's host is where it starts, and only that: an element
+             that runs along a path is put on the path by the runtime, which
+             writes its own left and top. So this asks the marks, whose position
+             nothing in the browser is allowed to touch. The box is where it was
+             laid out rather than where it is drawn, since a region in the middle
+             of a transition carries a transform. */
+          if (!m.dataset.vitKey) continue;
+          const [x, y] = said.split(' ').map(Number);
+          const d = m.offsetParent === pg
+            ? Math.max(Math.abs(m.offsetLeft - box.width * x / w),
+                       Math.abs(m.offsetTop - box.height * y / h))
+            : Infinity;
+          if (d > 1.5) out.off.push(m.dataset.vitKey + ' by ' + d.toFixed(2) + 'px');
+        }
+      }
+      return { ...out, spots: new Set(out.at.map(s => s.split(':')[1])).size,
+               at: undefined, off: out.off.slice(0, 4) };`);
+    check("every placed region says where it is", r.marks > 0 && r.noAt === 0,
+      `${r.noAt} of ${r.marks} regions carry no data-vit-at`);
+    check("a region is drawn where the layout put it", r.marks > 0 && r.off.length === 0,
+      r.off.join(", "));
+    check("the positions are the layout's, not one corner", r.spots > 1,
+      `${r.spots} distinct positions across ${r.marks} regions`);
+  }
+
+  /* A mark that has not arrived yet keeps its place in the layout and leaves no
+     ink, so the deck must not draw it: on paper it is simply hidden, and the
+     two backends have to agree about that. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present'; await window.__settle(200);
+      return [...document.querySelectorAll('.vit-page')]
+        .map(pg => pg.querySelectorAll(':scope > [data-vit-key=later]').length);`);
+    check("a veiled mark is not drawn", r.length > 0 && r.includes(0) && r.includes(1),
+      `hosts for the veiled key, frame by frame: ${r.join(" ")}`);
   }
 
   /* a closed dialog is out of the layout: one that is merely invisible still

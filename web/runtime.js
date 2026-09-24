@@ -260,7 +260,7 @@
      A name pairs with exactly one counterpart, so "one becomes three" has to
      be cloned on the smaller side: copy the single one twice in place and name
      all three, and three copies leaving one spot for three destinations reads
-     as a split. The reverse is a merge. What is cloned is the hoisted <svg>,
+     as a split. The reverse is a merge. What is cloned is the placed region,
      whose <use> references resolve against the document's own <defs>. */
 
   const marksOf = slide => {
@@ -272,8 +272,8 @@
   };
 
   /* ── names ──────────────────────────────────────────────────────────
-     m-<key>-<n>, n the occurrence of the key on its frame (hoist.js leaves
-     data-vit-key; the key's characters are the Typst side's assertion).
+     m-<key>-<n>, n the occurrence of the key on its frame (the Typst side
+     writes data-vit-key, and asserts what the key may contain).
      Given once, at load; spread() renames for one transition and restores. */
   const nameOf = (key, i) => `m-${key}-${i + 1}`;
   /* A name each, and whatever its object declared: the pair of effects and the
@@ -291,44 +291,12 @@
     }
   };
 
-  /* An unlifted frame cannot morph, so both sides of a transition are lifted
-     before it starts; the sweep below only saves the wait. Lifting takes the
-     marks out of the page's own drawing, so a thumbnail standing for this frame
-     is aimed again: what it references has moved. */
-  const lift = i => {
-    const s = slides[i];
-    if (!s || !window.vitLift(s)) return;
-    name(s);
-    runAnims(i);
-    const g = groups[gOf[i]];
-    if (g?.stand?.dataset.shows?.startsWith(`${i}:`)) point(g.stand, i);
-  };
-
-  const unlifted = () => {
-    for (let d = 0; d < n; d++) {
-      if (slides[cur + d] && !slides[cur + d].dataset.vitLifted) return cur + d;
-      if (slides[cur - d] && !slides[cur - d].dataset.vitLifted) return cur - d;
-    }
-    return -1;
-  };
-
-  /* One frame per idle slice, nearest the one on stage first. The target is
-     read afresh each time, so walking or jumping re-aims it with no queue. Not while a transition runs
-     (the work is layout); it starts again when that ends, and on every move.
-     Without an idle callback nothing is swept and frames wait until needed. */
-  let sweeping = false;
-  const sweep = () => {
-    if (sweeping || mirror || pendingUndo || !window.requestIdleCallback) return;
-    sweeping = true;
-    requestIdleCallback(() => {
-      sweeping = false;
-      if (pendingUndo) return;
-      const i = unlifted();
-      if (i < 0) return;
-      lift(i);
-      sweep();
-    });
-  };
+  /* A mark is a box of its own from the moment the document is parsed, so
+     naming is all a frame needs and it happens once, at load. A name is what
+     the browser pairs on, and only one writer may have it while a transition
+     runs: soloize() writes "none" over the unpaired ones for the length of one,
+     and a second writer would undo that. */
+  const nameAll = () => { for (const s of slides) name(s); };
 
   /* Spread els over K names: name i takes source floor(i*k/K); a source taken
      a second time is cloned in place. Everything touched is recorded and
@@ -482,9 +450,8 @@
      would jump when the snapshot goes.
 
      So it is drawn from the state like everything else, by render(), and there
-     is one writer of it. A frame that has just been lifted has animations that
-     did not exist when the deck last drew itself, so it is told on the spot.
-     Step animations are the deck's own; halt() cancels those. */
+     is one writer of it. Step animations are the deck's own; halt() cancels
+     those. */
 
   const runAnims = k => {
     const live = k === cur && !busy && mode !== "overview" && !reduced.matches;
@@ -527,7 +494,6 @@
       flush();
       busy--;
       render();     // the stage is settled again, and what moves by itself may
-      sweep();
       done?.();
     };
     vit.finished.then(clear, clear);
@@ -543,7 +509,6 @@
          than by whatever happens to be drawing the rail. */
       if (cur >= 0) settle(cur);
       cur = to;
-      lift(to);
     }
     const scroll = mode === "overview" ? "center" : true;
     if (moved) announce(scroll); else render(scroll);
@@ -577,7 +542,6 @@
     unpeek();
     want = to;
     mode = m;
-    lift(to);                 // before the transition: its setup reads both sides' marks
     stepTo(to, where.step ?? (turning ? 0 : at(to)), true);
 
     /* Dispatched before anything is captured, so another window showing this
@@ -778,21 +742,19 @@
 
      Two things the reference needs. The width and height have to be given: the
      source carries its size in points, and left to itself it would draw a
-     third too large. And a mark that hoisting has lifted out of the page is no
-     longer inside it. What is referenced there is the <g> within, which
-     carries the matrix that puts it back in the page's own space, and no name
-     of its own, so nothing here is ever captured twice.
+     third too large. And a mark is a frame of its own beside the page rather
+     than inside it, so each is drawn into the thumbnail where the page put it:
+     `data-vit-at` is the corner, in the page's own units, and the frame states
+     its own size in its attributes.
 
-     `data-shows` is the frame and how many marks were out of it when this was
-     built: aiming at what it already shows is nothing, and lifting changes the
-     count, which is how a swept frame's thumbnail catches up. */
+     `data-shows` is the frame and how many marks it has: aiming at what it
+     already shows is nothing. */
   const point = (stand, i) => {
     const page = slides[i]?.querySelector(".vit-page");
-    const src = page?.querySelector("svg");
+    const src = page?.querySelector(":scope > svg");
     if (!stand || !src) return;
     src.id ||= `vit-src-${i}`;
-    const marks = [...page.querySelectorAll("svg.vit-mark > g")];
-    marks.forEach((g, k) => (g.id ||= `${src.id}-m${k}`));
+    const marks = [...page.querySelectorAll(":scope > [data-vit-at]")];
     const shows = `${i}:${marks.length}`;
     if (stand.dataset.shows === shows) return;
     stand.dataset.shows = shows;
@@ -801,7 +763,14 @@
     stand.setAttribute("viewBox", box);
     stand.replaceChildren(
       svgEl("use", { href: `#${src.id}`, width: w, height: h }),
-      ...marks.map(g => svgEl("use", { href: `#${g.id}` })),
+      ...marks.flatMap((el, k) => {
+        const svg = el.querySelector("svg");
+        if (!svg) return [];
+        svg.id ||= `${src.id}-m${k}`;
+        const [x, y] = el.dataset.vitAt.split(/\s+/).map(Number);
+        const pt = a => parseFloat(svg.getAttribute(a));
+        return [svgEl("use", { href: `#${svg.id}`, x, y, width: pt("width"), height: pt("height") })];
+      }),
     );
   };
 
@@ -813,6 +782,7 @@
 
   /* the frame the address bar names goes on stage; from here on the deck is live */
   const land = () => {
+    nameAll();
     deck.setAttribute("data-ready", "");
     root.style.setProperty("--vit-speed", speed);
     const h0 = fromHash();
@@ -822,8 +792,6 @@
     mode = mirror ? "present" : "desk";
     apply(want = h0.i);
     moveDone(h0.i);
-    deck.addEventListener("vit:move-here", sweep);
-    sweep();
     /* The deck's box changes without a window resize: desk ⇄ presenting, and
        the presenter moving the desk's boundaries. What follows a path is a
        string of pixels, so it is measured again against the box it is in. */
@@ -885,8 +853,9 @@
     land();
   };
 
-  /* Lifting forces layout, so wait for the browser's own first pass: forcing
-     one while the parser is still filling the document lays the whole deck out
+  /* land() measures the deck (`render` reads `clientWidth`, `waapi.refit`
+     re-reads the boxes), so wait for the browser's own first pass: forcing one
+     while the parser is still filling the document lays the whole deck out
      twice. `DOMContentLoaded` is before that pass, and `requestAnimationFrame`
      never runs in a background tab. */
   if (document.readyState === "complete") init();

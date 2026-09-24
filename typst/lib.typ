@@ -1,9 +1,10 @@
 /// vit: lay out whole pages in Typst, `mark` what should morph, and let the
 /// browser do the rest.
 ///
-/// The identity channel is a *label*: the SVG export turns `<lbl>` into a
-/// `<g data-typst-label>` wrapping the content, so the subtree is the boundary;
-/// on the PDF side a label costs nothing, so nothing is gated by backend.
+/// The identity channel is a *name*: the page records what it marked and where
+/// the layout put it, and the deck draws each region again in a frame of its
+/// own, on an element carrying `data-vit-key`. That element is the boundary,
+/// and it is a CSS box, which is what the browser needs to morph it.
 ///
 /// There are three kinds of motion. A *transition* is a change of layout state (page to page,
 /// frame to frame) and runs on the View Transitions API. An *element animation*
@@ -286,8 +287,8 @@
 
   /* Opening/closing the overview is a whole-page zoom: the page interpolates as
   one group, and element-level morphs would tear it apart, so the marks' names
-  are overridden first (an author !important beats the inline names hoist.js
-  wrote on the elements) and they fold back into root to zoom together. */
+  are overridden first (an author !important beats the inline names the runtime
+  wrote on the regions) and they fold back into root to zoom together. */
   ```css
   html:active-view-transition-type(overview) .vit-mark {
     view-transition-name: none !important;
@@ -340,6 +341,18 @@
 /// this state.
 /// -> state
 #let _target = state("vit-target", "paged")
+
+/// Which frame is being laid out, counted as the document goes. A mark records
+/// it so the frame that follows knows which marks are its own.
+/// -> counter
+#let _frames = counter("vit-frames")
+
+/// How deep inside content that has not arrived yet this is. `reveal` hides
+/// what is still to come, and hidden content keeps its place in the layout but
+/// leaves no ink, so a mark in it has a position and nothing to draw. It says
+/// so here, because Typst cannot be asked whether something is hidden.
+/// -> state
+#let _hidden = state("vit-hidden", 0)
 
 /// A transition as the pair it is: how the new side enters, how the old side
 /// leaves. A string is the same effect both ways; a dictionary
@@ -581,16 +594,13 @@
 /// With `tween(play:)` the same states are played over time instead of
 /// stepped; the drawing says so itself and the deck only carries the word.
 ///
-/// The inner `box` is required: a label attaches to
-/// the element before it, and of everything that can stand in a paragraph only
-/// `box` and `block` carry one into the SVG as a `<g data-typst-label>`. Which
-/// of the two holds it is `block:` below; the rest of this paragraph is why the
-/// box is the default. Put the
-/// label on a `rect`, a `circle`, a cetz canvas, an equation, `emph` or bare
-/// text and the export writes no group at all, so the mark would silently not
-/// exist. Between the two, `block` is out: it is block-level, and a mark has to
-/// work on a word inside a sentence and on a term inside a formula; it is also
-/// breakable, and a mark split over two lines has no single box to interpolate.
+/// The inner `box` is required: what says where the region is and how big it is
+/// is a pair of points placed in its two corners, and only something with
+/// corners can hold them. Of everything that can stand in a paragraph that is
+/// `box` and `block`; which of the two is `block:` below. Between them, `block`
+/// is out as the default: it is block-level, and a mark has to work on a word
+/// inside a sentence and on a term inside a formula; it is also breakable, and
+/// a mark split over two lines has no single box to interpolate.
 ///
 /// A box does wrap its content, like ordinary text. But it is atomic, so one
 /// that does not fit the rest of the line moves to a line of its own: marking a
@@ -622,6 +632,11 @@
   /// `transitions`) and apply to this mark alone, whatever pace the page keeps.
   /// -> none | str | dictionary
   transition: none,
+  /// Which stack of layers this is one of, as `layers` says: `(key, index)`.
+  /// The deck aligns a stack by the point its layers share, and everything
+  /// drawn inside a layer moves with it.
+  /// -> none | array
+  stack: none,
   /// How the identity is held: in a box, or in a block.
   ///
   /// A box by default, and that is what lets a mark sit inside a sentence or a
@@ -637,7 +652,9 @@
   /// -> bool
   block: false,
   /// What the object is. Several states of one drawing are `tween`'s, not a
-  /// mark's: `mark(key, tween(s0, s1, …))`.
+  /// mark's: `mark(key, tween(s0, s1, …))`. To hide a mark, `veil` rather than
+  /// `hide`: the deck draws every region itself, and a bare `hide` leaves it
+  /// drawing one the page meant to drop.
   /// -> content
   body,
 ) = {
@@ -646,20 +663,102 @@
     message: "a mark key is letters, digits, _ and -: " + repr(key),
   )
   let fx = _pair(transition)
-  // the label is the identity; the effect goes into the marks table deck()
-  // writes (see _marks)
-  let lbl = label("vit-" + key)
-  let meta = if fx == none { none } else {
-    [#metadata((key: key, transition: _types(fx), sets: _bundles(fx)))<vit-mark>]
-  }
   // `block` is the argument here, so the element has to be named through `std`
   let hold = if block { std.block.with(breakable: false) } else { std.box }
-  [#meta#hold(body)#lbl]
+  context {
+    if _target.get() != "html" {
+      // On paper the deck places nothing, so a stack is aligned where it is
+      // laid out and these say where that is. Neither draws.
+      hold({
+        place(top + left, [#metadata((key: key, stack: stack))<vit-mark>])
+        body
+        place(bottom + right, [#metadata(none)<vit-mark-end>])
+      })
+    } else {
+      // The page keeps the space and loses the ink: hidden content is laid out
+      // and exported empty, so the region is drawn once, in the frame the deck
+      // places for it. What says where that frame goes is this record, placed
+      // in the holder's own top left corner: in a paragraph a position is a
+      // point on the baseline, and the corner is what a box is placed by.
+      let record = place(top + left, [#metadata((
+        key: key,
+        stack: stack,
+        shown: _hidden.get() == 0,
+        transition: if fx == none { none } else { _types(fx) },
+        sets: if fx == none { () } else { _bundles(fx) },
+        // Five text fields, put back around the body when it is laid out again
+        // on its own, where nothing the page set is in scope. Only these five:
+        // Typst cannot be asked for a show rule or a `set par`, so anything
+        // else the region needs has to be written inside it.
+        style: (size: text.size, fill: text.fill, font: text.font, weight: text.weight, style: text.style),
+        body: body,
+      ))<vit-mark>])
+      // and the far corner, so the frame is laid out in the box the page gave
+      // it: content written to fill its container (`width: 100%`) has nothing
+      // to fill when it is drawn on its own
+      let ending = place(bottom + right, [#metadata(none)<vit-mark-end>])
+      _tween.quiet.update(true)
+      // the far corner goes after the body, so that what the body records sits
+      // between the two and the deck can see what is nested in what
+      hide(hold({ record; body; ending }))
+      _tween.quiet.update(false)
+    }
+  }
 }
 
-/// The stylesheet as it ships. The prose in these files is for whoever reads
-/// them; the browser has no use for it, and every deck would otherwise carry a
-/// copy. Comments go on the way out, and the blank lines they leave with them.
+/// `hide`, for content with marks in it. Hidden content keeps its place in the
+/// layout and leaves no ink, so a mark inside it has a position and nothing to
+/// draw, and the deck must not give it a frame of its own. Typst cannot be
+/// asked whether something is hidden, so this says so as it hides. A bare
+/// `hide` around a mark leaves the page empty and the deck drawing the region
+/// anyway, which is the one way the HTML and the PDF can disagree.
+/// -> content
+#let veil(
+  /// -> content
+  body,
+) = {
+  _hidden.update(h => h + 1)
+  hide(body)
+  _hidden.update(h => h - 1)
+}
+
+/// A named point, for `layers` to align a stack by. The body keeps its place in
+/// the layout and leaves no ink, and the corner it starts at is what the name
+/// stands for, so the point may be anywhere in the picture rather than at a
+/// corner of it or in the middle.
+///
+/// A stack of layers is one drawing at several stages, and the later stage is
+/// usually drawn with the earlier one's parts still in it, hidden, so that both
+/// are laid out alike. Naming one of those parts in both layers is what lets
+/// the deck put them together: the layers meet at that point, and everything
+/// else follows from the layout.
+///
+/// ```typ
+/// layers("pb", diagram-a, anchor-in-b-drawn-hidden)
+/// ```
+///
+/// A `mark` is a named point too, at the corner its box starts at, so two
+/// layers that already share a marked object need nothing else.
+/// -> content
+#let anchor(
+  /// The name. The same name in two layers is the point they share.
+  /// -> str
+  key,
+  /// What holds the place: usually the part the later layer redraws.
+  /// -> content
+  body,
+) = veil(std.box({
+  place(top + left, [#metadata((key: key))<vit-anchor>])
+  body
+}))
+
+/// A stylesheet that arrives as it was written, with its prose in it: the
+/// browser has no use for that, and every deck would otherwise carry a copy.
+/// Comments go on the way out, and the blank lines they leave with them.
+///
+/// vit's own stylesheet does not come through here: the build minifies it, and
+/// stripping what esbuild already stripped is work for nobody. This is for CSS
+/// that comes from a package rather than from the build, which is `tween`'s.
 /// -> str
 #let _strip(
   /// -> str
@@ -690,10 +789,6 @@
   "url(\"data:image/svg+xml," + filled + "\")"
 }
 
-/// Which frame we are up to: a page needs to find its own frames among the
-/// document's.
-#let _frames = counter("vit-frames")
-
 /// How many steps every frame of the document has, in document order. A step
 /// is one press: the drawings on a frame step together, so the frame's count
 /// is the longest of them; a drawing that plays itself is not stepped, and one
@@ -702,7 +797,7 @@
 #let _steps() = {
   let out = ()
   for m in query(selector.or(<vit-frame>, <tween-steps>)) {
-    if str(m.label) == "vit-frame" {
+    if m.label == <vit-frame> {
       out.push(0)
     } else if out.len() > 0 and not m.value.plays and not m.value.nested {
       out.at(out.len() - 1) = calc.max(out.at(out.len() - 1), m.value.states - 1)
@@ -731,6 +826,9 @@
   let sets = ()
   for m in query(<vit-mark>) {
     let v = m.value
+    // a mark that declared no transition says nothing about the key: it is the
+    // occurrences that did which have to agree
+    if v.transition == none { continue }
     assert(
       v.key not in t or t.at(v.key).transition == v.transition,
       message: "mark \"" + v.key + "\" is given two different transitions; one object has one",
@@ -739,6 +837,229 @@
     for b in v.sets { if b not in sets { sets.push(b) } }
   }
   (table: t, css: sets.map(b => _rule(b.role, b.vars)).join(""))
+}
+
+/// How far each layer of each stack on this frame has to move so that the point
+/// it shares with the last layer lands in the same place.
+///
+/// What this works from is a point's offset *within* its layer, which does not
+/// change when the layer is placed somewhere else, so it settles rather than
+/// chasing itself. A point is a `mark` or an `anchor`, so it may be anywhere in
+/// the picture. Which frame a record belongs to is where it falls between the
+/// frames' own markers, not something it read: a marked region is laid out a
+/// second time when it is drawn, and a counter read in there answers with what
+/// the previous pass knew, so the document would never settle. Regions being
+/// drawn again say so with `vit-drawn`, and what they record is skipped: it is
+/// the page's layout that is being read.
+/// -> dictionary
+#let _offsets(
+  /// -> int
+  me,
+) = {
+  let open = ()
+  let corners = ()
+  let points = ()
+  let f = 0
+  let redrawn = 0
+  for m in query(selector.or(<vit-frame>, <vit-mark>, <vit-mark-end>, <vit-anchor>, <vit-drawn>, <vit-drawn-end>)) {
+    if m.label == <vit-drawn> {
+      redrawn += 1
+    } else if m.label == <vit-drawn-end> {
+      redrawn -= 1
+    } else if redrawn > 0 {
+      // a region drawn again in a frame of its own: the page said this already
+    } else if m.label == <vit-frame> {
+      f += 1
+    } else if m.label == <vit-mark> {
+      let v = m.value
+      let at = m.location().position()
+      let inside = if open.len() > 0 { open.last().layer } else { none }
+      let layer = inside
+      if f == me and v.stack != none {
+        // A layer is moved by one offset, the innermost one it is in, so a
+        // stack inside a layer would keep the outer stack's shift and lose the
+        // inner one. On paper each layer is placed relative to the last, which
+        // nests by itself, so the two backends would quietly disagree.
+        // an assert's message is worked out whether or not it fires
+        let outer = if inside == none { "" } else { inside.first() }
+        assert(
+          inside == none,
+          message: "layers(\"" + v.stack.first() + "\") is drawn inside a layer of layers(\""
+            + outer + "\"): stacks do not nest. Draw the picture flat.",
+        )
+        corners.push((v.stack.first(), v.stack.last(), at))
+        layer = (v.stack.first(), v.stack.last())
+      } else if f == me and inside != none {
+        points.push((inside.first(), inside.last(), v.key, at))
+      }
+      open.push((layer: layer))
+    } else if m.label == <vit-mark-end> {
+      if open.len() > 0 { let _ = open.pop() }
+    } else if m.label == <vit-anchor> and f == me {
+      let inside = if open.len() > 0 { open.last().layer } else { none }
+      // Outside a layer a name stands for nothing, and saying so here is what
+      // stops the failure surfacing later as `layers` reporting that its layers
+      // share no point.
+      assert(
+        inside != none,
+        message: "anchor(\"" + m.value.key
+          + "\") is not inside a layer: a named point is what layers(…) hangs its layers from, so it means something only when it is drawn in one.",
+      )
+      points.push((inside.first(), inside.last(), m.value.key, m.location().position()))
+    }
+  }
+  let out = (:)
+  for (sk, i, at) in corners {
+    let last = corners.filter(((s, _, _)) => s == sk).map(((_, j, _)) => j).sorted().last()
+    if i == last { continue }
+    let here = points.filter(((s, j, _, _)) => s == sk and j == i)
+    let there = points.filter(((s, j, _, _)) => s == sk and j == last)
+    let last-at = corners.filter(((s, j, _)) => s == sk and j == last).first().last()
+    let shared = here.filter(((_, _, n, _)) => there.any(((_, _, o, _)) => o == n))
+    assert(
+      shared.len() > 0,
+      message: "layers(\""
+        + sk
+        + "\"): layer "
+        + str(i + 1)
+        + " and the last layer share no named point, so where they meet cannot be worked out. Name a part that is in both with anchor(\"…\"), or mark the same object in both. The point may be anywhere in the picture.",
+    )
+    let n = shared.first().at(2)
+    let a = there.filter(((_, _, o, _)) => o == n).first().last()
+    let b = shared.first().last()
+    out.insert(sk + "/" + str(i), (x: (a.x - last-at.x) - (b.x - at.x), y: (a.y - last-at.y) - (b.y - at.y)))
+  }
+  out
+}
+
+/// The marks of the frame just laid out, each drawn again in a frame of its own
+/// and placed where the page put it. View Transitions ignore a
+/// `view-transition-name` on an SVG child and Web Animations keyframes are CSS,
+/// so a region that has to morph has to be a CSS box; a frame of its own is one.
+/// The page kept the space and lost the ink, so nothing is drawn twice.
+///
+/// The frame carries its own size in `em`, and the deck sets one font size on
+/// the host, so the drawing scales with the stage and its proportions are the
+/// frame's own rather than a box this has to get right.
+/// -> content
+#let _hosts(
+  /// -> dictionary
+  geo,
+) = context {
+  let me = _frames.get().first()
+  let pct(a, b) = str(a / b * 100) + "%"
+
+  /// One walk over what the frames recorded: which region belongs to which
+  /// frame, what is nested in what, and where every named point landed. A
+  /// region's corner is where the page put it; a stack's layers are moved from
+  /// there onto the point they share.
+  let mine = ()
+  let open = ()
+  let f = 0
+  let redrawn = 0
+  for m in query(selector.or(<vit-frame>, <vit-mark>, <vit-mark-end>, <vit-anchor>, <waapi-decl>, <vit-drawn>, <vit-drawn-end>)) {
+    if m.label == <vit-drawn> {
+      redrawn += 1
+      continue
+    } else if m.label == <vit-drawn-end> {
+      redrawn -= 1
+      continue
+    } else if redrawn > 0 {
+      // a region being drawn in its own frame: it has already said everything
+      continue
+    }
+    if m.label == <vit-frame> {
+      f += 1
+    } else if m.label == <vit-mark> {
+      let v = m.value
+      let at = m.location().position()
+      let inside = if open.len() > 0 { open.last().layer } else { none }
+      // a layer of a stack carries everything drawn inside it
+      let layer = if f == me and v.stack != none {
+        (v.stack.first(), v.stack.last())
+      } else { inside }
+      open.push((v: v, at: at, layer: layer, f: f))
+    } else if m.label == <vit-mark-end> {
+      let o = open.pop()
+      if o.f == me and o.v.shown {
+        let to = m.location().position()
+        mine.push((
+          kind: "mark",
+          v: o.v,
+          at: o.at,
+          size: (width: to.x - o.at.x, height: to.y - o.at.y),
+          layer: o.layer,
+        ))
+      }
+    } else if m.label == <waapi-decl> and f == me and m.value.placed {
+      mine.push((
+        kind: "decl",
+        v: m.value,
+        at: none,
+        size: none,
+        layer: if open.len() > 0 { open.last().layer } else { none },
+      ))
+    }
+  }
+
+  let shift = _offsets(me)
+  let moved(p, layer) = {
+    if layer == none { return p }
+    let d = shift.at(layer.first() + "/" + str(layer.last()), default: none)
+    if d == none { p } else { (x: p.x + d.x, y: p.y + d.y) }
+  }
+
+  /// The drawing again, on its own, at the size the frame says: 1pt of text is
+  /// 1em, so the frame states the page's own units and the stylesheet's one
+  /// font size is the whole of the scaling.
+  let drawn(body, style, size) = {
+    // What a region records, it recorded when the page was laid out. Drawing it
+    // again says it all a second time, and a state cannot stop that: a state
+    // read inside this frame answers with what the *previous* pass knew, so it
+    // would lag by one and never settle. These two say where the second telling
+    // begins and ends, and the walk above skips what lies between them.
+    [#metadata(none)<vit-drawn>]
+    set text(size: 1pt)
+    html.frame({
+      // the styles the region was written under, put back around it: a set rule
+      // reaches the rest of its own block, so this one has to stand beside the
+      // body rather than inside an if of its own
+      set text(..(if style == none { (:) } else { style }))
+      if size == none { std.box(body) } else { std.block(width: size.width, height: size.height, body) }
+    })
+    [#metadata(none)<vit-drawn-end>]
+  }
+  for h in mine {
+    let v = h.v
+    let p = if h.kind == "mark" { moved(h.at, h.layer) } else {
+      moved(query(label(v.tag + "@" + str(v.k))).first().location().position(), h.layer)
+    }
+    let where = "left:" + pct(p.x, geo.width) + ";top:" + pct(p.y, geo.height)
+    // where the region sits on the page, for the rail: a thumbnail draws the
+    // page and everything placed over it into one picture, and how big each is
+    // the frame inside says in its own attributes
+    let at = (p.x, p.y).map(l => str(l.pt())).join(" ")
+    if h.kind == "mark" {
+      html.elem(
+        "div",
+        attrs: (class: "vit-mark", "data-vit-key": v.key, "data-vit-at": at, style: where),
+        drawn(v.body, v.style, h.size),
+      )
+    } else {
+      // the declaration's own element, around the frame placed for it: it is
+      // the box the keyframes move, and it starts itself
+      html.elem(
+        v.tag,
+        attrs: (
+          class: "vit-mark",
+          "data-spec": json.encode(v.spec, pretty: false),
+          "data-vit-at": at,
+          style: where,
+        ),
+        drawn(v.body, v.style, none),
+      )
+    }
+  }
 }
 
 /// The player: the stylesheet, the runtime and the chrome (the toolbar, the
@@ -840,12 +1161,13 @@
           "laser-trail": str(laser.trail) + "ms",
         ))
           + _strip(_tween.css)
-          + _strip(read("web/deck.css"))
+          + read("web/deck.css")
           + _effects
           + _sets(fx)
           + marks.css,
       )
       _tween.html-target.update(true)
+      _tween.placing.update(true)
       _pane(html.elem(
         "div",
         attrs: (
@@ -857,6 +1179,18 @@
         ),
         {
           body
+          // Every region is placed by where the layout put it, which is a
+          // position read inside an `html.frame`. A compiler without typst#8832
+          // answers zero to all of them and says nothing, and the deck comes out
+          // stacked in the corner. The page's own two corners are a distance
+          // this knows is not zero, so ask them once.
+          context {
+            let p = query(<vit-probe>)
+            assert(
+              p.len() < 2 or p.at(1).location().position().x > p.at(0).location().position().x,
+              message: "this typst does not resolve a position inside html.frame (typst#8832), so every marked region would be placed in the top left corner. Build typst from main, or use the first release that carries the fix.",
+            )
+          }
           // last, so it is over the pages; a child of the deck, so a press on it
           // is a press on the page
           _reach()
@@ -882,7 +1216,6 @@
       // the paths are the package's: build.mjs (`npm run build`) puts web/
       // minified beside this file in dist/<version>/, and this file compiles
       // only from there
-      html.script(read("web/hoist.min.js"))
       html.script(_tween.js)
       html.script(read("web/runtime.min.js"))
       // the player's own chrome, written against the deck's surface alone
@@ -971,31 +1304,26 @@
   /// -> function
   body,
 ) = range(1, n + 1).map(i => body(i, (k, x) => {
-  if i >= k { x } else if type(x) == content { hide(x) } else { none }
+  if i >= k { x } else if type(x) == content { veil(x) } else { none }
 }))
 
-/// Layers of one picture, hung from the corner they share. Each layer is a mark
-/// of its own (`key-1`, `key-2`, …), so a layer that is on two frames keeps its
+/// Layers of one picture, hung from a point they share. Each layer is a mark of
+/// its own (`key-1`, `key-2`, …), so a layer that is on two frames keeps its
 /// identity: if a later layer makes the picture bigger, the earlier one glides
 /// to where it now sits instead of being redrawn. The last layer sizes the
-/// stack and the ones before it hang from `align`; a `none` layer is left out,
-/// which is how one arrives:
+/// stack and the ones before it move onto the shared point; a `none` layer is
+/// left out, which is how one arrives:
 ///
 /// ```typ
-/// layers("pb", meet: bottom + right, the-square, if step >= 3 { the-cone })
+/// layers("pb", the-square, if step >= 3 { the-cone })
 /// ```
 ///
-/// `meet` is where the layers meet: the corner the arriving layer does not
-/// push: `bottom + right` for a picture that grows up and to the left,
-/// `top + left` for one that grows down and to the right, and for growth on two
-/// sides at once the corner opposite both. It has to be said, because lining the
-/// layers up by the point they share needs that point's *position* in each, and
-/// inside an `html.frame` every position reads as zero, alike for two elements
-/// 60pt apart (sizes are there: `measure` answers). TEMPORARY (typst#8832,
-/// against typst#8828): when that lands the corner can be derived and `meet`
-/// becomes optional. Until then, if no corner holds (growth on opposite sides,
-/// by different amounts), nothing can hold the layers together, so keep the
-/// layout still with `reveal` instead.
+/// What holds the layers together is a point named in both: `anchor("…")`
+/// around a part that both draw, or the same `mark` in both. The point may be
+/// anywhere in the picture rather than at a corner of it or in the middle,
+/// because what this works from is the point's offset *inside* its own layer,
+/// which the layout knows wherever it sits. A layer that shares no point with
+/// the last one says so at compile time, and names what to do about it.
 ///
 /// A layer that is a drawing keeps its own picture only if the package lays it
 /// out the same way each time, so a later layer that must reach into an earlier
@@ -1005,24 +1333,32 @@
   /// Names the stack; each layer's mark key is this and its place in it.
   /// -> str
   key,
-  /// Where the layers meet: the corner the arriving layer does not push.
-  /// -> alignment
-  meet: none,
   /// The layers, back to front.
   /// -> content | none
   ..parts,
 ) = {
   let l = parts.pos().enumerate().filter(((i, x)) => x != none)
   if l.len() == 0 { return }
-  assert(
-    l.len() == 1 or type(meet) == alignment,
-    message: "layers(meet:) needs the corner where the layers meet, the one the arriving layer does not push, such as bottom + right for a picture that grows up and to the left. It cannot be worked out from the layers themselves. If the picture grows on opposite sides there is no such corner, so keep the layout still with reveal instead.",
-  )
-  box({
-    for (i, x) in l.slice(0, -1) { place(meet, mark(key + "-" + str(i + 1), x)) }
-    let (i, x) = l.last()
-    mark(key + "-" + str(i + 1), x)
-  })
+  let name(i) = key + "-" + str(i + 1)
+  let (li, lx) = l.last()
+  // The last layer sizes the stack and the ones before it hang from the point
+  // they share with it. Where that is, is a matter of where the layout put
+  // things, which is the deck's to work out once everything is laid out: here
+  // they are simply stacked, and the deck moves each one by the offset the
+  // shared point asks for.
+  context {
+    // On the HTML side the deck draws every region in a frame of its own and
+    // places it, so the layers are stacked here and moved there. On paper
+    // nothing is placed later, so the offset is applied to the layout itself.
+    let off = if _target.get() == "html" { (:) } else { _offsets(_frames.get().first()) }
+    box({
+      for (i, x) in l.slice(0, -1) {
+        let d = off.at(key + "/" + str(i), default: (x: 0pt, y: 0pt))
+        place(dx: d.x, dy: d.y, mark(name(i), stack: (key, i), x))
+      }
+      mark(name(li), stack: (key, li), lx)
+    })
+  }
 }
 
 /// Frames that accumulate. `build(a, b, c)` is three frames (`a`, then `a`
@@ -1141,7 +1477,17 @@
                 html.elem(
                   "div",
                   attrs: (class: "vit-page"),
-                  html.frame(block(width: geo.width, height: geo.height, inset: geo.margin, body)),
+                  {
+                    html.frame(block(width: geo.width, height: geo.height, inset: geo.margin, {
+                      body
+                      // the two corners of a box this knows the size of: what
+                      // says whether the compiler resolves a position inside a
+                      // frame at all (see the check in `deck`)
+                      place(top + left, [#metadata(none)<vit-probe>])
+                      place(bottom + right, [#metadata(none)<vit-probe>])
+                    }))
+                    _hosts(geo)
+                  },
                 )
               },
             ))
@@ -1153,6 +1499,10 @@
       )
     } else {
       for body in bodies {
+        // the same count as the HTML side keeps, and the same marker: a record
+        // belongs to the frame it falls after, on paper as in the browser
+        _frames.step()
+        [#metadata(none)<vit-frame>]
         block(width: 100%, height: 100%, body)
         pagebreak(weak: true)
       }

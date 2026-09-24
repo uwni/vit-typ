@@ -5,34 +5,47 @@ the API reference, `docs/api.pdf`.
 
 ## How it works
 
-**Identity is a label.** `mark(key)` attaches the Typst label `vit-key` to a box
-around the content. Typst's SVG export writes a label as a `<g
-data-typst-label>` _wrapping_ the content, so the subtree is the boundary and
-nothing is inferred from geometry. The box is what makes this work: of
-everything that can stand in a paragraph, only `box` and `block` carry a label
-into the SVG. A label on a `rect`, a `circle`, a cetz canvas, an equation,
-`emph` or bare text produces no group, and the mark would silently not exist.
-`block` is block-level and breakable, which rules it out for a term inside a
-formula or a word inside a sentence. A box wraps its content like ordinary text
-but is atomic, so a mark wider than the rest of the line takes a line of its
-own. Marking a word, a title or a figure costs nothing; marking a whole sentence
-mid-paragraph reflows the paragraph. On the PDF side a label costs nothing, so
-no code is gated by backend. The label is only identity. What a mark declares
-about itself (`transition:`) is collected by `query` on the Typst side and
-written into the HTML as a table by key (`const vitMarks = {…}`), which the
-runtime looks up.
+**Identity is a name.** `mark(key)` puts the content in a box and records what
+it is and where the layout put it; the deck then draws it again on an element
+of its own carrying `data-vit-key`, and that element is the boundary. Nothing is
+inferred from geometry.
 
-**Hoist.** `view-transition-name` is silently ignored on SVG children (only
-elements in the CSS box tree are captured), so `hoist.js` lifts each frame's
-marks. It runs on `load`, after the browser's first layout (measuring forces
-one), and one frame at a time when the runtime asks: both sides of a transition
-before it starts, the rest while the deck is idle. Lifting measures each marked
-`<g>` in the page's viewBox (`getBBox` × CTM, read as a ratio of two
-`getScreenCTM`s so the result is resolution-independent), creates an absolutely
-positioned `<svg>` host with that viewBox and a `view-transition-name`, and
-moves the `<g>` into it. Glyphs stay in the page's `<defs>` and are referenced
-with `<use>`; nothing is copied. Everything is measured before anything is
-moved, so nested marks stay correct.
+The box is what makes this work: what says where the region is and how big it
+is, is a point placed in each of its two corners, and only something with
+corners can hold them. Of everything that can stand in a paragraph that is `box`
+and `block`. `block` is block-level and breakable, which rules it out for a term
+inside a formula or a word inside a sentence, so a box is the default and
+`mark(block: true)` is the way to say otherwise. A box wraps its content like
+ordinary text but is atomic, so a mark wider than the rest of the line takes a
+line of its own. Marking a word, a title or a figure costs nothing; marking a
+whole sentence mid-paragraph reflows the paragraph.
+
+What a mark declares about itself is collected by `query` on the Typst side and
+written into the HTML as a table by key (`const vitMarks = {…}`) for the runtime
+to look up.
+
+**Placement.** `view-transition-name` is silently ignored on SVG children (only
+elements in the CSS box tree are captured), so a marked region has to be a box
+of its own. The Typst side makes it one at compile time. In the page's frame the
+mark keeps its space and loses its ink (`hide`), and records two corners and
+what it is: the key, the effects it declared, the styles it was written under,
+and its body. The deck then draws the body again in an `html.frame` of its own
+and places that frame with the corner the page reported, as a percentage of the
+page's box, in a `div.vit-mark` beside the page's drawing.
+
+The frame states its own size in `em`, so one font size on the host scales it:
+`font-size: calc(100cqw / var(--vit-w))`, with the frame emitted under
+`set text(size: 1pt)` so that 1em is 1pt of the page's own units. Nothing is
+measured in the browser, the proportions are the frame's own (an `html.frame`
+carries no `preserveAspectRatio`, so a host that forced width and height would
+letterbox a long thin region), and no script runs before the deck is ready.
+
+The cost is that the region is laid out twice: once in the page, hidden, which
+is what the corners and the size come from, and once on its own, which is what
+is drawn. The page's layout is what makes content written to fill its container
+work (`measure` answers 0pt for `width: 100%`), and the second layout is what
+draws it. Anything inside a mark that counts itself therefore counts twice; see
+TODO.md.
 
 **The browser does the pairing.** On every page turn the runtime calls
 `document.startViewTransition({ update, types })`; the browser pairs
@@ -186,8 +199,8 @@ There is one exception: the deck reads its own `window.name` and behaves
 differently when it is `vit-mirror`, a preview inside the speaker view. There
 is no other way to do this. Over `file://` the window that made a preview is
 another origin and cannot reach into it, so a preview that must present, drop
-the rail, skip the idle sweep and (if it runs ahead) not play a page change out
-has to learn all four from something it can see by itself. That is one fact
+the rail and (if it runs ahead) not play a page change out has to learn all
+three from something it can see by itself. That is one fact
 about the window it is in, read once at start; everything else still flows one
 way.
 
@@ -381,20 +394,20 @@ checked in `tests/invariants.mjs`.
 | `.vit-deck[data-duration,-easing,-theme,-version]`               | runtime            | the deck's pace, its chrome theme, the version in the help                    |
 | `.vit-group`                                                     | runtime, CSS       | one page. Its box is what the mode zooms carry                                |
 | `.vit-slide[data-transition,-steps]`                             | runtime, CSS       | one frame: the types of the transition into it, and how many presses it takes |
-| `.vit-page > svg`                                                | hoist.js, the rail | the page's drawing; a thumbnail is a `<use>` of it                            |
+| `.vit-page > svg`                                                | the rail           | the page's drawing; a thumbnail is a `<use>` of it                            |
 | `.vit-note`                                                      | runtime            | the page's speaker notes, never in the layout                                 |
 | `.vit-rail > .vit-thumb > .vit-cap`, `.vit-stand`, `.vit-dots i` | runtime, CSS       | one thumbnail: caption, the picture's slot, one dot per position              |
 | `.vit-bar [data-act]`                                            | runtime            | a toolbar button, by what it does                                             |
 | `.vit-bar [data-icon][data-title]`                               | runtime            | one of a button's two faces, and the words that go with it                    |
 | `.vit-settings [data-set]`, `[data-out]`, `[data-value]`         | runtime            | a control, its readout, and a segmented button's value                        |
-| `<g data-typst-label="vit-…">`                                   | hoist.js           | a mark: the label is the identity, the subtree is the boundary                |
+| `.vit-page > .vit-mark[data-vit-key][data-vit-at]`               | runtime, CSS       | one marked region: its own frame, and the corner the page put it at           |
 
 | written by the runtime                                             | read by          | what it says                                                                                              |
 | ------------------------------------------------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------- |
 | `<html data-mode>`                                                 | CSS              | `present`, `desk` or `overview`; the only record of the mode                                              |
 | `<html data-theme>`                                                | CSS              | the chrome's light or dark, resolved from `deck(theme:)` and the system                                   |
 | `.vit-deck[data-ready]`                                            | CSS              | the scripts have run; before that nothing is shown                                                        |
-| `.vit-mark[data-vit-key]`, `style.viewTransitionName`              | CSS, the browser | what hoisting lifted, and what pairs with what                                                            |
+| `style.viewTransitionName` on `.vit-mark`                          | CSS, the browser | what pairs with what; the element itself is the Typst side's                                              |
 | `.vit-stand[data-shows]`                                           | itself           | which frame the thumbnail is pointing at, and how many marks were out of it                               |
 | `is-active`, `is-here`, `is-reached`, `is-on`, `is-now`, `is-peek` | CSS              | the frame on stage, the page we are on, the toolbar being reached for, a dot passed / current / previewed |
 

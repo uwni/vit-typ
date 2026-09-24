@@ -74,3 +74,29 @@
     #circle(radius: 8pt, fill: green)
   ])
 ]
+
+// 9 · layers of one picture, hung from the point the layers share. The point
+//     is named with `anchor` in both and sits in the middle of the picture, not
+//     at a corner: the second layer grows to the left, so the first has to move
+//     for the green box to stay where it is.
+#let pin(body) = anchor("pin", body)
+#slide(title: "Layers")[
+  #place(center + horizon, layers("pic", box(pin(sq(green, w: 40pt)))))
+][
+  #place(center + horizon, layers(
+    "pic",
+    box(pin(sq(green, w: 40pt))),
+    box({ sq(amber, w: 40pt); h(10pt); pin(sq(green, w: 40pt)) }),
+  ))
+]
+
+// 10 · several states of one drawing inside a mark, which is what the mark
+//      docstring recommends, and a mark that has not arrived yet: `veil` keeps
+//      its place and tells the deck not to draw it.
+#slide(title: "Marked tween")[
+  #place(left + horizon, mark("grow", tween(..range(3).map(k => sq(blue, w: 30pt + 25pt * k)))))
+  #place(right + horizon, veil(mark("later", sq(amber, w: 40pt))))
+][
+  #place(left + horizon, mark("grow", tween(..range(3).map(k => sq(blue, w: 30pt + 25pt * k)))))
+  #place(right + horizon, mark("later", sq(amber, w: 40pt)))
+]

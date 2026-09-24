@@ -68,7 +68,7 @@ body {
   background: var(--vit-page);
   overflow: hidden;
 }
-/* Before the scripts have run (hoist.js lifts the marks, the runtime marks the deck ready) nothing is shown: at that moment the marks are still in place and every state of an element animation is stacked, which nobody should see. Only the first frame is laid out, the rest costs nothing until hoist.js shows it to measure. */
+/* Before the runtime has marked the deck ready nothing is shown: at that moment every state of an element animation is still stacked, and the address bar may name a frame other than the first, which nobody should see on the way past. */
 .vit-deck:not([data-ready]) {
   visibility: hidden;
 }
@@ -99,23 +99,32 @@ body {
 .vit-page {
   position: absolute;
   inset: 0;
+  /* the marks are placed against this box, and scaled by its width */
+  container-type: size;
 }
-.vit-page > svg:not(.vit-mark) {
+.vit-page > svg {
   position: absolute;
   inset: 0;
   width: 100% !important;
   height: 100% !important;
   display: block;
 }
-/* overflow must be visible: getBBox() is the geometric box without the stroke,
-   and hidden clips half a stroke width on every side (the ends of a Lissajous
-   curve get cut flat). View Transitions snapshots carry ink overflow anyway,
-   so nothing flickers. */
+/* A marked region is drawn in a frame of its own, placed at the corner the
+   layout gave it. The frame states its size in em, so this one font size is the
+   whole of the scaling and the drawing keeps the proportions Typst gave it.
+   overflow must be visible: the layout's box is the geometric box without the
+   stroke, and hidden clips half a stroke width on every side (the ends of a
+   Lissajous curve get cut flat). View Transitions snapshots carry ink overflow
+   anyway, so nothing flickers. */
 .vit-mark {
   position: absolute;
   display: block;
   overflow: visible;
   view-transition-class: vit-mo;
+  font-size: calc(100cqw / var(--vit-w));
+  /* the regions follow the page in the document, so they are drawn over it;
+     this is for the hit testing, which the order alone does not settle */
+  z-index: 1;
 }
 /* speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
 .vit-note {

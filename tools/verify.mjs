@@ -70,7 +70,7 @@ execFileSync('pdftoppm', ['-png', '-r', '96', '-scale-to-x', '1280', '-scale-to-
    outlines". A shift or a missing glyph produces solid blobs. The mean is just
    a magnitude: the anti-aliasing difference between two rasterisers sits around
    1, the same page shifted by 2px is more than twice that. Both images are
-   blurred by 1px first: a hoisted region is its own box and the browser snaps
+   blurred by 1px first: a placed region is its own box and the browser snaps
    its position to whole pixels (up to half a pixel off), and a theorem box full
    of small text pushes the mean to 2.3 on that half pixel alone, from
    anti-aliasing rather than displacement. Blurred, it drops to 1.1 while a real 2px

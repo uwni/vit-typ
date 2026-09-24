@@ -1,44 +1,57 @@
-/* Hoisted regions per page, their geometry, and console errors.
-   The geometry is in percentages, so it **must be identical across window
-   sizes**. getCTM's target space differs between browsers, and a test that
-   only runs at 1280×720 would never see that bug. */
-import { chromium } from 'playwright';
+/* Placed regions per page, their geometry, and console errors.
+   The geometry is written by the Typst side as percentages of the page, so
+   where the browser puts a region **must be the same fraction of the page at
+   every window size**: a region that drifts with the window is a region being
+   positioned by something other than the layout. What is compared is the
+   rendered box, not the attribute: the attribute is a compile-time constant
+   and comparing it across windows compares it with itself.
+
+   Driven by tests/cdp.mjs, the same one-file driver the invariants and
+   verify.mjs use: one browser, resized through the protocol, rather than a
+   second browser package with a path written down in here.
+     node tools/check.mjs        (needs examples/tutorial.html compiled)        */
+import { open } from '../tests/cdp.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const url = 'file://' + join(HERE, '..', 'examples', 'tutorial.html');
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
 
 const SIZES = [{ width: 1280, height: 720 }, { width: 1920, height: 1080 },
 { width: 900, height: 600 }, { width: 1440, height: 900 }];
-/* the deck opens on the desk; everything here is about the page being presented.
-   `window.vit` exists once the deck is ready, which is a wait and not a timeout */
-const present = async p => {
-  await p.waitForFunction(() => document.querySelector('.vit-deck')?.hasAttribute('data-ready'), null, { timeout: 60000 });
-  await p.evaluate(() => { window.vit.mode = 'present'; });
-  for (const f of p.frames()) if (f !== p.mainFrame()) await f.waitForLoadState('load').catch(() => { });
+
+const p = await open({ width: SIZES[0].width, height: SIZES[0].height, port: 9412 });
+const sleep = ms => p.evaluate(`await new Promise(r => setTimeout(r, ${ms})); return 1;`);
+
+/* The deck opens on the desk; everything here is about the page being
+   presented. `.vit-deck[data-ready]` is a wait and not a timeout. The viewport
+   is set before the load, so each size gets the deck as it lays itself out at
+   that size rather than a resized one. */
+const present = async vp => {
+  await p.send('Emulation.setDeviceMetricsOverride',
+    { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false });
+  await p.goto(url, '.vit-deck[data-ready]');
+  await p.evaluate("window.vit.mode = 'present'; return 1;");
+  await sleep(400);
 };
-/* the marks of a frame are lifted when the frame is first needed and swept up
-   in idle time after that: geometry can only be compared once that is done */
-const alllifted = p => p.waitForFunction(
-  () => document.querySelectorAll('.vit-slide[data-vit-lifted]').length === document.querySelectorAll('.vit-slide').length,
-  null, { timeout: 60000 });
-const errs = [];
+
+/* Every region is in the document from the moment it is parsed, placed by the
+   Typst side, so there is nothing to wait for beyond the deck being ready. */
 const seen = [];
 
 for (const vp of SIZES) {
-  const p = await b.newPage({ viewport: vp });
-  p.on('pageerror', e => errs.push(e.message));
-  p.on('console', m => m.type() === 'error' && errs.push(m.text()));
-  await p.goto(url); await present(p); await alllifted(p);
-  seen.push(await p.evaluate(() =>
-    [...document.querySelectorAll('.vit-slide')].map(s =>
-      [...s.querySelectorAll('.vit-mark')].map(m =>
-        m.dataset.vitKey + ' ' +
-        [m.style.left, m.style.top, m.style.width, m.style.height]
-          .map(v => (+v.replace('%', '')).toFixed(2)).join(' ')))));
-  await p.close();
+  await present(vp);
+  seen.push(await p.evaluate(`
+    return [...document.querySelectorAll('.vit-slide')].map(s =>
+      [...s.querySelectorAll('.vit-mark')].map(m => {
+        /* a declaration's host has no key of its own; it is named by its tag */
+        const name = m.dataset.vitKey ?? m.tagName.toLowerCase();
+        const page = m.closest('.vit-page').getBoundingClientRect();
+        const r = m.getBoundingClientRect();
+        if (!page.width) return name + ' off stage';
+        return name + ' ' + [(r.left - page.left) / page.width, (r.top - page.top) / page.height]
+          .map(v => (v * 100).toFixed(2)).join(' ');
+      }));`));
 }
 
 seen[0].forEach((marks, i) => {
@@ -57,20 +70,19 @@ console.log('resolution independence: ' + (drift.length
    previous), but as long as the geometry chains up, what you see is one object
    travelling. */
 {
-  const p = await b.newPage({ viewport: SIZES[0] });
-  p.on('pageerror', e => errs.push(e.message));
-  p.on('console', m => m.type() === 'error' && errs.push(m.text()));
-  await p.goto(url); await p.waitForTimeout(400); await present(p);
-  const total = await p.evaluate(() => window.vit.total);
+  await present(SIZES[0]);
+  const total = await p.evaluate('return window.vit.total;');
   const steps = [];
   for (let i = 1; i < total; i++) {
-    await p.evaluate(i => window.vit.go(i - 1), i);
-    await p.waitForTimeout(760);
-    steps.push(await p.evaluate(async i => {
+    await p.evaluate(`window.vit.go(${i - 1}); return 1;`);
+    await sleep(760);
+    /* String.raw, so that the backslashes in the regexes below reach the page
+       as they are written: an ordinary template literal eats them. */
+    steps.push(await p.evaluate(String.raw`
       const rest = document.querySelectorAll('.vit-mark').length;
       const orig = document.startViewTransition.bind(document); let vit;
       document.startViewTransition = a => (vit = orig(a));
-      window.vit.go(i); await vit.ready;
+      window.vit.go(${i}); await vit.ready;
       const seen = {};
       document.getAnimations().forEach(a => {
         const pe = a.effect && a.effect.pseudoElement; if (!pe) return;
@@ -104,10 +116,8 @@ console.log('resolution independence: ' + (drift.length
           const n = [...sl.querySelectorAll('.vit-mark')].map(m => m.style.viewTransitionName).filter(Boolean);   // a mark no transition has named yet has none
           return n.length === new Set(n).size;      // uniqueness is only required among elements rendered **together**
         }),
-      };
-    }, i));
+      };`));
   }
-  await p.close();
 
   const dirty = steps.map((s, i) => (!s.clean || !s.unique) ? (i + 1) + '→' + (i + 2) : null).filter(Boolean);
   const cloned = steps.map((s, i) => s.cloned ? (i + 1) + '→' + (i + 2) + ' cloned ' + s.cloned : null).filter(Boolean);
@@ -146,5 +156,5 @@ console.log('resolution independence: ' + (drift.length
     (skipped ? '; skipped ' + skipped + ' transitions with count changes' : '')));
 }
 
-console.log('errors:', errs.length ? errs : 'none');
-await b.close();
+console.log('errors:', p.errors.length ? p.errors : 'none');
+p.close();
