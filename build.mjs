@@ -43,7 +43,7 @@ const copy = dir => {
 
 const options = dir => ({
   absWorkingDir: ROOT,
-  entryPoints: ["web/hoist.js", "web/runtime.js", "web/chrome.js", "web/deck.css"],
+  entryPoints: ["web/runtime.js", "web/chrome.js", "web/deck.css"],
   outbase: ".",
   outdir: dir,
   outExtension: { ".js": ".min.js" },
