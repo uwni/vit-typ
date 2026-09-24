@@ -26,44 +26,80 @@ const sleep = ms => p.evaluate(`await new Promise(r => setTimeout(r, ${ms})); re
 /* The deck opens on the desk; everything here is about the page being
    presented. `.vit-deck[data-ready]` is a wait and not a timeout. The viewport
    is set before the load, so each size gets the deck as it lays itself out at
-   that size rather than a resized one. */
+   that size rather than a resized one. `__done` is the move having finished:
+   a frame in the middle of a view transition is out of the live rendering and
+   measures as nothing. */
 const present = async vp => {
   await p.send('Emulation.setDeviceMetricsOverride',
     { width: vp.width, height: vp.height, deviceScaleFactor: 1, mobile: false });
   await p.goto(url, '.vit-deck[data-ready]');
-  await p.evaluate("window.vit.mode = 'present'; return 1;");
+  await p.evaluate(`
+    window.__done = fn => new Promise(r => {
+      const deck = document.querySelector('.vit-deck');
+      let done = false;
+      const ok = () => { if (done) return; done = true; deck.removeEventListener('vit:move-done', ok); r(); };
+      deck.addEventListener('vit:move-done', ok); fn(); setTimeout(ok, 4000);
+    });
+    window.vit.mode = 'present';
+    return 1;`);
   await sleep(400);
 };
 
-/* Every region is in the document from the moment it is parsed, placed by the
-   Typst side, so there is nothing to wait for beyond the deck being ready. */
-const seen = [];
+/* Only the frame on stage has a size, so the deck is walked. What is read is
+   the rendered box against the page's own box: reading the percentage back out
+   of the element would compare a compile-time constant with itself. A
+   declaration's host is listed but not compared — an element running along a
+   path is put on the path by the runtime, which writes its own left and top. */
+const geometry = () => p.evaluate(`
+  const rows = [];
+  for (let k = 0; k < window.vit.total; k++) {
+    if (window.vit.index !== k) await window.__done(() => window.vit.go(k));
+    await new Promise(r => setTimeout(r, 60));
+    const pg = document.querySelector('.vit-slide.is-active .vit-page');
+    const box = pg?.getBoundingClientRect();
+    if (!box?.width) { rows.push({ frame: k, marks: null }); continue; }
+    rows.push({ frame: k, marks: [...pg.querySelectorAll(':scope > .vit-mark')].map(m => {
+      const r = m.getBoundingClientRect();
+      return {
+        key: m.dataset.vitKey ?? null,
+        tag: m.tagName.toLowerCase(),
+        x: (r.left - box.left) / box.width * 100,
+        y: (r.top - box.top) / box.height * 100,
+      };
+    }) });
+  }
+  return rows;`);
 
-for (const vp of SIZES) {
-  await present(vp);
-  seen.push(await p.evaluate(`
-    return [...document.querySelectorAll('.vit-slide')].map(s =>
-      [...s.querySelectorAll('.vit-mark')].map(m => {
-        /* a declaration's host has no key of its own; it is named by its tag */
-        const name = m.dataset.vitKey ?? m.tagName.toLowerCase();
-        const page = m.closest('.vit-page').getBoundingClientRect();
-        const r = m.getBoundingClientRect();
-        if (!page.width) return name + ' off stage';
-        return name + ' ' + [(r.left - page.left) / page.width, (r.top - page.top) / page.height]
-          .map(v => (v * 100).toFixed(2)).join(' ');
-      }));`));
+const seen = [];
+for (const vp of SIZES) { await present(vp); seen.push(await geometry()); }
+
+const at = m => m.x.toFixed(2) + ' ' + m.y.toFixed(2);
+for (const row of seen[0]) {
+  console.log('frame ' + (row.frame + 1) + ':' + (row.marks ? '' : ' not on stage'));
+  for (const m of row.marks ?? []) console.log('   ' + (m.key ?? m.tag + ' (runtime-placed)') + ' ' + at(m));
 }
 
-seen[0].forEach((marks, i) => {
-  console.log('slide ' + (i + 1) + ':');
-  marks.forEach(m => console.log('   ' + m));
-});
-
-const ref = JSON.stringify(seen[0]);
-const drift = SIZES.map((vp, k) => [vp, JSON.stringify(seen[k]) === ref]).filter(x => !x[1]);
+/* The box is snapped to whole pixels before it is reported, so the same
+   fraction reads a hair differently at each width; a region positioned by
+   something other than the layout misses by percentage points, not by this. */
+const TOLERANCE = 0.2;
+const drift = [];
+for (let k = 1; k < SIZES.length; k++) {
+  let worst = 0, how = '';
+  for (let f = 0; f < seen[0].length; f++) {
+    const a = seen[0][f].marks, b = seen[k][f]?.marks;
+    if (!a || !b || a.length !== b.length) { worst = Infinity; how = 'frame ' + (f + 1) + ' has a different set of regions'; break; }
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].key == null) continue;                       // the runtime placed it
+      const d = Math.max(Math.abs(a[i].x - b[i].x), Math.abs(a[i].y - b[i].y));
+      if (d > worst) { worst = d; how = a[i].key + ' on frame ' + (f + 1) + ' by ' + d.toFixed(3) + 'pp'; }
+    }
+  }
+  if (worst > TOLERANCE) drift.push(SIZES[k].width + 'x' + SIZES[k].height + ': ' + how);
+}
 console.log('resolution independence: ' + (drift.length
-  ? '✗ ' + drift.map(d => d[0].width + 'x' + d[0].height).join(', ') + ' differ from 1280x720'
-  : '✓ ' + SIZES.map(v => v.width + 'x' + v.height).join(' / ') + ' identical'));
+  ? '✗ ' + drift.join('; ')
+  : '✓ ' + SIZES.map(v => v.width + 'x' + v.height).join(' / ') + ' agree to within ' + TOLERANCE + 'pp'));
 /* ── one key across several pages: every transition must start where the
    previous one ended. That is the criterion for "continuous change": pairs are
    computed per transition (forward with the next frame, back with the
