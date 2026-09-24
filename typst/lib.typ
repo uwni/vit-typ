@@ -1440,21 +1440,24 @@
       geo != none or target() != "html",
       message: "a slide belongs to a deck: `deck` or `player` says what layout its frames are cut to",
     )
-    // this page's frames among the document's, and how many steps each has
+    // this page's frames among the document's
     let base = _frames.get().first()
-    let all = _steps()
-    let steps = range(bodies.len()).map(i => all.at(base + i, default: 0))
-    // every frame carries the types of the transition into it: the first frame of the
-    // page the page's (none: no transition), the others the frame-to-frame one
-    let attrs(i) = (
-      (
-        if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
-          section + ("data-transition": _types(fx))
-        }
-      )
-        + ("data-steps": str(steps.at(i)))
-    )
     if target() == "html" {
+      // how many steps each of this page's frames has. Asked here rather than
+      // above the branch: it walks the whole document, and only this side reads
+      // the answer.
+      let all = _steps()
+      let steps = range(bodies.len()).map(i => all.at(base + i, default: 0))
+      // every frame carries the types of the transition into it: the first frame of the
+      // page the page's (none: no transition), the others the frame-to-frame one
+      let attrs(i) = (
+        (
+          if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
+            section + ("data-transition": _types(fx))
+          }
+        )
+          + ("data-steps": str(steps.at(i)))
+      )
       // the rail is built once, by the deck, out of these: a thumbnail needs
       // the page's caption and how many positions it has, and both are known
       // here and nowhere else
@@ -1480,11 +1483,14 @@
                   {
                     html.frame(block(width: geo.width, height: geo.height, inset: geo.margin, {
                       body
-                      // the two corners of a box this knows the size of: what
+                      // The two corners of a box this knows the size of: what
                       // says whether the compiler resolves a position inside a
-                      // frame at all (see the check in `deck`)
-                      place(top + left, [#metadata(none)<vit-probe>])
-                      place(bottom + right, [#metadata(none)<vit-probe>])
+                      // frame at all (see the check in `player`). One frame
+                      // answers it for the document, so only the first asks.
+                      if base + i == 0 {
+                        place(top + left, [#metadata(none)<vit-probe>])
+                        place(bottom + right, [#metadata(none)<vit-probe>])
+                      }
                     }))
                     _hosts(geo)
                   },
