@@ -5,10 +5,11 @@ the API reference, `docs/api.pdf`.
 
 ## How it works
 
-**Identity is a name.** `mark(key)` puts the content in a box and records what
-it is and where the layout put it; the deck then draws it again on an element
-of its own carrying `data-vit-key`, and that element is the boundary. Nothing is
-inferred from geometry.
+**Identity is a name.** `mark(key)` puts the content in a labelled box and
+records what it is and where the layout put it; the deck places an empty
+element carrying `data-vit-key` there, and the browser moves the region's group
+into it (`web/hoist.js`). That element is the boundary. Nothing is inferred from
+geometry.
 
 The box is what makes this work: what says where the region is and how big it
 is, is a point placed in each of its two corners, and only something with
@@ -26,26 +27,117 @@ to look up.
 
 **Placement.** `view-transition-name` is silently ignored on SVG children (only
 elements in the CSS box tree are captured), so a marked region has to be a box
-of its own. The Typst side makes it one at compile time. In the page's frame the
-mark keeps its space and loses its ink (`hide`), and records two corners and
-what it is: the key, the effects it declared, the styles it was written under,
-and its body. The deck then draws the body again in an `html.frame` of its own
-and places that frame with the corner the page reported, as a percentage of the
-page's box, in a `div.vit-mark` beside the page's drawing.
+of its own. The Typst side lays the region out exactly once, in the page's
+frame, in a labelled box, and records two corners and what it is: the key, the
+stack it is a layer of, the effects it declared, and whether it is under a veil.
+The SVG export writes `<g data-typst-label="vit:key">` around a labelled box's
+ink. Beside the page's drawing the deck emits one empty `div.vit-mark` per
+region, placed and sized in percent of the page from the corners the page
+reported, and carrying them in the page's own units too (`data-vit-at`,
+`data-vit-size`).
 
-The frame states its own size in `em`, so one font size on the host scales it:
-`font-size: calc(100cqw / var(--vit-w))`, with the frame emitted under
-`set text(size: 1pt)` so that 1em is 1pt of the page's own units. Nothing is
-measured in the browser, the proportions are the frame's own (an `html.frame`
-carries no `preserveAspectRatio`, so a host that forced width and height would
-letterbox a long thin region), and no script runs before the deck is ready.
+`web/hoist.js` runs first, while the document is still being parsed, before the
+drawings' own elements upgrade: it moves each group into its element, in an
+`<svg>` whose `viewBox` is the box the layout gave the region, with the
+transforms of everything that stood above the group folded into one `matrix` so
+that its coordinates stay the page's. A move, not a measurement: nothing is laid
+out and nothing is read back from the browser's layout (`transform.baseVal` is
+the attribute, parsed), so it waits for nothing and paints nothing twice. Which
+element is which region is the order the page laid them out, per key, on both
+sides; a `waapi.animate` inside a frame is the same, under its own label, and
+`tween(play:)` points at the n-th label of its kind rather than at an ordinal
+written into the frame.
 
-The cost is that the region is laid out twice: once in the page, hidden, which
-is what the corners and the size come from, and once on its own, which is what
-is drawn. The page's layout is what makes content written to fill its container
-work (`measure` answers 0pt for `width: 100%`), and the second layout is what
-draws it. Anything inside a mark that counts itself therefore counts twice; see
-TODO.md.
+Nothing is laid out twice, and that is not a nicety. A second layout is in the
+document a second time: every counter in the region steps again (a numbered
+heading inside a mark made the next heading 2 in the browser and 1 on paper),
+every state is written again, and every equation is counted again by Typst's
+own HTML export, which costs the document a layout pass. The page's layout is
+also the only one that knows what container-relative content comes to
+(`measure` answers 0pt for `width: 100%`). What a pass is, and what a deck
+pays, is the next section.
+
+## The introspection budget
+
+Typst lays a document out again and again until every question the document
+asked has the same answer on the document it produced, and gives up after
+**five** passes (`crates/typst/src/lib.rs`, the loop in `compile_impl`). Pass N
+is built while observing the introspector of pass N−1, every observation is
+recorded, and the loop stops when all of them still hold on the document just
+built. Two consequences shape everything below.
+
+**The first pass observes nothing.** It sees an empty introspector: every query
+is empty, every counter 0, every state its default. Whatever a document does
+with those answers, it does wrong once. So a document that asks anything at all
+takes at least two passes, and exactly two only if the document built from
+empty answers agrees, in everything observed, with the one built from real
+answers. That is the whole design constraint: **nothing that shapes a page may
+depend on an answer.**
+
+**An error inside a context or a show rule is not fatal during the loop.** It is
+delayed: that rule's entire output becomes empty for the pass, the pass's
+diagnostics are dropped unless it is the last, and the error surfaces only if it
+is still there at the end (`typst-realize/src/lib.rs`, `engine.delay`). An
+assert that fails only when the answers are empty, or only when they are not,
+removes content on alternate passes, the document never settles, and nothing
+names the cause. The fault that took this package longest to find was of that
+kind: a state answering "paged" on the first pass, and `_marks` failing on the
+record the paper branch wrote.
+
+A deck takes **two** passes, the floor, by four rules:
+
+1. **The deck builds the page, from its own arguments.** A frame's size decides
+   every position inside it, and positions are what the deck queries. So
+   `player` installs `show <vit-stage>: …` with its own width, height and
+   margin, and `slide` emits only `[#block(body)<vit-stage>]`. Whether the
+   document is HTML at all arrives the same way, as the style `waapi.hosting`
+   sets (`copy.html`): `target()` cannot be asked inside a frame, and a state
+   answers "paged" on the first pass — which is how `mark` used to take the
+   paper branch once and hand `_marks` a record without a `transition`.
+2. **A record carries no answer.** What `mark` writes down is its key, its
+   stack, its effects and whether it is under a veil, all arguments and styles
+   (`veil` is a style, `waapi.hidden`, since Typst cannot be asked whether
+   something is hidden). No ordinal either: `tween` used to number its playing
+   drawings with a counter, and two of them on one page cost a pass.
+3. **Which frame a record belongs to is where it falls.** `_hosts` runs after
+   its frame's records and walks up to `here()`, starting over at every
+   `vit-frame`; `_offsets` runs from inside the frame, before the stack's own
+   layers are recorded, so it counts the frame markers before it and walks that
+   whole segment. No frame is numbered by a counter anywhere.
+4. **The region is laid out once.** The page's frame is the only layout of a
+   mark; the browser moves the ink. This package first drew every region a
+   second time, in an `html.frame` of its own, and that copy could only be
+   built from the query, so it first existed on the second pass. Anything in it
+   that read the introspector at its own location (theorion's proof reads a
+   state it also writes) read one pass stale and settled one pass late, and
+   Typst's HTML export queries `math.equation` on every pass
+   (`typst-html/src/document.rs`, to decide whether to emit math CSS) with a
+   recorded hash over every equation's content and location, so any equation
+   in the copy cost a third pass by itself. An equation in a mark was three,
+   theorion's proof in a mark four. Once was two and three.
+
+What the host protocol carries travels as
+[`elembic`](https://typst.app/universe/package/elembic/) styles, all of it: that
+the document is HTML, that the deck places boxes, that a region is veiled, that
+a drawing is inside another's states.
+
+What still costs a pass is the content's own, and vit adds nothing to it.
+`examples/tutorial.typ` takes three: theorion's proof ends in a QED symbol that
+is an inline equation whose presence it reads from a state
+(`theorion-qed-stack`), so the equation first exists on the second pass and the
+export's equation query sees it on the third — the same three a plain document
+with that proof takes. fletcher and cetz read nothing from the introspector
+(fletcher `get`s a state it never updates). `tests/fixture.typ` takes two, and
+so does every construct in the package, measured: an equation inside a mark,
+fletcher with equations inside a mark, two `waapi.animate` on one page, two
+`tween(play:)` on one page, all two.
+
+To see what a deck pays and why, `tools/typst-convergence-debug.patch` against a
+typst checkout adds `TYPST_DEBUG_CONVERGENCE=1`, which prints for every pass that
+did not settle which introspections changed and which errors were swallowed,
+and `TYPST_DEBUG_STOP_AT=n`, which emits pass n's document so two passes can be
+diffed as files. For the count alone, `--timings t.json` and count the
+`html document` spans.
 
 **The browser does the pairing.** On every page turn the runtime calls
 `document.startViewTransition({ update, types })`; the browser pairs
@@ -393,7 +485,8 @@ checked in `tests/invariants.mjs`.
 | ---------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------- |
 | `.vit-deck[data-duration,-easing,-theme,-version]`               | runtime            | the deck's pace, its chrome theme, the version in the help                    |
 | `.vit-group`                                                     | runtime, CSS       | one page. Its box is what the mode zooms carry                                |
-| `.vit-slide[data-transition,-steps]`                             | runtime, CSS       | one frame: the types of the transition into it, and how many presses it takes |
+| `.vit-slide[data-transition]`                                    | runtime, CSS       | one frame: the types of the transition into it                                |
+| `.vit-deck[data-steps]`                                          | runtime            | how many presses every frame takes, in document order, one list for the deck  |
 | `.vit-page > svg`                                                | the rail           | the page's drawing; a thumbnail is a `<use>` of it                            |
 | `.vit-note`                                                      | runtime            | the page's speaker notes, never in the layout                                 |
 | `.vit-rail > .vit-thumb > .vit-cap`, `.vit-stand`, `.vit-dots i` | runtime, CSS       | one thumbnail: caption, the picture's slot, one dot per position              |

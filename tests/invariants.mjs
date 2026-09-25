@@ -131,10 +131,18 @@ const attrs = name => [...new Set([...markup.matchAll(new RegExp(`data-${name}="
   check("the deck says what the runtime reads off it", wrong.length === 0, wrong.join(" "));
 
   const frames = [...markup.matchAll(/<section class="vit-slide"([^>]*)>/g)].map(m => m[1]);
-  const bad = frames.filter(f => !/data-steps="\d+"/.test(f)
-    || (/data-transition/.test(f) && !/data-transition="(enter-[\w-]+ leave-[\w-]+)( [\w-]+)*"/.test(f)));
-  check("and every frame says how it comes in and how far it steps",
+  const bad = frames.filter(f =>
+    /data-transition/.test(f) && !/data-transition="(enter-[\w-]+ leave-[\w-]+)( [\w-]+)*"/.test(f));
+  check("and every frame says how it comes in",
     frames.length > 0 && bad.length === 0, `${frames.length} frames, ${bad.length} malformed`);
+
+  /* How far each frame steps is one list on the deck, in document order: a page
+     that stated its own frames' counts would be putting the answer to a query
+     into what another query reads, which costs the document a pass. */
+  const steps = (attr("steps") ?? "").split(" ").filter(Boolean);
+  check("and the deck says how far every frame steps",
+    steps.length === frames.length && steps.every(s => /^\d+$/.test(s)),
+    `${steps.length} counts for ${frames.length} frames: ${steps.join(" ")}`);
 }
 
 {
@@ -216,8 +224,11 @@ try {
       fn();
       setTimeout(ok, 4000);
     });
+    window.__steps = () => (document.querySelector('.vit-deck').dataset.steps || '')
+      .split(' ').filter(Boolean).map(Number);
+    window.__stepOf = s => window.__steps()[[...document.querySelectorAll('.vit-deck .vit-slide')].indexOf(s)] || 0;
     window.__model = () => [...document.querySelectorAll('.vit-deck .vit-group')].map((g, k) => {
-      const frames = [...g.querySelectorAll('.vit-slide')].map(s => +s.dataset.steps || 0);
+      const frames = [...g.querySelectorAll('.vit-slide')].map(s => window.__stepOf(s));
       const pos = frames.reduce((n, s) => n + s + 1, 0);
       return { page: k + 1, frames: frames.length, pos,
                labels: frames.flatMap((s, f) => Array.from({length: s + 1}, (_, i) => i))
@@ -877,7 +888,7 @@ try {
       const gs = [...document.querySelectorAll('.vit-deck .vit-group')];
       for (const [k, g] of gs.entries())
         for (const s of g.querySelectorAll('.vit-slide'))
-          if (!(+s.dataset.steps || 0) && s.querySelector('[data-tween-at]')) return k;
+          if (!window.__stepOf(s) && s.querySelector('[data-tween-at]')) return k;
       return -1;`);
     const r = k < 0 ? null : await page.evaluate(`
       window.vit.mode = 'present';
@@ -1046,7 +1057,8 @@ try {
                         bar: !!document.querySelector('.vit-bar') };
           /* a frame that plays itself: states of its own, no steps */
           const slides = [...deck.querySelectorAll('.vit-slide')];
-          const k = slides.findIndex(s => !(+s.dataset.steps || 0) && s.querySelector('[data-tween-at]'));
+          const steps = (deck.dataset.steps || '').split(' ').filter(Boolean).map(Number);
+          const k = slides.findIndex((s, j) => !(steps[j] || 0) && s.querySelector('[data-tween-at]'));
           if (k < 0) { out.plays = null; return out; }
           await done(() => window.vit.go(k));
           await new Promise(r => setTimeout(r, 300));

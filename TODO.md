@@ -1,60 +1,63 @@
 # TODO
 
-## Compile-time placement, and what it costs
+## A typst that no release carries yet
 
 Since [typst#8832](https://github.com/typst/typst/pull/8832) (merged into typst
 main on 2026-09-23, commit 7e9a95d) a position resolves inside an `html.frame`,
-so vit places every marked region itself: the page keeps the space and loses the
-ink, and the region is drawn again in a frame of its own, placed where the
-layout put it. `hoist.js` is gone, and with it the measuring pass, the
-`getScreenCTM` conventions and the idle sweep.
+so vit knows where every marked region is without measuring anything in the
+browser: the page records the region's two corners, the deck places an element
+there, and `web/hoist.js` only moves the region's group into it. The measuring
+pass, the `getScreenCTM` conventions and the idle sweep went with the
+measuring.
 
-It is not in a release yet. The newest release is 0.15.1, where positions inside
-a frame are all zero, and `typst.toml` still declares `compiler = "0.15.0"`.
-A version number cannot tell the two apart (the main build also calls itself
-0.15.1), so `deck` asks instead: every page places a point in each of its two
-corners, and a compiler that answers zero to the distance between them is
-refused by name. The manifest should be raised the day a release carries the
-fix.
+The newest release is 0.15.1, where positions inside a frame are all zero, and
+`typst.toml` still declares `compiler = "0.15.0"`. A version number cannot tell
+the two apart (the main build also calls itself 0.15.1), so `deck` asks instead:
+every page places a point in each of its two corners, and a compiler that
+answers zero to the distance between them is refused by name. **Raise the
+manifest the day a release carries the fix**, and drop the probe with it.
 
-What the change costs, and what is worth knowing before touching it:
+## What a deck costs Typst
 
-- **A marked region is laid out twice**: once in the page, hidden, which is what
-  gives its corner and its size, and once in its own frame, which is what is
-  drawn. That is what lets a mark hold content written to fill its container
-  (`width: 100%`), because `measure` reports 0pt for such content and only the
-  page's own layout knows the answer.
-- **Two layouts mean two readings.** Anything inside a mark that counts or
-  measures itself is asked twice, and the second answer comes from a pass that
-  the first pass's output changed, so the document can chase itself. vit's own
-  records no longer do this: which frame a record belongs to is where it falls
-  between the frames' markers, not a counter it read, and with that removed the
-  fixture settles. What is left is other packages' doing. The tutorial still
-  reports `document did not converge within five attempts`, from fletcher's and
-  cetz's own `measure` and from the equation counter inside marked regions.
-  Those readings are one introspection round stale. The PDF is unaffected (it
-  lays nothing out twice), and the HTML is right in this deck, but a deck that
-  numbers or queries something inside a mark should not be assumed to be.
-  Removing the second layout is the real fix and is its own piece of work: the
-  page's layout cannot be the one to go, because it is the only one that knows
-  what container-relative content comes to.
-- **A region's box is the layout's, not the ink's.** `hoist.js` measured
-  `getBBox`, which is the ink without the stroke; the layout's box has the
-  ascent and descent of a line in it. Every morph starts and ends on that box,
-  so `fit` and `anchor` pin a slightly different corner than they used to, and
-  a marked region lands a pixel or two from where it did.
-- **Nothing may be placed inside a placed region.** A frame does not nest, so
-  the deck emits every region as a sibling of the page's own drawing and
-  positions it with CSS. `waapi.animate` inside a mark has nowhere to go: the
-  copy that keeps the space is told to stay quiet and the copy that is drawn is
-  inside the frame, so neither can declare it. It is refused at compile time,
-  by the assert in tween's `declared`.
+Typst gives a document five layout passes to settle. A deck takes **two**, the
+floor for any document that asks a question at all, and vit adds nothing to
+what its content costs on its own: see **The introspection budget** in
+`docs/internals.md` for the two facts about Typst's loop that decide this and
+the four rules that follow from them. Every construct in the package has been
+measured at two, and so has `tests/fixture.typ`; `examples/tutorial.typ` takes
+three, which is theorion's proof by itself (its QED symbol is an inline
+equation whose presence it reads from a state, and Typst's HTML export queries
+every equation on every pass).
+
+The way there is worth writing down, because the obvious design is wrong. When
+positions inside a frame arrived, the first design drew every marked region a
+second time, in an `html.frame` of its own beside the page. It cost a pass on
+any region whose content reads the introspector — the copy could only be built
+from a query, so it first existed on pass two, and read one pass stale from
+then on — and it was wrong: a second layout is in the document a second time,
+so a counter stepped inside a mark stepped twice, and a numbered heading inside
+a mark made the next heading 2 in the browser and 1 on paper. Typst has no way
+to lay content out without it being in the document; `measure` is the one
+sandbox and it returns a size. So the region is laid out once, by the page, and
+the browser moves the ink.
+
+To measure a deck: `typst compile --features html --timings t.json deck.typ
+out.html`, then count the `html document` spans in `t.json`; to see why,
+`tools/typst-convergence-debug.patch`.
+
+## What the layout's box is
+
+- **A region's box is the layout's, not the ink's.** The old `hoist.js`
+  measured `getBBox`, which is the ink without the stroke; the layout's box has
+  the ascent and descent of a line in it. Every morph starts and ends on that
+  box, so `fit` and `anchor` pin a slightly different corner than they used to,
+  and a marked region lands a pixel or two from where it did.
 - **A mark is hidden with `veil`, not `hide`.** Whether a region has arrived yet
   is something the deck has to be told, because Typst cannot be asked whether
   content is hidden. `reveal` and `anchor` say it; a bare `hide` does not, and
-  leaves the page empty while the deck draws the region anyway. That is the one
-  way the PDF and the HTML can disagree, and it cannot be detected, only
-  documented.
+  leaves the page empty while the deck names an empty element that still
+  morphs. That is the one way the PDF and the HTML can disagree, and it cannot
+  be detected, only documented.
 
 ## Waiting on browsers: the empty frame during a capture
 

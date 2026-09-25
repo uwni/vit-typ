@@ -17,7 +17,14 @@ navigates, tidies the DOM once at load, and hands the browser two states.
 
 ## Requirements
 
-- Typst 0.15 +.
+- A Typst with [typst#8832](https://github.com/typst/typst/pull/8832), which
+  makes a position resolve inside an `html.frame`. That is typst main; no
+  release carries it yet, and 0.15.1 is refused by name at compile time rather
+  than producing a deck stacked in the top left corner.
+- [`elembic`](https://typst.app/universe/package/elembic/), which `tween` and
+  `vit` both use for what a host tells the content under it. See **The
+  introspection budget** in [docs/internals.md](docs/internals.md) for why none
+  of it is a state.
 - A browser with same-document View Transitions including transition types and
   `view-transition-class`, and CSS `d` for path morphing. Blink and Gecko have
   both; in Safari 27 preview switch on the "CSS d property" flag under
@@ -156,7 +163,8 @@ or one object is moving**:
 | `reveal(n, (step, at) => …)` | Frames from **one** description: the body is rendered once per frame and each part says when it arrives, e.g. `at(2, thing)`. Before its frame, content keeps its space (so nothing is laid out again and nothing jumps) and anything else is `none`, which switches a stroke or a fill off. |
 | `layers(key, a, b, …)` | Layers of one picture, each its own mark (`key-1`, `key-2`, …). The last one sizes the stack; a `none` layer is left out, which is how a layer arrives. When it does, the layers already there glide as whole pictures instead of being redrawn. The layers are hung on the point they share, which is any `mark` or `anchor` named in both; it may be anywhere in the picture. |
 | `anchor(key, body)` | A named point for `layers` to hang a stack on. The body keeps its place in the layout and leaves no ink, so the later layer can redraw the earlier one's parts hidden and name one of them. |
-| `veil(body)` | `hide`, for content with marks in it. The deck draws every marked region itself, and Typst cannot be asked whether something is hidden, so this says so as it hides. `reveal` and `anchor` use it; a bare `hide` around a mark leaves the page empty and the region drawn anyway. |
+| `turning(transition)` | How the pages under it turn, for a run of them rather than the whole deck: `#show: turning("slide")`. Takes what `deck(transition:)` takes, `none` included; a page's own `transition:` still wins. The page size is not settable this way, and deliberately: the stylesheet carries it once and every region is scaled by it. |
+| `veil(body)` | `hide`, for content with marks in it. The deck gives every marked region an element of its own, and Typst cannot be asked whether something is hidden, so this says so as it hides. `reveal` and `anchor` use it; a bare `hide` around a mark leaves the page empty and the region drawn anyway. |
 | `build(a, b, c)` | Frames that accumulate: `a`, then `a` and `b`, then all three. For content that flows, like a list or a stack of blocks, where later parts are meant to push the layout. |
 
 `window.vit` is the deck's API for anything that displays or controls it. The
@@ -468,9 +476,9 @@ mid-presentation.
 
 ## Limitations
 
-- **Z-order changes**: a marked region is drawn beside the page rather than in
-  it, and painted over it. A marked element that was under other content comes
-  out on top.
+- **Z-order changes**: a marked region is moved out of the page into an element
+  beside it, and painted over it. A marked element that was under other content
+  comes out on top.
 - **Overflow is clipped silently**: a page is a fixed-size block; content that
   does not fit is invisible in both the PDF and the HTML, identically, but
   nothing warns.
@@ -479,20 +487,10 @@ mid-presentation.
   Magic Move.
 - **Glyph-level morphing** between two marks is out of scope; at that level
   each glyph must be animated by hand.
-- **A marked region is laid out twice**: once in the page, for its corner and
-  its size, and once on its own, which is what the browser draws. Anything
-  inside a mark that counts, numbers or measures itself is therefore asked
-  twice, and reads one introspection round stale. Typst reports this as
-  `document did not converge within five attempts`. The PDF is unaffected.
-- **Only five text settings follow a mark's body**: the size, the fill, the
-  font, the weight and the style. The body is laid out again outside the page,
-  where show rules, `set par` and everything else the page set are out of
-  scope, and Typst has no way to hand those over. Write what the region needs
-  inside the mark.
-- **A mark is hidden with `veil`, not `hide`**: the deck draws every marked
-  region itself, and has to be told that one has not arrived yet. `reveal` and
-  `anchor` say so; a bare `hide` leaves the region hidden on paper and drawn in
-  the browser.
+- **A mark is hidden with `veil`, not `hide`**: the deck gives every marked
+  region an element of its own, and has to be told that one has not arrived
+  yet. `reveal` and `anchor` say so; a bare `hide` leaves the region hidden on
+  paper and named in the browser, an empty element that still morphs.
 - **`dash: (phase:)` is not portable**: Typst writes it to `stroke-dashoffset`
   without flipping the sign, so the PDF and the browser draw the dash in
   different places. Put the position in the dash array instead (a zero-length
@@ -503,11 +501,14 @@ mid-presentation.
 
 ## How it works
 
-`mark` is a name. The Typst side hides the marked region in the page, draws it
-again in a frame of its own and places it where the layout put it, so that it is
-a CSS box and can carry a `view-transition-name`; the browser does the pairing;
-every transition is written as CSS and the runtime only adds `fwd` or `back`.
-The details are in [docs/internals.md](docs/internals.md).
+`mark` is a name. The Typst side lays the marked region out once, in the page,
+under a label, and records where the layout put it; beside the page it places an
+empty element there, and the browser moves the region's group into it
+(`web/hoist.js`, a move, not a measurement), so that it is a CSS box and can
+carry a `view-transition-name`. The browser does the pairing; every transition
+is written as CSS and the runtime only adds `fwd` or `back`. A deck settles in
+two of Typst's five layout passes, and what its content costs on top is the
+content's own. The details are in [docs/internals.md](docs/internals.md).
 
 `html.frame` outputs glyph outlines, so rendering is Typst's own, and
 `tools/verify.mjs` compares the PDF and the HTML page by page.
@@ -518,6 +519,7 @@ The details are in [docs/internals.md](docs/internals.md).
 typst/typst.toml    package manifest; its version names the build's directory
 typst/lib.typ       entry point: deck / slide / mark
 typst/chrome/       the player's own markup, in Typst: bar, desk (rail, pane, notes), help, icons, laser, settings, speaker
+web/hoist.js        moves every marked region's group out of the page SVG into the element the Typst side placed for it: runs first, while the document parses, and measures nothing
 web/deck.css        page SVG layout, the three modes, toolbar, laser, speaker view (the effects are written by lib.typ)
 web/runtime.js      the deck: model, element-animation steps, continuous animation, transitions, the rail, mode zooms, and window.vit
 web/chrome.js       what floats over it: toolbar, laser pointer, settings panel, key help, black screen, speaker view
@@ -531,6 +533,7 @@ tests/invariants.mjs  properties every build must have, whatever the deck says
 tools/paths.mjs     paths.js under Node against a table of cases
 tools/check.mjs     region geometry at four window sizes, pairing chains, clone clean-up, console errors
 tools/verify.mjs    PDF ↔ HTML pixel comparison, frozen mid-transition frames
+tools/typst-convergence-debug.patch  for a typst checkout: which introspections changed on each pass, which errors it swallowed, stop after pass n
 tools/clef.py       derives the tutorial's clef from a font glyph: skeleton, Eulerian trail, offset outline
 tools/cetz.mjs      the CeTZ layer against several CeTZ versions, page pair by page pair
 tools/cetz.typ      one canvas drawn twice, with states and without: the pages must match, compiled by cetz.mjs

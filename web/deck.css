@@ -109,22 +109,27 @@ body {
   height: 100% !important;
   display: block;
 }
-/* A marked region is drawn in a frame of its own, placed at the corner the
-   layout gave it. The frame states its size in em, so this one font size is the
-   whole of the scaling and the drawing keeps the proportions Typst gave it.
-   overflow must be visible: the layout's box is the geometric box without the
-   stroke, and hidden clips half a stroke width on every side (the ends of a
-   Lissajous curve get cut flat). View Transitions snapshots carry ink overflow
-   anyway, so nothing flickers. */
+/* A marked region's own element, placed and sized in percent of the page where
+   the layout put the region; hoist.js moves the region's group into it, in an
+   <svg> whose viewBox is the box the layout gave it. overflow must be visible:
+   the layout's box is the geometric box without the stroke, and hidden clips
+   half a stroke width on every side (the ends of a Lissajous curve get cut
+   flat). View Transitions snapshots carry ink overflow anyway, so nothing
+   flickers. */
 .vit-mark {
   position: absolute;
   display: block;
   overflow: visible;
   view-transition-class: vit-mo;
-  font-size: calc(100cqw / var(--vit-w));
   /* the regions follow the page in the document, so they are drawn over it;
      this is for the hit testing, which the order alone does not settle */
   z-index: 1;
+}
+.vit-mark > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 /* speaker notes: read by the runtime only, never shown in the layout (display:none is not captured by a view transition either) */
 .vit-note {

@@ -88,15 +88,20 @@
 
   /* deck(…) parameters, the presenter's speed, what this browser can do */
   const settings = () => {
+    STEPS = (deck.dataset.steps || "").split(" ").filter(Boolean).map(Number);
     defaultMs = parseInt(deck.dataset.duration, 10);
     EASING = deck.dataset.easing.split(" ").map(Number);   // the four numbers of a cubic Bézier
     reduced = matchMedia("(prefers-reduced-motion: reduce)");
     canvit = typeof document.startViewTransition === "function";
   };
 
-  /* How many steps a frame has, from data-steps, so the whole model is known
-     before a single page is opened. */
-  const stepCount = s => +s.dataset.steps || 0;
+  /* How many steps every frame has, in document order, so the whole model is
+     known before a single page is opened. One list on the deck rather than an
+     attribute per frame: a page that stated its own frames' counts would put
+     the answer to a compile-time query into something another query reads, and
+     the document would take an introspection pass longer to settle. */
+  let STEPS = [];
+  const stepCount = i => STEPS[i] || 0;
 
   /* pages, frames and steps into the position sequence */
   const buildModel = () => {
@@ -121,7 +126,7 @@
       for (let i = g.from; i < g.to; i++) {
         head[i] = g.pos.length;
         abs[i] = POS.length;
-        for (let k = 0; k <= stepCount(slides[i]); k++) {
+        for (let k = 0; k <= stepCount(i); k++) {
           const q = { i, at: k, n: POS.length };
           g.pos.push(q);
           POS.push(q);
@@ -377,7 +382,7 @@
          does is its own business, so we ask rather than look */
       m.anim = tween.plays(m.box);
     }
-    return (plans[i] = { marks, n: stepCount(s) });
+    return (plans[i] = { marks, n: stepCount(i) });
   };
 
   /* A step's animations are the deck's to cancel when the next one starts; a
@@ -776,7 +781,7 @@
 
   /* A frame at rest is at its last step: a page we are not on shows its work
      finished, like a handout. Free for a frame with no steps, which is most. */
-  const settle = i => { if (stepCount(slides[i])) stepTo(i, stepCount(slides[i]), true); };
+  const settle = i => { if (stepCount(i)) stepTo(i, stepCount(i), true); };
 
   /* ── init ─────────────────────────────────────────────────────────── */
 
@@ -804,7 +809,7 @@
       get total() { return n; },        // frames
       get pages() { return gn; },       // pages; a page may be several frames
       get step() { return at(cur); }, set step(k) { stepTo(cur, k); },
-      get steps() { return stepCount(slides[cur]); },
+      get steps() { return stepCount(cur); },
       get speed() { return speed; }, set speed(v) { setSpeed(v); },
       get version() { return deck.dataset.version || null; },
       /* "desk" (where it opens), "present" or "overview": what the toolbar and Esc / Enter / o switch between */

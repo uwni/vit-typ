@@ -1,0 +1,80 @@
+diff --git a/crates/typst/src/lib.rs b/crates/typst/src/lib.rs
+index 895194bd1..37f826b07 100644
+--- a/crates/typst/src/lib.rs
++++ b/crates/typst/src/lib.rs
+@@ -156,11 +156,75 @@ fn compile_impl<T: Output>(
+ 
+         document = T::create(&mut engine, &content, styles)?;
+ 
++        // LOCAL DEBUG PATCH: name the errors this iteration swallowed. They are
++        // drained and put straight back, so promotion at the end is unchanged.
++        if std::env::var_os("TYPST_DEBUG_CONVERGENCE").is_some() {
++            let errs = subsink.delayed();
++            if !errs.is_empty() {
++                eprintln!("[delayed] iteration {}: {} error(s) swallowed", history.len() + 1, errs.len());
++                for e in &errs {
++                    eprintln!("  ! {}", e.message);
++                    for h in &e.hints {
++                        eprintln!("      hint: {}", h.v);
++                    }
++                    for t in &e.trace {
++                        eprintln!("      via: {:?}", t.v);
++                    }
++                }
++            }
++            subsink.delayed_errors(errs);
++        }
++
++        // LOCAL DEBUG PATCH: stop after iteration N and emit that document, so
++        // successive iterations can be diffed as files.
++        if let Some(n) = std::env::var("TYPST_DEBUG_STOP_AT").ok().and_then(|v| v.parse::<usize>().ok()) {
++            if history.len() + 1 >= n {
++                eprintln!("[stop] emitting the document of iteration {}", history.len() + 1);
++                sink.extend_from_sink(subsink);
++                break;
++            }
++        }
++
+         if timed!("check stabilized", constraint.validate(document.introspector())) {
+             sink.extend_from_sink(subsink);
+             break;
+         }
+ 
++        // LOCAL DEBUG PATCH: name the introspections whose output changed
++        // between the document just observed and the document just built.
++        // Slot MAX_ITERS is the new document, slot MAX_ITERS-1 the one it
++        // observed, so `analyze` reports exactly what moved this iteration.
++        if !history.is_empty() && std::env::var_os("TYPST_DEBUG_CONVERGENCE").is_some() {
++            let mut introspectors =
++                [&empty_introspector as &dyn Introspector; MAX_ITERS + 1];
++            introspectors[MAX_ITERS] = document.introspector();
++            let mut slot = MAX_ITERS;
++            for doc in history.iter().rev() {
++                if slot == 0 {
++                    break;
++                }
++                slot -= 1;
++                introspectors[slot] = doc.introspector();
++            }
++            let diags = typst_library::introspection::analyze(
++                world,
++                introspectors,
++                subsink.introspections(),
++            );
++            eprintln!(
++                "[convergence] iteration {} -> {}: {} introspection(s) changed",
++                history.len(),
++                history.len() + 1,
++                diags.len().saturating_sub(1)
++            );
++            for d in diags.iter().skip(1) {
++                eprintln!("  - {}", d.message);
++                for h in &d.hints {
++                    eprintln!("      {}", h.v);
++                }
++            }
++        }
++
+         if history.is_full() {
+             let mut introspectors =
+                 [&empty_introspector as &dyn Introspector; MAX_ITERS + 1];
