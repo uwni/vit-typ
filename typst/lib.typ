@@ -544,53 +544,172 @@
   "enter-" + p.enter.effect + " leave-" + p.leave.effect + _bundles(p).map(b => " " + _tag(b.role, b.vars)).join()
 )
 
-/// How pages turn, for the pages that say nothing of their own. A style rather
-/// than a state, so that it can be set for a run of pages and not only for the
-/// whole deck: see `turning`.
-///
-/// The layout a deck is cut to is *not* here, and nothing reads it back at all:
-/// the deck builds every page's frame itself, from its own arguments (the show
-/// rule in `player`). Read back from anywhere, a state or this style chain, it
-/// would be the wrong number on the document's first pass, when every answer
-/// is empty, and the whole frame with it; one pass more to settle, or none.
-#let _stage = _e.element.declare(
-  "stage",
-  prefix: "@preview/vit,v0.1.0",
-  doc: "What a page takes from the deck rather than saying itself.",
-  display: it => it.body,
-  fields: (
-    _e.field("body", _e.types.option(content), required: true),
-    _e.field(
-      "transition", _e.types.option(dictionary), default: _pair("fade"),
-      doc: "The pair a page turns with; none is no transition between pages.",
-    ),
-    _e.field(
-      "inside", bool, default: false,
-      doc: "There is a deck around this page. Only `player` sets it; a page that finds it false is being written outside one.",
-    ),
-  ),
-)
-
-/// How the pages under this turn, for a run of them rather than the whole deck:
-/// `#show: turning("push")`, and every page after it in that scope turns that
-/// way unless it says otherwise itself. Takes what `deck(transition:)` takes.
-///
-/// ```typ
-/// #show: turning(none)        // a section that does not move
-/// ```
-/// -> function
-#let turning(
-  /// A name from `transitions`, a pair `(enter:, leave:)`, a dictionary with
-  /// settings, or `none`.
-  /// -> none | str | dictionary
-  transition,
-) = _e.set_(_stage, transition: _pair(transition))
-
 /// Between frames of one page the layout stays put and changes incrementally,
 /// so the page cross-fades (what is the same stays, what was added fades in),
 /// and elements enter and leave by their own `mark(transition:)`.
 /// -> dictionary
 #let _frame = _pair("fade")
+
+/// The rules a transition's settings need, written where the transition is:
+/// the deck's default with the stylesheet, a page's own in its own `<style>`,
+/// a mark's with the marks. All of them land after deck.css, so they are what
+/// the effects read. (A query for them all would not settle: what the pages
+/// emit depends on the deck's default, which is what this is part of.)
+/// -> str
+#let _sets(
+  /// -> none | dictionary
+  fx,
+) = if fx == none { "" } else { _bundles(fx).map(b => _rule(b.role, b.vars)).join("") }
+
+/// One frame of a page, as the deck lays it out: one picture. On paper it is a
+/// page of its own. In the browser the deck's show rule (`player`) draws it: the
+/// `html.frame`, from the deck's own size, and the elements its regions are
+/// moved into. The frame's marker goes first either way: a record belongs to
+/// the frame whose marker it falls after, and nothing is counted.
+#let stage = _e.element.declare(
+  "stage",
+  prefix: "@preview/vit,v0.1.0",
+  doc: "One frame of a page.",
+  count: none,
+  fields: (
+    _e.field("body", content, required: true),
+  ),
+  display: it => {
+    [#metadata(none)<vit-frame>]
+    block(width: 100%, height: 100%, it.body)
+    pagebreak(weak: true)
+  },
+)
+
+/// One page. On the HTML side a whole-page `html.frame` (hence pixel-identical
+/// to the PDF); on the PDF side a page.
+///
+/// Several bodies are *frames of the same page*: navigation walks them one by
+/// one, the overview merges them into one thumbnail with dots for the
+/// positions. Frames still transition with View Transitions, so "the second
+/// frame has one more line" is an element-level interpolation, not a page
+/// jump.
+///
+/// ```typ
+/// #slide(title: "Two frames")[first][first + something added]
+/// ```
+///
+/// An element (elembic): the frames are its positional arguments. Fields:
+///
+/// - `title`: the page's caption, for the rail and the speaker view.
+/// - `note`: speaker notes, read by the runtime and never shown in the layout.
+/// - `transition`: how this page comes in, a name from `transitions` or
+///   `(enter:, leave:)` with settings; `none` takes the run's (`turn`).
+/// - `turn`: how the pages of a run turn, for the pages that say nothing of
+///   their own: `turning` sets it, `deck`/`player` set it for the whole deck.
+/// - `inside`: there is a deck around this page. Only `player` sets it.
+///
+/// The layout a page is cut to is *not* a field, and nothing reads it back at
+/// all: the deck builds every frame itself, from its own arguments (the show
+/// rule in `player`). Read back from anywhere, a state or the style chain, it
+/// would be the wrong number on the document's first pass, when every answer
+/// is empty, and the whole frame with it; one pass more to settle, or none.
+/// -> content
+#let slide = _e.element.declare(
+  "slide",
+  prefix: "@preview/vit,v0.1.0",
+  doc: "One page of the deck: its frames, its caption and its notes.",
+  count: none,
+  fields: (
+    _e.field("frames", _e.types.array(content), required: true, named: true, doc: "The frames, in order."),
+    _e.field("title", _e.types.option(_e.types.union(str, content)), default: none, doc: "The caption."),
+    _e.field("note", _e.types.option(content), default: none, doc: "Speaker notes."),
+    _e.field("transition", _e.types.option(_e.types.union(str, dictionary)), default: none, doc: "This page's own transition; none takes the run's."),
+    _e.field("turn", _e.types.option(_e.types.union(str, dictionary)), default: "fade", doc: "How the pages of this run turn."),
+    _e.field("inside", bool, default: false, doc: "There is a deck around this page. Only `player` sets it."),
+  ),
+  // the frames are the positional arguments, as many as there are; a page
+  // with none is one empty frame
+  construct: orig => (..args) => {
+    assert(
+      args.named().keys().all(k => k in ("title", "note", "transition")),
+      message: "slide takes title, note and transition; the frames are positional",
+    )
+    let bodies = args.pos()
+    if bodies.len() == 0 { bodies = ([],) }
+    let _ = _pair(args.named().at("transition", default: none))
+    orig(frames: bodies, ..args.named())
+  },
+  display: it => context {
+    let own = _pair(it.transition)
+    let fx = if own == none { _pair(it.turn) } else { own }
+    // The layout a frame is cut to is the deck's, and the deck builds the frame
+    // itself (the show rule in `player`). All a page needs to know is that
+    // there is a deck at all, and that is a field a set rule filled, not an
+    // answer.
+    assert(
+      it.inside or target() != "html",
+      message: "a slide belongs to a deck: `deck` or `player` says what layout its frames are cut to",
+    )
+    if target() == "html" {
+      let section = (class: "vit-slide")
+      // every frame carries the types of the transition into it: the first
+      // frame of the page the page's (none: no transition), the others the
+      // frame-to-frame one
+      let attrs(i) = (
+        if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
+          section + ("data-transition": _types(fx))
+        }
+      )
+      html.elem(
+        "div",
+        attrs: (class: "vit-group"),
+        {
+          // the rules this page's own settings need, written where the
+          // transition is (see `_sets`); a name alone needs none, and the run's
+          // are `turning`'s to write, once
+          let css = _sets(own)
+          if type(css) == str and css != "" { html.elem("style", css) }
+          it.frames.enumerate().map(((i, body)) => html.elem("section", attrs: attrs(i), stage(body))).join()
+          // notes are hidden inside the group (CSS display:none); the runtime
+          // reads innerHTML
+          if it.note != none { html.elem("aside", attrs: (class: "vit-note"), it.note) }
+        },
+      )
+    } else {
+      for body in it.frames { stage(body) }
+    }
+  },
+)
+
+/// How the pages under it turn, for a run of them rather than the whole deck:
+/// `#turning("slide")[ …slides… ]`, or `#show: turning("slide")` for the rest
+/// of a scope. A page that says `transition:` itself is not affected. It is a
+/// set rule on `slide`'s `turn` field (`e.set_(slide, turn: …)`), so it is in
+/// scope for its body and gone after it.
+///
+/// Prefer the scoped form for a run in the middle of a deck. Until Typst has
+/// custom elements of its own, an elembic set rule is a show rule, and
+/// `#show: turning(…)` written before page after page nests them one inside
+/// the next, which Typst stops at a depth of 64 — around twenty of them. The
+/// scoped form and `transition:` on a page nest nothing.
+/// -> content | function
+#let turning(
+  /// A name from `transitions`, or a dictionary naming the effects and their
+  /// settings, as `slide(transition:)` takes it.
+  /// -> none | str | dictionary
+  transition,
+  /// The run: with it, the pages it applies to; without it, the rule itself,
+  /// for `#show:`.
+  /// -> content
+  ..scope,
+) = {
+  let p = _pair(transition)
+  assert(scope.named().len() == 0 and scope.pos().len() <= 1, message: "turning takes a transition and, optionally, the pages it applies to")
+  let rule(doc) = {
+    // the rules the run's settings need, once for the run rather than once per
+    // page (see `_sets`); a name alone needs none, and paper needs nothing
+    let css = _sets(p)
+    if type(css) == str and css != "" { context { if target() == "html" { html.elem("style", css) } } }
+    _e.set_(slide, turn: transition)(doc)
+  }
+  if scope.pos().len() == 0 { rule } else { rule(scope.pos().first()) }
+}
 
 /// Give a piece of content a name: this is one object, and the same `key` on
 /// two adjacent pages is the same object, which the browser pairs and
@@ -629,66 +748,81 @@
 /// that does not fit the rest of the line moves to a line of its own: marking a
 /// word, a title, a term or a figure costs nothing, while marking a whole
 /// sentence in the middle of running prose reflows the paragraph around it.
+///
+/// An element (elembic): `mark(key, body)` constructs it, and what a document
+/// wants for a run of marks it sets on the fields, `#show: e.set_(mark,
+/// transition: "rise")`, the way `turning` does for pages. Fields:
+///
+/// - `key`: the name. Same name on two adjacent pages = one pair. Letters,
+///   digits, `_` and `-` (it becomes a CSS `view-transition-name`).
+/// - `body`: what the object is. Several states of one drawing are `tween`'s,
+///   not a mark's: `mark(key, tween(s0, s1, …))`. To hide a mark, `veil` rather
+///   than `hide`: the deck gives every marked region an element of its own, and
+///   a bare `hide` leaves it giving one to a region the page meant to drop.
+/// - `transition`: this object's own enter/leave effect: a name from
+///   `transitions`, the same both ways, or `(enter: name, leave: name)`, where
+///   `enter` is how it appears and `leave` how it disappears (going back replays
+///   either in reverse). It applies only when the mark is one-sided in a
+///   transition; a paired mark morphs regardless. `"wipe-up"` reveals from the
+///   bottom edge up, `"slide"` pushes in from the right (by its own width,
+///   fading as it goes), `"zoom"` shrinks into place, `"none"` appears at once.
+///   Unset (`none`) folds the mark into the page: within a page it cross-fades
+///   with the layout, between pages it pushes, wipes or fades with the whole
+///   page. Definition, theorem and proof each revealed from a different edge is
+///   three marks with one value each. One object has one effect: given on any
+///   occurrence of the key, it holds for all of them, and two occurrences may
+///   not disagree. Marks nest: one around an assembly is a group of its own, and
+///   the marks inside it keep their own identity. The group carries what is
+///   left once they are lifted out, which is how the first change's result
+///   takes part in the next one as a whole (see `fit` and `anchor` in
+///   `transitions`). Settings ride along in the same dictionary (`duration`,
+///   `easing`, `zoom`, `push`; see `transitions`) and apply to this mark alone,
+///   whatever pace the page keeps.
+/// - `stack`: which stack of layers this is one of, as `layers` says: `(key,
+///   index)`. The deck aligns a stack by the point its layers share, and
+///   everything drawn inside a layer moves with it.
+/// - `block`: how the identity is held: in a box (the default), or in a block.
+///   A box is what lets a mark sit inside a sentence or a formula. But a box is
+///   only as tall as the glyphs in it, where a line is as tall as the line. So
+///   content that *is* a block in its own right (a title in a header band, a
+///   figure, a column) measures differently boxed than it did unmarked, and
+///   anything that lays it out by measuring it (fitting it to a width, centring
+///   it on the horizon) moves. Marking such content with `block: true` holds
+///   the identity in an unbreakable block instead, which measures exactly as
+///   the content did, and the layout does not notice the mark at all. It is
+///   block-level, so it is wrong inside a sentence, which is why it is not the
+///   default.
 /// -> content
-#let mark(
-  /// The name. Same name on two adjacent pages = one pair. Letters, digits,
-  /// `_` and `-` (it becomes a CSS `view-transition-name`).
-  /// -> str
-  key,
-  /// This object's own enter/leave effect: a name from `transitions`, the same
-  /// both ways, or `(enter: name, leave: name)`, where `enter` is how it appears
-  /// and `leave` how it disappears (going back replays either in reverse). It applies
-  /// only when the mark is one-sided in a transition; a paired mark morphs
-  /// regardless. `"wipe-up"` reveals from the bottom edge up, `"slide"` pushes
-  /// in from the right (by its own width, fading as it goes), `"zoom"` shrinks into place,
-  /// `"none"` appears at once. Unset (`none`) folds the mark into the page:
-  /// within a page it cross-fades with the layout, between pages it pushes,
-  /// wipes or fades with the whole page. Definition, theorem and proof each
-  /// revealed from a different edge is three marks with one value each. One
-  /// object has one effect: given on any occurrence of the key, it holds for
-  /// all of them, and two occurrences may not disagree. Marks nest: one around
-  /// an assembly is a group of its own, and the marks inside it keep their own
-  /// identity. The group carries what is left once they are lifted out, which
-  /// is how the first change's result takes part in the next one as
-  /// a whole (see `fit` and `anchor` in `transitions`). Settings ride along in
-  /// the same dictionary (`duration`, `easing`, `zoom`, `push`; see
-  /// `transitions`) and apply to this mark alone, whatever pace the page keeps.
-  /// -> none | str | dictionary
-  transition: none,
-  /// Which stack of layers this is one of, as `layers` says: `(key, index)`.
-  /// The deck aligns a stack by the point its layers share, and everything
-  /// drawn inside a layer moves with it.
-  /// -> none | array
-  stack: none,
-  /// How the identity is held: in a box, or in a block.
-  ///
-  /// A box by default, and that is what lets a mark sit inside a sentence or a
-  /// formula. But a box is only as tall as the glyphs in it, where a line is as
-  /// tall as the line. So content that *is* a block in its own right (a title
-  /// in a header band, a figure, a column) measures differently boxed than it
-  /// did unmarked, and anything that lays it out by measuring it (fitting it to
-  /// a width, centring it on the horizon) moves. Marking such content with
-  /// `block: true` holds the identity in an unbreakable block instead, which
-  /// measures exactly as the content did, and the layout does not notice the
-  /// mark at all. It is block-level, so it is wrong inside a sentence, which is
-  /// why it is not the default.
-  /// -> bool
-  block: false,
-  /// What the object is. Several states of one drawing are `tween`'s, not a
-  /// mark's: `mark(key, tween(s0, s1, …))`. To hide a mark, `veil` rather than
-  /// `hide`: the deck gives every region an element of its own, and a bare
-  /// `hide` leaves it giving one to a region the page meant to drop.
-  /// -> content
-  body,
-) = {
-  assert(
-    type(key) == str and key.match(regex("^[A-Za-z0-9_-]+$")) != none,
-    message: "a mark key is letters, digits, _ and -: " + repr(key),
-  )
-  let fx = _pair(transition)
-  // `block` is the argument here, so the element has to be named through `std`
-  let hold = if block { std.block.with(breakable: false) } else { std.box }
-  context {
+#let mark = _e.element.declare(
+  "mark",
+  prefix: "@preview/vit,v0.1.0",
+  doc: "One object, named, that the browser pairs across pages.",
+  // an element's own counter is an element per instance, and nothing counts marks
+  count: none,
+  fields: (
+    _e.field("key", str, required: true, doc: "The name: letters, digits, _ and -."),
+    _e.field("body", content, required: true, doc: "What the object is."),
+    _e.field("transition", _e.types.option(_e.types.union(str, dictionary)), default: none, doc: "This object's own enter/leave effect; none folds it into the page."),
+    _e.field("stack", _e.types.option(array), default: none, doc: "Which stack of layers this is one of: (key, index)."),
+    _e.field("block", bool, default: false, doc: "Hold the identity in an unbreakable block rather than a box."),
+  ),
+  // what is wrong is said where it is written, not when the page is laid out
+  construct: orig => (..args) => {
+    let key = args.pos().at(0, default: none)
+    assert(
+      type(key) == str and key.match(regex("^[A-Za-z0-9_-]+$")) != none,
+      message: "a mark key is letters, digits, _ and -: " + repr(key),
+    )
+    let _ = _pair(args.named().at("transition", default: none))
+    orig(..args)
+  },
+  display: it => {
+    let key = it.key
+    let stack = it.stack
+    let body = it.body
+    let fx = _pair(it.transition)
+    // `block` is the field here, so the element has to be named through `std`
+    let hold = if it.block { std.block.with(breakable: false) } else { std.box }
     _drawing(copy => if copy.nested {
       // inside the states of a drawing: a node of that drawing, which the
       // runtime steps as a whole, and not an object of its own
@@ -708,7 +842,8 @@
       // name and Web Animations can move (web/hoist.js). Where that element
       // goes is this record, placed in the box's own top left corner: in a
       // paragraph a position is a point on the baseline, and the corner is what
-      // a box is placed by.
+      // a box is placed by. It carries the effect as resolved here, set rule
+      // and all, which is why `_marks` reads it rather than the element.
       let record = place(top + left, [#metadata((
         key: key,
         stack: stack,
@@ -728,8 +863,8 @@
         [#hold({ record; body; ending })#label("vit:" + key)]
       }
     })
-  }
-}
+  },
+)
 
 /// `hide`, for content with marks in it. Hidden content keeps its place in the
 /// layout and leaves no ink, so a mark inside it has a position and nothing to
@@ -763,18 +898,25 @@
 ///
 /// A `mark` is a named point too, at the corner its box starts at, so two
 /// layers that already share a marked object need nothing else.
+///
+/// An element (elembic): fields `key` (the name; the same name in two layers is
+/// the point they share) and `body` (what holds the place: usually the part the
+/// later layer redraws).
 /// -> content
-#let anchor(
-  /// The name. The same name in two layers is the point they share.
-  /// -> str
-  key,
-  /// What holds the place: usually the part the later layer redraws.
-  /// -> content
-  body,
-) = veil(std.box({
-  place(top + left, [#metadata((key: key))<vit-anchor>])
-  body
-}))
+#let anchor = _e.element.declare(
+  "anchor",
+  prefix: "@preview/vit,v0.1.0",
+  doc: "A named point, for layers to hang a stack on.",
+  count: none,
+  fields: (
+    _e.field("key", str, required: true, doc: "The name."),
+    _e.field("body", content, required: true, doc: "What holds the place."),
+  ),
+  display: it => veil(std.box({
+    place(top + left, [#metadata((key: it.key))<vit-anchor>])
+    it.body
+  })),
+)
 
 /// A stylesheet that arrives as it was written, with its prose in it: the
 /// browser has no use for that, and every deck would otherwise carry a copy.
@@ -834,17 +976,6 @@
 /// now. Written into the HTML as a table for the runtime, which looks up and
 /// never decides. Every occurrence of a key must say the same.
 /// -> dictionary
-/// The rules a transition's settings need, written where the transition is:
-/// the deck's default with the stylesheet, a page's own in its own `<style>`,
-/// a mark's with the marks. All of them land after deck.css, so they are what
-/// the effects read. (A query for them all would not settle: what the pages
-/// emit depends on the deck's default, which is what this is part of.)
-/// -> str
-#let _sets(
-  /// -> none | dictionary
-  fx,
-) = if fx == none { "" } else { _bundles(fx).map(b => _rule(b.role, b.vars)).join("") }
-
 #let _marks() = {
   let t = (:)
   let sets = ()
@@ -1162,7 +1293,7 @@
     // ignored, and the compiler warns about it), so the layout is not read off
     // `page`; `deck` sets its own page from the same numbers, for the PDF.
     show: turning(transition)
-    show: _e.set_(_stage, inside: true)
+    show: _e.set_(slide, inside: true)
     if target() == "html" {
       let marks = _marks()
       html.elem(
@@ -1196,16 +1327,21 @@
       // wrong once and the document would need a pass more to settle. Here it
       // is this function's own argument, right from the first pass.
       let geo = (width: width, height: height, margin: margin)
-      show <vit-stage>: it => html.elem("div", attrs: (class: "vit-page"), {
-        html.frame(block(width: width, height: height, inset: margin, {
-          it.body
-          // The two corners of a box this knows the size of: what says whether
-          // the compiler resolves a position inside a frame at all (see the
-          // check below). Every frame asks; the check reads the first pair.
-          place(top + left, [#metadata(none)<vit-probe>])
-          place(bottom + right, [#metadata(none)<vit-probe>])
-        }))
-        _hosts(geo)
+      show: _e.show_(stage, it => {
+        let body = _e.fields(it).body
+        [#metadata(none)<vit-frame>]
+        html.elem("div", attrs: (class: "vit-page"), {
+          html.frame(block(width: width, height: height, inset: margin, {
+            body
+            // The two corners of a box this knows the size of: what says
+            // whether the compiler resolves a position inside a frame at all
+            // (see the check below). Every frame asks; the check reads the
+            // first pair.
+            place(top + left, [#metadata(none)<vit-probe>])
+            place(bottom + right, [#metadata(none)<vit-probe>])
+          }))
+          _hosts(geo)
+        })
       })
       // How many steps every frame of the document has, in document order. Said
       // once, here, rather than on each frame: a page that stated its own
@@ -1251,9 +1387,9 @@
       {
         let at = 0
         let pages = ()
-        for v in query(<vit-page>).map(m => m.value) {
-          pages.push((title: v.title, steps: all.slice(at, calc.min(at + v.frames, all.len()))))
-          at += v.frames
+        for v in _e.query(slide).map(_e.fields) {
+          pages.push((title: v.title, steps: all.slice(at, calc.min(at + v.frames.len(), all.len()))))
+          at += v.frames.len()
         }
         _rail(pages)
       }
@@ -1450,109 +1586,4 @@
     out.push(acc)
   }
   out
-}
-
-/// One page. On the HTML side a whole-page `html.frame` (hence pixel-identical
-/// to the PDF); on the PDF side a page.
-///
-/// Several bodies are *frames of the same page*: navigation walks them one by
-/// one, the overview merges them into one thumbnail with dots for the
-/// positions. Frames still transition with View Transitions, so "the second
-/// frame has one more line" is an element-level interpolation, not a page
-/// jump.
-///
-/// ```typ
-/// #slide(title: "Two frames")[first][first + something added]
-/// ```
-/// -> content
-#let slide(
-  /// Shown only in the thumbnail caption, never in the layout. May be content.
-  /// -> content | str | none
-  title: none,
-  /// Speaker notes. HTML only, placed in the page's `<aside class="vit-note">`
-  /// (not in the layout, not in the PDF) and read by the desk the deck opens
-  /// on and by the speaker view (`s`). May be content: paragraphs, lists,
-  /// emphasis all render.
-  /// -> content | str | none
-  note: none,
-  /// Overrides `deck(transition:)` for this page: a name from `transitions`,
-  /// the same both ways, or `(enter: name, leave: name)`, where `enter` is how
-  /// this page comes in when turning to it and `leave` how the page before it
-  /// goes out, with settings of its own if it wants them (`duration`, `easing`,
-  /// `zoom`, `push`; see `transitions`). Not used between frames of this page; individual elements enter and
-  /// leave by `mark(transition:)`. Going back, the page being left decides, so
-  /// a transition always replays in reverse. `none` takes the deck's.
-  /// -> none | str | dictionary
-  transition: none,
-  /// The frames of this page. None at all is one blank page.
-  /// -> content
-  ..frames,
-) = {
-  let bodies = frames.pos()
-  if bodies.len() == 0 { bodies = ([],) }
-  let own = _pair(transition)
-  let section = (class: "vit-slide")
-  _e.get(g => context {
-    let stage = g(_stage)
-    let fx = if own == none { stage.transition } else { own }
-    // The layout a frame is cut to is the deck's, and the deck builds the frame
-    // itself (the show rule in `player`). All a page needs to know is that
-    // there is a deck at all, and that is a style, not an answer.
-    assert(
-      stage.inside or target() != "html",
-      message: "a slide belongs to a deck: `deck` or `player` says what layout its frames are cut to",
-    )
-    if target() == "html" {
-      // every frame carries the types of the transition into it: the first frame of the
-      // page the page's (none: no transition), the others the frame-to-frame one
-      let attrs(i) = (
-        if i > 0 { section + ("data-transition": _types(_frame)) } else if fx == none { section } else {
-          section + ("data-transition": _types(fx))
-        }
-      )
-      // What the rail needs of this page, and only what the page knows by
-      // itself. How many steps its frames have is the deck's to work out: an
-      // answer to a query, put in here, would be read back by the query the
-      // deck runs over these, and the document would take a pass longer to
-      // settle. See `data-steps` in `player`.
-      [#metadata((title: title, frames: bodies.len()))<vit-page>]
-      html.elem(
-        "div",
-        attrs: (class: "vit-group"),
-        {
-          // a transition this page set itself brings the rules its settings need
-          if own != none and _sets(own) != "" { html.elem("style", _sets(own)) }
-          bodies
-            .enumerate()
-            .map(((i, body)) => html.elem(
-              "section",
-              attrs: attrs(i),
-              {
-                // where this frame begins, for the walks; invisible. A record
-                // belongs to the frame whose marker it falls after: nothing is
-                // counted, so nothing is read back.
-                [#metadata(none)<vit-frame>]
-                // The page's own drawing, and the regions placed over it, are
-                // the deck's to build: it knows the layout as a number of its
-                // own, where a page would have to read it back. See the show
-                // rule in `player`.
-                [#block(body)<vit-stage>]
-              },
-            ))
-            .join()
-          // notes are hidden inside the group (CSS display:none); the runtime
-          // reads innerHTML
-          if note != none { html.elem("aside", attrs: (class: "vit-note"), note) }
-        },
-      )
-    } else {
-      for body in bodies {
-        // the same marker as the HTML side puts down: a record belongs to the
-        // frame it falls after, on paper as in the browser
-        [#metadata(none)<vit-frame>]
-        block(width: 100%, height: 100%, body)
-        pagebreak(weak: true)
-      }
-    }
-  })
 }

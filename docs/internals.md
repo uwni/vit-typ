@@ -88,8 +88,8 @@ A deck takes **two** passes, the floor, by four rules:
 
 1. **The deck builds the page, from its own arguments.** A frame's size decides
    every position inside it, and positions are what the deck queries. So
-   `player` installs `show <vit-stage>: …` with its own width, height and
-   margin, and `slide` emits only `[#block(body)<vit-stage>]`. Whether the
+   `player` installs `e.show_(stage, …)` with its own width, height and
+   margin, and `slide` only constructs a `stage` per frame. Whether the
    document is HTML at all arrives the same way, as the style `waapi.hosting`
    sets (`copy.html`): `target()` cannot be asked inside a frame, and a state
    answers "paged" on the first pass — which is how `mark` used to take the
@@ -138,6 +138,49 @@ did not settle which introspections changed and which errors were swallowed,
 and `TYPST_DEBUG_STOP_AT=n`, which emits pass n's document so two passes can be
 diffed as files. For the count alone, `--timings t.json` and count the
 `html document` spans.
+
+## Elements
+
+Everything a document writes is an [`elembic`](https://typst.app/universe/package/elembic/)
+element: `mark`, `anchor`, `slide` and its `stage` in vit, `tween`, `animate`
+and `track` in tween. Their fields are what a set rule sets for a run
+(`e.set_(mark, transition: "rise")`, and `turning` is `e.set_(slide, turn: …)`),
+what a show rule sees (`e.fields(it)`), and what a query reads
+(`e.query(slide)` is where the rail gets its captions). What a host tells the
+content under it is a fieldless element read through `e.get` (tween's `copy`:
+`html`, `places`, `hidden`, `nested`). Elembic is the prototype of Typst's own
+custom elements, and the switch is one to one: `e.element.declare` → the
+native declaration, `e.set_` → `set`, `e.show_` → `show`, `e.get(g => g(x).f)`
+→ `context x.f`, `e.query` → `query`, `e.fields(it)` → `it.f`.
+
+What is not an element is what custom elements would not carry either: where a
+region is, and its name in the SVG. A mark's corners are `place`d metadata
+(`vit-mark`, `vit-mark-end`) because an inline element's location is a point on
+the baseline and the corner is what a box is placed by; the frame markers
+(`vit-frame`) are where a segment begins; the labels (`vit:key`, `waapi-anim`,
+`tween@n`, `tween-play`) are the SVG export's only channel; `vit-probe` asks
+the compiler a question. The effect a mark ends up with is read from its
+record rather than from `e.query(mark)`, because the record is written by the
+display, where the set rules have already been applied.
+
+Three things elembic's normal mode decides, all read from `element.typ`:
+
+- An instance is self-contained — its own labelled `context`, its display, and
+  a metadata beside it for queries (`rendered`, `fields`) — so instances never
+  nest by count, and 200 pages cost nothing but 200 instances
+  (`tests/scale.typ`, an invariant). An element's default `count: counter.step`
+  would add a counter element per instance, so every element here says
+  `count: none`.
+- A *rule* (`e.set_`, `e.show_`) wraps the rest of its scope in a `context` and
+  a show rule, and Typst stops a show-rule chain at 64. vit and tween therefore
+  emit no rule per page, frame or mark: `player` emits a fixed few, and
+  `veil` (`hidden`) and `tween` (`inner`) are scoped to their body. A document
+  that writes `#show: turning(…)` before page after page is nesting rules
+  itself, and runs out around twenty; `turning(…)[…]` and `transition:` do
+  not.
+- Normal mode reads and writes no state, so an element costs no layout pass;
+  the numbers in the previous section were measured again after the
+  conversion and are unchanged.
 
 **The browser does the pairing.** On every page turn the runtime calls
 `document.startViewTransition({ update, types })`; the browser pairs

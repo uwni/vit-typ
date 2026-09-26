@@ -21,10 +21,17 @@ navigates, tidies the DOM once at load, and hands the browser two states.
   makes a position resolve inside an `html.frame`. That is typst main; no
   release carries it yet, and 0.15.1 is refused by name at compile time rather
   than producing a deck stacked in the top left corner.
-- [`elembic`](https://typst.app/universe/package/elembic/), which `tween` and
-  `vit` both use for what a host tells the content under it. See **The
-  introspection budget** in [docs/internals.md](docs/internals.md) for why none
-  of it is a state.
+- [`elembic`](https://typst.app/universe/package/elembic/): `mark`, `slide`,
+  `anchor`, `tween`, `waapi.animate` and `waapi.track` are elembic elements, with
+  fields a document sets for a run (`#show: e.set_(mark, transition: "rise")`)
+  and reads back (`e.fields(it)`), and what a host tells the content under it
+  travels the same way. Elembic is the prototype of Typst's own custom elements;
+  when those land the mapping is one to one (`e.set_` → `set`, `e.show_` →
+  `show`, `e.query` → `query`, `e.fields(it)` → `it.field`) and nothing else
+  changes: what is not an element — where a region is, and its label in the
+  SVG — is what custom elements would not carry either. See **The introspection
+  budget** in [docs/internals.md](docs/internals.md) for why none of it is a
+  state.
 - A browser with same-document View Transitions including transition types and
   `view-transition-class`, and CSS `d` for path morphing. Blink and Gecko have
   both; in Safari 27 preview switch on the "CSS d property" flag under
@@ -154,16 +161,16 @@ or one object is moving**:
 | `deck(font:)` | Font stack with glyph-by-glyph fallback, default `("DejaVu Sans", "Noto Sans CJK SC")`. |
 | `slide(title:)` | Shown only in the thumbnail caption, never in the layout. May be content. |
 | `slide(note:)` | Speaker notes. HTML only; read by the speaker view (`s`). May be content. |
-| `slide(..frames)` | Several bodies = **frames of the same page**. Navigation walks them one by one; the overview merges them into one thumbnail. |
+| `slide(..frames)` | Several bodies = **frames of the same page**. Navigation walks them one by one; the overview merges them into one thumbnail. An element (elembic), like `mark`: `title`, `note`, `transition` and `turn` are its fields. |
 | `slide(transition:)` | Overrides `deck(transition:)` for this page: a name or an `(enter:, leave:)` pair, for how this page comes in and how the page before it goes out. Going back, the page being left decides, so it always replays in reverse. `none` uses the deck's. |
-| `mark(key)[…]` | Names a piece of content. The same key on two adjacent pages pairs them. |
+| `mark(key)[…]` | Names a piece of content. The same key on two adjacent pages pairs them. An element (elembic): `#show: e.set_(mark, transition: "rise")` sets a field for every mark under it, `e.fields(it)` reads them back. |
 | `mark(block:)` | What holds the identity: a box by default, which lets a mark sit inside a sentence, or an unbreakable block with `block: true`. A box is only as tall as its glyphs while a line is as tall as the line, so content that is a block in its own right (a title in a header band, a figure, a column) measures differently in a box, and anything that fits or centres it by measuring it moves. `block: true` measures exactly as the unmarked content did. |
 | `mark(transition:)` | This object's **own** enter/leave effect (same names as above, a string or an `(enter:, leave:)` pair). Applies only when the mark is one-sided in a transition; a paired mark morphs regardless. Unset, the mark folds into the page. An object has one effect: given on any occurrence of the key, it applies to all of them, and two occurrences may not disagree. Keys are letters, digits, `_` and `-`. |
-| `tween(s0, s1, …)` | **Element animation**: N states of one drawing, stepped with `→` / `←`. Comes from `tween` and is re-exported so a deck needs one import; needs no `mark`. `still:` says which state the PDF shows (`-1`, the last, by default). |
+| `tween(s0, s1, …)` | **Element animation**: N states of one drawing, stepped with `→` / `←`. Comes from `tween` and is re-exported so a deck needs one import. An element (elembic): `still` and `play` are fields, `#show: e.set_(tween, still: 0)` sets them for a run of drawings. |
 | `reveal(n, (step, at) => …)` | Frames from **one** description: the body is rendered once per frame and each part says when it arrives, e.g. `at(2, thing)`. Before its frame, content keeps its space (so nothing is laid out again and nothing jumps) and anything else is `none`, which switches a stroke or a fill off. |
 | `layers(key, a, b, …)` | Layers of one picture, each its own mark (`key-1`, `key-2`, …). The last one sizes the stack; a `none` layer is left out, which is how a layer arrives. When it does, the layers already there glide as whole pictures instead of being redrawn. The layers are hung on the point they share, which is any `mark` or `anchor` named in both; it may be anywhere in the picture. |
 | `anchor(key, body)` | A named point for `layers` to hang a stack on. The body keeps its place in the layout and leaves no ink, so the later layer can redraw the earlier one's parts hidden and name one of them. |
-| `turning(transition)` | How the pages under it turn, for a run of them rather than the whole deck: `#show: turning("slide")`. Takes what `deck(transition:)` takes, `none` included; a page's own `transition:` still wins. The page size is not settable this way, and deliberately: the stylesheet carries it once and every region is scaled by it. |
+| `turning(transition)[…]` | How the pages under it turn, for a run of them rather than the whole deck: `#turning("slide")[ …slides… ]`, or `#show: turning("slide")` for the rest of a scope. Takes what `deck(transition:)` takes; a page's own `transition:` still wins. A set rule on `slide`'s `turn` field. Until Typst has custom elements of its own, an elembic set rule is a show rule, and `#show: turning(…)` written before page after page nests them (Typst stops at 64 deep, about twenty of them); the scoped form and `transition:` nest nothing. |
 | `veil(body)` | `hide`, for content with marks in it. The deck gives every marked region an element of its own, and Typst cannot be asked whether something is hidden, so this says so as it hides. `reveal` and `anchor` use it; a bare `hide` around a mark leaves the page empty and the region drawn anyway. |
 | `build(a, b, c)` | Frames that accumulate: `a`, then `a` and `b`, then all three. For content that flows, like a list or a stack of blocks, where later parts are meant to push the layout. |
 
@@ -528,6 +535,7 @@ dist/<version>/     the package as built, ready to import; not committed
 examples/tutorial.typ  the tutorial deck: the API, page by page, code beside result
 docs/api.typ        API reference, generated by tidy from lib.typ
 tests/fixture.typ   a six-page deck with the cases the invariants need
+tests/scale.typ     a two-hundred-page deck: nothing may grow with the page count (show-rule depth, layout passes, regions left unmoved)
 tests/cdp.mjs       a Chrome DevTools Protocol driver in one file: no package to install
 tests/invariants.mjs  properties every build must have, whatever the deck says
 tools/paths.mjs     paths.js under Node against a table of cases

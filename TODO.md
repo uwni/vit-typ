@@ -59,6 +59,28 @@ out.html`, then count the `html document` spans in `t.json`; to see why,
   morphs. That is the one way the PDF and the HTML can disagree, and it cannot
   be detected, only documented.
 
+## Waiting on Typst: custom elements
+
+`mark`, `slide`, `anchor`, `tween`, `waapi.animate` and `waapi.track` are
+[`elembic`](https://typst.app/universe/package/elembic/) elements, and the host
+protocol is an elembic style chain; see **Elements** in `docs/internals.md`.
+Elembic is the prototype of the custom elements Typst is to grow, so the day
+they land the change is mechanical: `e.element.declare` → the native
+declaration, `e.set_` → `set`, `e.show_` → `show`, `e.get` → `context x.f`,
+`e.query` → `query`, `e.fields(it)` → `it.f`. Two things go with it:
+
+- **The rule nesting.** An elembic set rule is a show rule, so
+  `#show: turning(…)` before page after page nests them and Typst stops at 64
+  deep, around twenty. A native `set` nests nothing, and the note on `turning`
+  can go.
+- **The record's copy of the effect.** `_marks` reads a mark's effect from the
+  record its display wrote, because that is where set rules have been applied.
+  A native `query(mark)` answers with the resolved fields, and the record can
+  go back to being geometry only.
+
+What stays is what custom elements do not carry: the corners, the frame
+markers, the labels in the SVG, the compiler probe.
+
 ## Waiting on browsers: the empty frame during a capture
 
 A view transition captures the old state, runs the update, then captures the

@@ -1219,6 +1219,39 @@ try {
     JSON.stringify({ cut, ...walked, errors: p2.errors.slice(0, 2) }));
 }
 
+/* ── nothing grows with the page count ──────────────────────────────
+   tests/scale.typ is two hundred pages. Typst stops a show-rule chain at 64
+   deep and lays a document out at most five times, so a deck that nested a
+   rule per page or asked a question per page would fail here and nowhere
+   smaller. Compiled and counted, not looked at: the layout passes come from
+   the compiler's own trace, and every region the Typst side wrote an element
+   for has to be moved into it. */
+{
+  const dir = mkdtempSync(join(tmpdir(), "vit-scale-"));
+  const out = join(dir, "scale.html"), trace = join(dir, "trace.json");
+  const run = spawnSync("typst", ["compile", "--root", ROOT, "--features", "html", "--timings", trace,
+    join(ROOT, "tests/scale.typ"), out], { encoding: "utf8" });
+  check("a two-hundred-page deck compiles", run.status === 0, (run.stderr ?? "").split("\n").find(l => l.startsWith("error")) ?? "");
+  if (run.status === 0) {
+    const events = JSON.parse(readFileSync(trace, "utf8"));
+    const passes = (events.traceEvents ?? events).filter(e => e.name === "html document" && (e.ph === "X" || e.ph === "B")).length;
+    check("a two-hundred-page deck settles in two layout passes", passes === 2, `${passes} passes`);
+    const big = readFileSync(out, "utf8");
+    const shells = (big.match(/class="vit-mark"/g) ?? []).length;
+    check("a two-hundred-page deck has an element per region", shells === 1000, `${shells} regions`);
+    const p = await open({ width: 1280, height: 720, port: 9355 });
+    await p.goto("file://" + out, ".vit-deck[data-ready]");
+    const moved = await p.evaluate(`return {
+      filled: document.querySelectorAll('.vit-mark > svg').length,
+      left: document.querySelectorAll('.vit-page > svg [data-typst-label^="vit:"]').length,
+    };`);
+    check("every region of a two-hundred-page deck is moved into its element",
+      moved.filled === shells && moved.left === 0, `${moved.filled} of ${shells} filled, ${moved.left} left in the page`);
+    check("a two-hundred-page deck logs no error", p.errors.length === 0, p.errors.slice(0, 3).join(" | "));
+    p.close();
+  }
+}
+
 /* ── the verdict ────────────────────────────────────────────────────── */
 const failed = results.filter(r => r.ok !== true && r.ok !== "n/a");
 const skipped = results.filter(r => r.ok === "n/a");
