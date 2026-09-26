@@ -8,4 +8,4 @@ description = "Typst slides that morph in the browser: one .typ, PDF + HTML, ele
 repository = "https://github.com/uwni/vit-typ"
 keywords = ["slides", "presentation", "html", "animation", "view-transitions"]
 categories = ["presentation"]
-compiler = "0.15.0"
+compiler = "0.16.0"

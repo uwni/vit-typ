@@ -78,15 +78,18 @@
 // 9 · layers of one picture, hung from the point the layers share. The point
 //     is named with `anchor` in both and sits in the middle of the picture, not
 //     at a corner: the second layer grows to the left, so the first has to move
-//     for the green box to stay where it is.
-#let pin(body) = anchor("pin", body)
+//     for the green box to stay where it is. The first layer draws the green
+//     box and the second keeps its space hidden, the way the later stage of a
+//     drawing is written with the earlier one's parts still in it: the layer
+//     that moves is the one with ink, which is what the ink check needs.
+#let pin(body, shown: true) = { anchor("pin", box()); if shown { body } else { hide(body) } }
 #slide(title: "Layers")[
   #place(center + horizon, layers("pic", box(pin(sq(green, w: 40pt)))))
 ][
   #place(center + horizon, layers(
     "pic",
     box(pin(sq(green, w: 40pt))),
-    box({ sq(amber, w: 40pt); h(10pt); pin(sq(green, w: 40pt)) }),
+    box({ sq(amber, w: 40pt); h(10pt); pin(sq(green, w: 40pt), shown: false) }),
   ))
 ]
 
@@ -99,4 +102,34 @@
 ][
   #place(left + horizon, mark("grow", tween(..range(3).map(k => sq(blue, w: 30pt + 25pt * k)))))
   #place(right + horizon, mark("later", sq(amber, w: 40pt)))
+]
+
+// 11 · a run of pages that turn one way, set once for the run: `turning`
+//      writes the settings' rule once and every page of the run carries them
+#turning((effect: "slide", duration: 90))[
+  #slide(title: "Run A")[#place(left + horizon, mark("run", sq(blue)))]
+  #slide(title: "Run B")[#place(right + horizon, mark("run", sq(blue)))]
+]
+
+// 12 · a field set for a scope, on the element itself: every mark under the
+//      rule has the effect, and nothing outside it does
+#import "@preview/elembic:1.1.1" as e
+#{
+  show: e.set_(mark, transition: "zoom")
+  slide(title: "Set")[#place(center + horizon, mark("ruled", sq(green)))]
+}
+
+// 13 · a mark inside a drawing's states is a node of that drawing, stepped
+//      with it, and not an object of its own
+#slide(title: "Node")[
+  #align(center + horizon, tween(..range(3).map(k => mark("node", sq(amber, w: 40pt + 30pt * k)))))
+]
+
+// 14 · a counter stepped inside a mark and read on the next page: the region
+//      is laid out once, so paper and browser count the same
+#let c = counter("vit-fixture")
+#slide(title: "Count")[#place(center + horizon, mark("count", { c.step(); sq(blue, w: 40pt) }))]
+#slide(title: "Counted")[
+  #context [#metadata(c.get().first())<vit-fixture-count>]
+  #align(center + horizon, text(30pt)[after])
 ]

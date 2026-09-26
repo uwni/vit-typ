@@ -31,8 +31,9 @@ const build = async () => {
   /* the fixture imports the package in dist/: built first, or it tests
      whatever that was the last time someone ran the build */
   await (await import("../build.mjs")).build();
-  const out = join(mkdtempSync(join(tmpdir(), "vit-fixture-")), "fixture.html");
-  const run = spawnSync("typst", ["compile", "--root", ROOT, "--features", "html",
+  const dir = mkdtempSync(join(tmpdir(), "vit-fixture-"));
+  const out = join(dir, "fixture.html"), trace = join(dir, "trace.json");
+  const run = spawnSync("typst", ["compile", "--root", ROOT, "--features", "html", "--timings", trace,
     join(ROOT, "tests/fixture.typ"), out], { encoding: "utf8" });
   const said = run.stderr ?? "";
   if (run.status !== 0) {
@@ -47,6 +48,24 @@ const build = async () => {
     process.stderr.write(said);
     throw new Error("the fixture did not settle: " + unsettled[0].trim());
   }
+  /* Two passes is the floor for a document that asks anything at all, and the
+     package is written so that nothing it does adds a third: a third here is a
+     record reading an answer, or a region laid out twice. */
+  const events = JSON.parse(readFileSync(trace, "utf8"));
+  const passes = (events.traceEvents ?? events).filter(e => e.name === "html document" && (e.ph === "X" || e.ph === "B")).length;
+  check("the fixture settles in two layout passes", passes === 2, `${passes} passes`);
+  /* A region is laid out once, so a counter stepped inside a mark counts once:
+     paper and browser have to answer the same on the page after. A second
+     layout of the region would be in the document a second time, and the
+     browser would say one more. */
+  const count = target => {
+    const q = spawnSync("typst", ["query", "--root", ROOT, "--features", "html", "--target", target,
+      join(ROOT, "tests/fixture.typ"), "<vit-fixture-count>", "--field", "value", "--one"], { encoding: "utf8" });
+    return q.status === 0 ? q.stdout.trim() : "error: " + (q.stderr ?? "").split("\n")[0];
+  };
+  const [paper, browser] = [count("paged"), count("html")];
+  check("a counter stepped inside a mark counts once, on paper and in the browser",
+    paper === "1" && browser === "1", `paper ${paper}, browser ${browser}`);
   return out;
 };
 const file = process.argv[2] ? resolve(process.argv[2]) : await build();
@@ -341,7 +360,7 @@ try {
   {
     const r = await page.evaluate(`
       window.vit.mode = 'present'; await window.__settle(400);
-      const out = { marks: 0, noAt: 0, off: [], at: [] };
+      const out = { marks: 0, noAt: 0, off: [], at: [], ink: [], empty: [] };
       // Only the frame on stage has a size, so walk them, and wait for each
       // move to finish: a page in the middle of a view transition is out of the
       // live rendering and measures as nothing.
@@ -371,16 +390,32 @@ try {
                        Math.abs(m.offsetTop - box.height * y / h))
             : Infinity;
           if (d > 1.5) out.off.push(m.dataset.vitKey + ' by ' + d.toFixed(2) + 'px');
+          /* The ink is moved into the element, not drawn again, and the
+             element's viewBox is what cuts it out of the page's coordinates:
+             a viewBox given the wrong corner leaves the element placed right
+             and its ink drawn back where the page had it. The ink's own box,
+             in the element's units, has to sit inside the viewBox. */
+          const svg = m.querySelector(':scope > svg');
+          if (!svg) { out.empty.push(m.dataset.vitKey); continue; }
+          const vb = svg.viewBox.baseVal, b = svg.getBBox();
+          if (!b.width && !b.height) continue;
+          const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+          if (cx < vb.x || cx > vb.x + vb.width || cy < vb.y || cy > vb.y + vb.height) {
+            out.ink.push(m.dataset.vitKey + ' on frame ' + (k + 1) + ': ink centred at ' + cx.toFixed(0) + ',' + cy.toFixed(0)
+              + ' outside ' + [vb.x, vb.y, vb.width, vb.height].map(v => v.toFixed(0)).join(' '));
+          }
         }
       }
       return { ...out, spots: new Set(out.at.map(s => s.split(':')[1])).size,
-               at: undefined, off: out.off.slice(0, 4) };`);
+               at: undefined, off: out.off.slice(0, 4), ink: out.ink.slice(0, 4) };`);
     check("every placed region says where it is", r.marks > 0 && r.noAt === 0,
       `${r.noAt} of ${r.marks} regions carry no data-vit-at`);
     check("a region is drawn where the layout put it", r.marks > 0 && r.off.length === 0,
       r.off.join(", "));
     check("the positions are the layout's, not one corner", r.spots > 1,
       `${r.spots} distinct positions across ${r.marks} regions`);
+    check("every region was moved into its element", r.empty.length === 0, `empty: ${r.empty.join(" ")}`);
+    check("a region's ink is inside its element", r.marks > 0 && r.ink.length === 0, r.ink.join("; "));
   }
 
   /* A mark that has not arrived yet keeps its place in the layout and leaves no
@@ -393,6 +428,63 @@ try {
         .map(pg => pg.querySelectorAll(':scope > [data-vit-key=later]').length);`);
     check("a veiled mark is not drawn", r.length > 0 && r.includes(0) && r.includes(1),
       `hosts for the veiled key, frame by frame: ${r.join(" ")}`);
+  }
+
+  /* The constructs are elements, and a field set for a scope holds for every
+     instance under it and none outside: `e.set_(mark, transition: "zoom")`
+     around one page gives that page's mark the effect, which reaches the
+     browser through the marks table and the class the runtime writes. */
+  {
+    const table = /const vitMarks = (\{[\s\S]*?\});<\/script>/.exec(html);
+    let marks = {};
+    try { marks = JSON.parse(table?.[1] ?? "{}"); } catch { }
+    const cls = await page.evaluate(`
+      return [...document.querySelectorAll('.vit-mark[data-vit-key=ruled]')].map(m => m.style.viewTransitionClass);`);
+    check("a field set for a scope holds for the marks under it",
+      marks.ruled?.transition === "enter-zoom leave-zoom" && cls.length === 1 && /enter-zoom/.test(cls[0]),
+      `table ${JSON.stringify(marks.ruled)}, class ${JSON.stringify(cls)}`);
+    check("and not for the marks outside it", !("run" in marks) && !("box" in marks),
+      `table keys ${Object.keys(marks).join(" ")}`);
+  }
+
+  /* A mark inside a drawing's states is a node of that drawing: the runtime
+     steps the states as a whole, and a node lifted out would no longer line up.
+     So it gets no element and no label, and the drawing still steps. */
+  {
+    const r = await page.evaluate(`
+      const all = [...document.querySelectorAll('.vit-deck .vit-slide')];
+      const f = all.findIndex((s, i) => window.vit.title(i) === 'Node');
+      return { f, hosts: document.querySelectorAll('.vit-mark[data-vit-key=node]').length };`);
+    const steps = (/data-steps="([^"]*)"/.exec(/<div class="vit-deck"[^>]*>/.exec(html)?.[0] ?? "")?.[1] ?? "").split(" ");
+    check("a mark inside a drawing's states is a node of it",
+      r.f >= 0 && r.hosts === 0 && !/data-typst-label="vit:node"/.test(html) && steps[r.f] === "2",
+      `frame ${r.f}: ${r.hosts} host(s), steps ${steps[r.f]}`);
+  }
+
+  /* `turning` for a run of pages: the settings are written once, by the rule,
+     and every page of the run turns with them. */
+  {
+    const r = await page.evaluate(`
+      window.vit.mode = 'present'; await window.__settle(300);
+      const all = [...document.querySelectorAll('.vit-deck .vit-slide')];
+      const f = all.findIndex((s, i) => window.vit.title(i) === 'Run A');
+      const g = all.findIndex((s, i) => window.vit.title(i) === 'Run B');
+      if (f < 1 || g < 0) return null;
+      const measure = async to => {
+        await window.__done(() => window.vit.go(to - 1));
+        const real = document.startViewTransition.bind(document); let vit;
+        document.startViewTransition = o => (vit = real(o));
+        window.vit.go(to); await vit.ready;
+        const ran = getComputedStyle(document.documentElement, '::view-transition-group(root)').animationDuration;
+        document.startViewTransition = real;
+        await vit.finished.catch(() => { });
+        return { types: [...vit.types], ran };
+      };
+      return { a: await measure(f), b: await measure(g), typesA: all[f].dataset.transition, typesB: all[g].dataset.transition };`);
+    const ok = r && [r.a, r.b].every(m => Math.abs(parseFloat(m.ran) * 1000 - 90) < 1 && m.types.some(t => /set-duration-90ms/.test(t)))
+      && /enter-slide leave-slide set-duration-90ms/.test(r.typesA) && /enter-slide leave-slide set-duration-90ms/.test(r.typesB);
+    check("a run's turning, and its settings, hold for every page of the run", ok,
+      r ? `ran ${r.a.ran} / ${r.b.ran}; ${r.typesA} · ${r.typesB}` : "no run pages found");
   }
 
   /* a closed dialog is out of the layout: one that is merely invisible still
