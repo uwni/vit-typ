@@ -336,16 +336,6 @@
 /// -> str
 #let version = version(toml("typst.toml").package.version.split(".").map(int))
 
-/// What the deck told the content under it, read off the style chain:
-/// `#_drawing(copy => …copy.html…)`. `tween`'s, because it is the host
-/// protocol: a drawing has to know the same thing.
-///
-/// It travels as a style, and it has to. A state is an answer, and on the
-/// document's first pass every answer is empty, so a page that read one would
-/// be built wrong once and the document would take an introspection pass more
-/// to settle. `target()` cannot be asked either: inside an `html.frame`, which
-/// is where every page is, it says paper.
-#let _drawing = _tween.asking
 
 
 /// A transition as the pair it is: how the new side enters, how the old side
@@ -805,9 +795,13 @@
     _e.field("transition", _e.types.option(_e.types.union(str, dictionary)), default: none, doc: "This object's own enter/leave effect; none folds it into the page."),
     _e.field("stack", _e.types.option(array), default: none, doc: "Which stack of layers this is one of: (key, index)."),
     _e.field("block", bool, default: false, doc: "Hold the identity in an unbreakable block rather than a box."),
+    // what the deck says, set for a scope like any field: never an argument
+    _e.field("html", bool, default: false, doc: "The document is an HTML one. The deck sets it (`player`)."),
+    _e.field("veiled", bool, default: false, doc: "Under a `veil`: keeps its place, shows nothing, gets no element."),
   ),
   // what is wrong is said where it is written, not when the page is laid out
   construct: orig => (..args) => {
+    assert("html" not in args.named() and "veiled" not in args.named(), message: "html and veiled are the deck's to set (player, veil), not an argument")
     let key = args.pos().at(0, default: none)
     assert(
       type(key) == str and key.match(regex("^[A-Za-z0-9_-]+$")) != none,
@@ -823,11 +817,13 @@
     let fx = _pair(it.transition)
     // `block` is the field here, so the element has to be named through `std`
     let hold = if it.block { std.block.with(breakable: false) } else { std.box }
-    _drawing(copy => if copy.nested {
+    // whether this is inside a drawing's states is the drawing's own field
+    // (`tween`'s `nested`, set by its `inner`), read off the style chain here
+    _e.get(g => if g(_tween.tween).nested {
       // inside the states of a drawing: a node of that drawing, which the
       // runtime steps as a whole, and not an object of its own
       hold(body)
-    } else if not copy.html {
+    } else if not it.html {
       // On paper the deck places nothing, so a stack is aligned where it is
       // laid out and these say where that is. Neither draws.
       hold({
@@ -849,13 +845,13 @@
         stack: stack,
         transition: if fx == none { none } else { _types(fx) },
         sets: if fx == none { () } else { _bundles(fx) },
-        shown: not copy.hidden,
+        shown: not it.veiled,
       ))<vit-mark>])
       // and the far corner, so the element is as big as the box the page gave
       // the region. It goes after the body, so that what the body records sits
       // between the two and the deck can see what is nested in what.
       let ending = place(bottom + right, [#metadata(none)<vit-mark-end>])
-      if copy.hidden {
+      if it.veiled {
         // under a veil: the region keeps its place and shows nothing, and it is
         // still a named point, so it records itself and gets no element
         hold({ record; body; ending })
@@ -870,14 +866,14 @@
 /// layout and leaves no ink, so a mark inside it has a position and nothing to
 /// show, and the deck must not give it an element of its own: an empty one
 /// would still be named, and still morph. Typst cannot be asked whether
-/// something is hidden, so this says so as it hides, as a style the marks
-/// inside read (`tween`'s `hidden`, since a drawing may want to know too).
+/// something is hidden, so this says so as it hides: a set rule on `mark`'s
+/// `veiled` field, in scope for the body and gone after it.
 /// -> content
 #let veil(
   /// -> content
   body,
 ) = {
-  show: _tween.hidden
+  show: _e.set_(mark, veiled: true)
   hide(body)
 }
 
@@ -1183,15 +1179,18 @@
       "width:" + pct(h.size.width, geo.width),
       "height:" + pct(h.size.height, geo.height),
     ).join(";")
-    // the corner and the size in the page's own units: the browser writes them
-    // on the element's `viewBox`, and the rail draws every region into a
-    // thumbnail where the page put it
+    // Two boxes in the page's own units. `data-vit-at` is where the element
+    // goes, which for a layer of a stack is not where the page drew it: the
+    // rail draws every region into a thumbnail there. `data-vit-box` is where
+    // the page drew it, corner and size: the browser writes it on the
+    // element's `viewBox`, which is what cuts the region's ink out of the
+    // page's coordinates, and the ink is drawn once, where it is.
     let at = (p.x, p.y).map(l => str(l.pt())).join(" ")
-    let size = (h.size.width, h.size.height).map(l => str(l.pt())).join(" ")
+    let box = (h.at.x, h.at.y, h.size.width, h.size.height).map(l => str(l.pt())).join(" ")
     if h.kind == "mark" {
       html.elem(
         "div",
-        attrs: (class: "vit-mark", "data-vit-key": v.key, "data-vit-at": at, "data-vit-size": size, style: where),
+        attrs: (class: "vit-mark", "data-vit-key": v.key, "data-vit-at": at, "data-vit-box": box, style: where),
       )
     } else {
       // the declaration's own element: it is the box the keyframes move, and it
@@ -1202,7 +1201,7 @@
           class: "vit-mark",
           "data-spec": json.encode(v.spec, pretty: false),
           "data-vit-at": at,
-          "data-vit-size": size,
+          "data-vit-box": box,
           style: where,
         ),
       )
@@ -1317,8 +1316,11 @@
           + _sets(fx)
           + marks.css,
       )
-      // the drawings under this deck are in an HTML document, and the deck
-      // gives a declaration that needs a CSS box a frame of its own
+      // the marks and the drawings under this deck are in an HTML document, and
+      // the deck gives a declaration that needs a CSS box an element of its own:
+      // one field each, set here for the whole deck (two rules, consecutive, so
+      // elembic makes them one)
+      show: _e.set_(mark, html: true)
       show: _tween.hosting(places: true)
       // Every page's own drawing, and the elements its regions are moved into.
       // The deck builds them, not the page: the size of a frame is where every
@@ -1544,11 +1546,11 @@
   // things, which is the deck's to work out once everything is laid out: here
   // they are simply stacked, and the deck moves each one by the offset the
   // shared point asks for.
-  _drawing(copy => context {
-    // On the HTML side the deck draws every region in a frame of its own and
+  _e.get(g => context {
+    // On the HTML side the deck gives every region an element of its own and
     // places it, so the layers are stacked here and moved there. On paper
     // nothing is placed later, so the offset is applied to the layout itself.
-    let off = if copy.html { (:) } else { _offsets() }
+    let off = if g(mark).html { (:) } else { _offsets() }
     box({
       for (i, x) in l.slice(0, -1) {
         let d = off.at(key + "/" + str(i), default: (x: 0pt, y: 0pt))

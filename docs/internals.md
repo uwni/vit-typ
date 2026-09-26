@@ -147,8 +147,11 @@ and `track` in tween. Their fields are what a set rule sets for a run
 (`e.set_(mark, transition: "rise")`, and `turning` is `e.set_(slide, turn: …)`),
 what a show rule sees (`e.fields(it)`), and what a query reads
 (`e.query(slide)` is where the rail gets its captions). What a host tells the
-content under it is a fieldless element read through `e.get` (tween's `copy`:
-`html`, `places`, `hidden`, `nested`). Elembic is the prototype of Typst's own
+content under it is a field of the same elements, set for a scope like any
+other: `hosting` sets `html` and `places` on `tween` and `animate`, `player`
+sets `html` on `mark`, `veil` is `e.set_(mark, veiled: true)` around a `hide`,
+and `tween` sets its own `nested` around its states. No element exists only to
+carry settings: an element is something the document has. Elembic is the prototype of Typst's own
 custom elements, and the switch is one to one: `e.element.declare` → the
 native declaration, `e.set_` → `set`, `e.show_` → `show`, `e.get(g => g(x).f)`
 → `context x.f`, `e.query` → `query`, `e.fields(it)` → `it.f`.

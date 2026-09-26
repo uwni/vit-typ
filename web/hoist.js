@@ -7,8 +7,12 @@
    where. The page's SVG carries <g data-typst-label="vit:key"> around the
    region's ink (the SVG export writes one for a labelled box), and beside the
    page sits one empty element per region, `.vit-mark`, already placed and
-   sized in percent, with the region's corner and size in the page's own units
-   on it (data-vit-at, data-vit-size). This moves each group into its element.
+   sized in percent, with the box the page drew the region in, in the page's
+   own units, on it (data-vit-box). This moves each group into its element.
+   Where the element sits is not always where the page drew the region: a
+   layer of a stack is moved onto the point its layers share (data-vit-at is
+   that place, for the rail). The viewBox is the box the page drew, so the
+   ink lands in the element wherever the element is.
 
    A move, not a measurement: nothing is laid out and nothing is read back from
    the browser's layout (transform.baseVal is the attribute, parsed), so it
@@ -73,8 +77,7 @@
     }
 
     for (const { g, shell, m } of plan) {
-      const [x, y] = shell.dataset.vitAt.split(" ").map(Number);
-      const [w, h] = shell.dataset.vitSize.split(" ").map(Number);
+      const [x, y, w, h] = shell.dataset.vitBox.split(" ").map(Number);
       /* The element's own <svg>, showing the page's units through the box the
          layout gave the region: the region is drawn where the page drew it,
          and the viewBox is what cuts it out. Its width and height are the same

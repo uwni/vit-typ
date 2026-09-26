@@ -31,7 +31,15 @@ const shot = async (name, clip) => {
 const present = async () => {
   await p.goto(url, '.vit-deck[data-ready]');
   await wait(500);
-  await p.evaluate("window.vit.mode = 'present'; await new Promise(r => setTimeout(r, 400)); return 1;");
+  /* the mode change is a view transition of its own (the desk zooms into the
+     page); a shot taken before it is over is the desk, half-zoomed. Wait for
+     the last pseudo-element animation to be gone rather than for a number. */
+  await p.evaluate(`window.vit.mode = 'present';
+    const t0 = performance.now();
+    while (performance.now() - t0 < 4000 && (window.vit.moving || document.getAnimations().some(a => a.effect && a.effect.pseudoElement))) {
+      await new Promise(r => setTimeout(r, 50));
+    }
+    await new Promise(r => setTimeout(r, 100)); return 1;`);
   await p.evaluate("document.querySelector('.vit-bar')?.remove(); return 1;");
 };
 /* move and wait for it to be over: vit:move-done pairs one for one with
